@@ -14,14 +14,15 @@ flowchart TD
     C --> E[auth.users trigger<br/>自動建 profile + user_stats]
     D --> F[Dashboard 檢查 onboarding_done]
     E --> F
-    F -->|false| G[Plan Picker 畫面]
-    G --> H{揀咩 plan?}
-    H -- 自訂 --> I[PlanForm<br/>填章節清單 + 日數]
-    H -- NT-40 --> J[INSERT user_plan_enrollments]
-    H -- OT-40 --> J
-    H -- NT+OT-40 --> J
-    I --> J
-    J --> K{想唔想即刻邀請 partner?}
+    F -->|false| G[Plan Builder — single page live preview]
+    G --> G1{揀範圍}
+    G1 -- 新約 only --> G2
+    G1 -- 舊約 only --> G2
+    G1 -- 新約 + 舊約 --> G1a[揀 reading order<br/>先新後舊 / 先舊後新 / 新舊並行]
+    G1a --> G2
+    G2[拖 slider 40-365 日] --> G3[即時 preview:<br/>每日 X NT + Y OT 章<br/>預計完成日]
+    G3 --> H[確認 → INSERT user_plan_enrollments<br/>(scope, reading_order, total_days, chapters_per_day)]
+    H --> K{想唔想即刻邀請 partner?}
     K -- 是 --> L[輸入 partner email]
     K -- 唔住 --> N[Dashboard]
     L --> M[INSERT partner_invites<br/>發 email link]

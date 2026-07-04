@@ -41,47 +41,43 @@ create table public.user_stats (
 );
 
 -- =====================================================================
--- 3. reading_plans_catalog — curated plans (seed data)
--- =====================================================================
-create table public.reading_plans_catalog (
-  id              uuid primary key default uuid_generate_v4(),
-  slug            text unique not null,        -- 'nt-40', 'ot-40', 'nt-ot-40', 'custom'
-  name_zh         text not null,
-  description_zh  text,
-  duration_days   int not null,
-  is_standard     boolean not null default true,
-  structure       jsonb not null,              -- [{day:1, book:'Matt', chapter:1}, ...]
-  cover_image_url text,
-  created_at      timestamptz not null default now(),
-  updated_at      timestamptz not null default now()
-);
-
--- Custom plans (user-created) share this table but is_standard=false
-alter table public.reading_plans_catalog
-  add column if not exists created_by uuid references public.profiles(id);
-
-create index on public.reading_plans_catalog (slug);
-create index on public.reading_plans_catalog (is_standard);
-
--- =====================================================================
--- 4. user_plan_enrollments — user joined a plan
+-- 3. user_plan_enrollments — user joined a plan
+--   Stage 1 change: removed reading_plans_catalog; plan metadata
+--   lives directly on the enrollment (scope, reading_order, total_days)
 -- =====================================================================
 create table public.user_plan_enrollments (
   id                   uuid primary key default uuid_generate_v4(),
   user_id              uuid not null references public.profiles(id) on delete cascade,
-  plan_slug            text not null references public.reading_plans_catalog(slug) on delete restrict,
+  scope                text not null
+                          check (scope in ('nt', 'ot', 'nt_ot')),
+  reading_order        text
+                          check (reading_order in ('nt_ot', 'ot_nt', 'parallel')),
+  -- reading_order nullable: NULL when scope IN ('nt', 'ot')
+  total_days           int  not null
+                          check (total_days between 40 and 365),
+  chapters_per_day     int  not null,           -- ceil(scope_chapters / total_days)
   started_at           timestamptz not null default now(),
-  current_day          int  not null default 1,
-  daily_chapter_count  int  not null default 1,
-  status               text not null default 'active'
-                         check (status in ('active', 'paused', 'completed', 'abandoned')),
   completed_at         timestamptz,
   paused_at            timestamptz,
-  unique (user_id, plan_slug)
+  status               text not null default 'active'
+                          check (status in ('active', 'paused', 'completed', 'abandoned')),
+  -- Defensive: if scope is nt or ot, reading_order must be null
+  check (
+    (scope in ('nt', 'ot') and reading_order is null)
+    or (scope = 'nt_ot' and reading_order is not null)
+  )
 );
 
 create index on public.user_plan_enrollments (user_id, status);
-create index on public.user_plan_enrollments (plan_slug);
+create index on public.user_plan_enrollments (status, started_at);
+
+-- Scope → total_chapters mapping (also lives in lib/bible/scope.ts as fallback)
+comment on column public.user_plan_enrollments.chapters_per_day is
+  'Computed at insert: ceil(scope_chapters / total_days). scope nt=260, ot=929, nt_ot=1189.';
+
+-- =====================================================================
+-- 4. reading_sessions — every "I read X chapter" event
+-- =====================================================================
 
 -- =====================================================================
 -- 5. reading_sessions — every "I read X chapter" event
@@ -90,7 +86,6 @@ create table public.reading_sessions (
   id              uuid primary key default uuid_generate_v4(),
   user_id         uuid not null references public.profiles(id) on delete cascade,
   enrollment_id   uuid not null references public.user_plan_enrollments(id) on delete cascade,
-  plan_slug       text not null references public.reading_plans_catalog(slug),
   day_number      int  not null,               -- 第幾日 (1-based)
   book_zh         text not null,
   chapter         int  not null,
@@ -134,8 +129,6 @@ create table public.partner_pairs (
   unique (user_id, partner_id),
   check (user_id <> partner_id)
 );
-
-create index on public.partner_pairs (user_id) where status = 'active';
 create index on public.partner_pairs (partner_id) where status = 'active';
 
 -- =====================================================================
@@ -328,9 +321,7 @@ create trigger trg_user_stats_updated_at
   before update on public.user_stats
   for each row execute function public.touch_updated_at();
 
-create trigger trg_plans_updated_at
-  before update on public.reading_plans_catalog
-  for each row execute function public.touch_updated_at();
+-- (reading_plans_catalog trigger removed — table dropped in Stage 1)
 
 create trigger trg_enrollments_updated_at
   before update on public.user_plan_enrollments
@@ -362,11 +353,8 @@ create policy "profiles_public_read"  on public.profiles for select to authentic
 create policy "user_stats_self_read"   on public.user_stats for select using (auth.uid() = user_id);
 create policy "user_stats_self_update" on public.user_stats for update using (auth.uid() = user_id);
 
--- reading_plans_catalog: standard plans public, custom plans owner-only
-create policy "plans_standard_read"   on public.reading_plans_catalog for select
-                                       using (is_standard or auth.uid() = created_by);
-create policy "plans_owner_write"     on public.reading_plans_catalog for all
-                                       using (auth.uid() = created_by) with check (auth.uid() = created_by);
+-- reading_plans_catalog: DROPPED in Stage 1 (user plans are dynamic)
+-- RLS for catalog is no longer applicable; enrollment RLS below
 
 -- enrollments: own rows only
 create policy "enrollments_self"      on public.user_plan_enrollments for all
@@ -406,18 +394,13 @@ insert into public.achievements (code, name_zh, description_zh, tier, criteria) 
   ('streak_7',         '連續 7 日',    '連續 7 日完成讀經',           'bronze', '{"type":"streak","days":7}'),
   ('streak_30',        '連續 30 日',   '連續 30 日完成讀經',          'silver', '{"type":"streak","days":30}'),
   ('streak_100',       '連續 100 日',  '連續 100 日完成讀經',         'gold',   '{"type":"streak","days":100}'),
-  ('read_nt',          '新約完成',     '完成新約 40 日計劃',          'silver', '{"type":"plan_complete","slug":"nt-40"}'),
-  ('read_ot',          '舊約完成',     '完成舊約 40 日計劃',          'silver', '{"type":"plan_complete","slug":"ot-40"}'),
-  ('read_full',        '新舊約完成',   '完成新舊約 40 日計劃',        'gold',   '{"type":"plan_complete","slug":"nt-ot-40"}'),
+  ('read_nt',          '新約完成',     '完成新約 plan（任何日數）',   'silver', '{"type":"plan_complete","scope":"nt"}'),
+  ('read_ot',          '舊約完成',     '完成舊約 plan（任何日數）',   'silver', '{"type":"plan_complete","scope":"ot"}'),
+  ('read_full',        '新舊約完成',   '完成新舊約 plan（任何日數）', 'gold',   '{"type":"plan_complete","scope":"nt_ot"}'),
   ('first_partner',    '同行者',       '邀請第一位讀經拍檔',          'bronze', '{"type":"partner_count","count":1}'),
   ('level_5',          'LEVEL 5',      '達到 Level 5',               'silver', '{"type":"level","min":5}'),
   ('level_10',         'LEVEL 10',     '達到 Level 10',              'gold',   '{"type":"level","min":10}');
 
--- =====================================================================
--- SEED: standard reading plans (structure TBD by content team)
--- Slugs locked: nt-40, ot-40, nt-ot-40, custom
--- =====================================================================
-insert into public.reading_plans_catalog (slug, name_zh, description_zh, duration_days, is_standard, structure) values
-  ('nt-40',     '40 日新約 1 次',     '40 日讀完整本新約',  40, true, '{"placeholder": true, "note": "待內容編輯填入章節編排"}'),
-  ('ot-40',     '40 日舊約 1 次',     '40 日讀完整本舊約',  40, true, '{"placeholder": true, "note": "待內容編輯填入章節編排"}'),
-  ('nt-ot-40',  '40 日新舊約 1 次',   '40 日新約 + 舊約並行', 40, true, '{"placeholder": true, "note": "待內容編輯填入章節編排"}');
+-- (reading_plans_catalog seeds removed — table dropped in Stage 1)
+-- Plan metadata now lives directly on user_plan_enrollments.
+-- Stage 2+ may re-add catalog table for curated "official" challenges.

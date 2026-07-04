@@ -31,38 +31,48 @@
 
 ## 3. Reading Plan — Hybrid Model
 
-### Onboarding Flow（2-step wizard）
+### Onboarding UX（single-page live preview）
 
 ```
-Step 1: 揀範圍
-   ○ 新約 only
-   ○ 舊約 only
-   ○ 新約 + 舊約       → 解鎖 Step 2
-
-Step 2 (only if Both): 揀 reading order
-   ○ 先新後舊
-   ○ 先舊後新
-   ○ 新舊並行          (動態比例，舊 quest 嘅 smart algorithm)
-
-Step 3: Duration slider
-   ┌─────────────────────────────────┐
-   │ 起點 40 日                       │
-   │ 40 → 60: step 1 日               │
-   │ 60 → 90: step 5 日               │
-   │ 90 → 180: step 10 日             │
-   │ 180 → 365: step 30 日            │
-   │   (跳過 360 → 直接 365 — TBD)    │
-   └─────────────────────────────────┘
-
-Step 4: 即時 preview
-   - 每日新約 X 章
-   - 每日舊約 Y 章
-   - 每日總計 ≈ Z 分鐘
-   - 完成日期 [start + N 日]
-   - 兩約同日完成? ✓/✗ (only for 並行)
-
-Step 5: Confirm → INSERT user_plan_enrollments
+┌─────────────────────────────────────────────┐
+│  設定你的讀經計劃                            │
+│                                             │
+│  範圍                                        │
+│  ● 新約 + 舊約                              │
+│                                             │
+│  Reading order                              │
+│  ● 新舊並行                                  │
+│                                             │
+│  持續時間                                    │
+│  40 ──────●───────────────────── 365         │
+│            ↑ 60                              │
+│  顯示：[ 60 日 ]                             │
+│                                             │
+│  ─── 即時預覽 ───                           │
+│  每日新約：5 章                              │
+│  每日舊約：16 章                             │
+│  預計完成日：2026-09-01                      │
+│                                             │
+│           [ 確認並開始 → ]                   │
+└─────────────────────────────────────────────┘
 ```
+
+**Live update 規則**：
+- 改範圍 → 即時重算 preview
+- 改 reading order → 即時重算（NT-only / OT-only 時自動 disable）
+- 拖 slider → 即時重算
+- React `useState` + `useMemo` 就搞掂
+
+### Plan Preview fields（Stage 1）
+
+只顯示：
+- ✅ 每日新約 X 章
+- ✅ 每日舊約 Y 章
+- ✅ 預計完成日 = start_date + ceil(total_chapters / per_day) days
+
+**唔顯示**：
+- ❌ 每日總計分鐘（每人速度唔同）
+- ❌ 兩約同日完成 indicator（非必要 info）
 
 ### Slider values (anchored 40–365, dynamic step)
 
@@ -80,7 +90,7 @@ Step 5: Confirm → INSERT user_plan_enrollments
 - Slider 揀嘅日數係 **commitment target**（用戶希望幾耐做完）
 - 實際每日讀 chapter count = `ceil(total_chapters_in_scope / commitment_days)`
   - NT 260 章 / 40 日 = 7 章/日
-  - OT 929 章 / 40 日 = 24 章/日（≈ 30 分鐘）
+  - OT 929 章 / 40 日 = 24 章/日
   - NT+OT 1189 章 / 365 日 = 4 章/日
 - **實際完成日期** = `start_date + ceil(total_chapters / per_day) days`
   - 例 NT-only / 365 日：260/365 = 0.7 → ceil = 1 章/日 → 260 日完成
@@ -88,13 +98,20 @@ Step 5: Confirm → INSERT user_plan_enrollments
 - Grace period（slider 揀嘅日數 > 實際完成日）係 **純 cosmetic**
   - 顯示 "你嘅 plan 提早 X 日完成 🎉"
   - Enrollment status 自動變 `completed`
-  - 唔影響 streak / XP（streak 係 daily lesson，唔係 plan-level）
 
 ### Edge cases
 - NT-only / OT-only 都唔需要 Step 2（reading order 預設線性）
 - ❌ 唔 enforce min chapters/day（user 揀 365 日 OT-only 都接受）
 - ❌ 唔 enforce hard warning for high load（user 自己 commit）
 - ✅ Plan 完成日係 actual completion，唔係 slider 揀嘅日數
+
+### Plan Adjustment（入到 plan 之後可以調）
+
+- User 入到 dashboard 可以點「調整計劃進度」
+- 拖 slider 改 total_days
+- 自動 re-compute chapters_per_day
+- `UPDATE user_plan_enrollments SET total_days=..., chapters_per_day=...`
+- 今日之後嘅 daily schedule 即時 re-generate
 
 ## 4. Tech Stack（承繼 bible-reading-quest-2025）
 
@@ -174,27 +191,42 @@ user_achievements (
   PRIMARY KEY (user_id, achievement_id)
 )
 
--- Reading plans catalog (curated)
-reading_plans_catalog (
-  id PK,
-  slug TEXT UNIQUE,        -- 'john-30', 'nt-90', 'bible-365'
-  name_zh TEXT,
-  description_zh TEXT,
-  duration_days INT,
-  structure JSONB          -- [{day: 1, book: 'John', chapter: 1}, ...]
-)
+-- ❌ DROP reading_plans_catalog (Stage 0 決定)
+--   用戶 plan 全部 metadata 直接存 user_plan_enrollments
+--   不再 pre-define fixed slugs
 
--- User plan enrollments
+-- User plan enrollments (replaces catalog)
 user_plan_enrollments (
-  id PK,
-  user_id FK,
-  plan_slug FK,
-  started_at TIMESTAMPTZ,
-  current_day INT DEFAULT 1,
-  daily_chapter_count INT DEFAULT 1,
-  status TEXT              -- 'active', 'paused', 'completed'
+  id              uuid PK,
+  user_id         FK,
+  scope           TEXT CHECK (scope IN ('nt', 'ot', 'nt_ot')),
+  reading_order   TEXT CHECK (reading_order IN ('nt_ot', 'ot_nt', 'parallel')),
+  -- reading_order nullable when scope IN ('nt', 'ot')
+  total_days      INT CHECK (total_days BETWEEN 40 AND 365),
+  chapters_per_day INT NOT NULL,   -- = ceil(scope_chapters / total_days)
+  started_at      TIMESTAMPTZ DEFAULT now(),
+  completed_at    TIMESTAMPTZ,
+  status          TEXT DEFAULT 'active'
+                    CHECK (status IN ('active', 'paused', 'completed', 'abandoned')),
+  paused_at       TIMESTAMPTZ
 )
 ```
+
+### Schema 變動說明
+
+**Stage 0**：`reading_plans_catalog` 用嚟 pre-define 4 個 fixed plans
+**Stage 1**：DROP catalog，因為 user plan 係 dynamic combination (scope × order × 40-365 days)
+**Stage 2+**：如果將來想加 curated 「牧者推薦 21 日 NT challenge」之類嘅 official plan，可以重新加返 catalog table，分 `is_official=true/false` 兩類
+
+### 從 scope 計 total chapters（application layer）
+
+| scope | total_chapters |
+|---|---|
+| 'nt' | 260 |
+| 'ot' | 929 |
+| 'nt_ot' | 1189 |
+
+> Stage 1 將呢個 mapping hardcode 喺 `lib/bible/scope.ts`。Stage 2 可以改由 DB 讀。
 
 ## 6. User Journey（MVP）
 
