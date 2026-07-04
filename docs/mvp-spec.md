@@ -31,23 +31,70 @@
 
 ## 3. Reading Plan — Hybrid Model
 
-### Onboarding Plan Picker（5 選項，第一步）
+### Onboarding Flow（2-step wizard）
 
-| # | Plan | 範圍 | 日數 | 適合對象 |
-|---|---|---|---|---|
-| 1 | **自訂讀經計劃** | User 自己設 | User 設 | 已有穩定讀經習慣 |
-| 2 | **40 日新約 1 次** | 新約 | 40 日 | New believer / 想認識耶穌 |
-| 3 | **40 日舊約 1 次** | 舊約 | 40 日 | 想認識聖經故事 / 舊約背景 |
-| 4 | **40 日新舊約 1 次** | 新舊約並行 | 40 日 | 想 short-term commit |
-| 5 | **（Stage 2+）** 90 日 / 365 日 | … | … | 進階用戶 |
+```
+Step 1: 揀範圍
+   ○ 新約 only
+   ○ 舊約 only
+   ○ 新約 + 舊約       → 解鎖 Step 2
 
-> 自訂 plan form = 沿用 `bible-reading-quest-2025` `PlanForm.tsx`
-> 40 日 plans 嘅具體章節編排（哪日讀哪卷哪章）由內容編輯製作，MVP launch 預載佔位 schema，內容 Stage 1 後期填入
+Step 2 (only if Both): 揀 reading order
+   ○ 先新後舊
+   ○ 先舊後新
+   ○ 新舊並行          (動態比例，舊 quest 嘅 smart algorithm)
 
-### Plan Customization（任何 plan 入到後都可調）
-- 每日 chapter count 可調（multi-track：可同時進行多個 plan）
-- 可中途 skip / pause / 重啟
-- 完成 plan → 解鎖 achievement + option 重新 enroll
+Step 3: Duration slider
+   ┌─────────────────────────────────┐
+   │ 起點 40 日                       │
+   │ 40 → 60: step 1 日               │
+   │ 60 → 90: step 5 日               │
+   │ 90 → 180: step 10 日             │
+   │ 180 → 365: step 30 日            │
+   │   (跳過 360 → 直接 365 — TBD)    │
+   └─────────────────────────────────┘
+
+Step 4: 即時 preview
+   - 每日新約 X 章
+   - 每日舊約 Y 章
+   - 每日總計 ≈ Z 分鐘
+   - 完成日期 [start + N 日]
+   - 兩約同日完成? ✓/✗ (only for 並行)
+
+Step 5: Confirm → INSERT user_plan_enrollments
+```
+
+### Slider values (anchored 40–365, dynamic step)
+
+| Range | Step | # Ticks | Values |
+|---|---|---|---|
+| 40–60 | 1 | 21 | 40, 41, …, 60 |
+| 60–90 | 5 | 7 | 60, 65, 70, 75, 80, 85, 90 |
+| 90–180 | 10 | 10 | 90, 100, 110, …, 180 |
+| 180–365 | 30 (skip 360) | 7 | 180, 210, 240, 270, 300, 330, **365** |
+
+> 確認：Slider 180→365 用 (a) — 由 330 直接跳 365，中間唔包 360。
+
+### Duration logic
+
+- Slider 揀嘅日數係 **commitment target**（用戶希望幾耐做完）
+- 實際每日讀 chapter count = `ceil(total_chapters_in_scope / commitment_days)`
+  - NT 260 章 / 40 日 = 7 章/日
+  - OT 929 章 / 40 日 = 24 章/日（≈ 30 分鐘）
+  - NT+OT 1189 章 / 365 日 = 4 章/日
+- **實際完成日期** = `start_date + ceil(total_chapters / per_day) days`
+  - 例 NT-only / 365 日：260/365 = 0.7 → ceil = 1 章/日 → 260 日完成
+  - 例 OT-only / 365 日：929/365 = 2.5 → ceil = 3 章/日 → 310 日完成
+- Grace period（slider 揀嘅日數 > 實際完成日）係 **純 cosmetic**
+  - 顯示 "你嘅 plan 提早 X 日完成 🎉"
+  - Enrollment status 自動變 `completed`
+  - 唔影響 streak / XP（streak 係 daily lesson，唔係 plan-level）
+
+### Edge cases
+- NT-only / OT-only 都唔需要 Step 2（reading order 預設線性）
+- ❌ 唔 enforce min chapters/day（user 揀 365 日 OT-only 都接受）
+- ❌ 唔 enforce hard warning for high load（user 自己 commit）
+- ✅ Plan 完成日係 actual completion，唔係 slider 揀嘅日數
 
 ## 4. Tech Stack（承繼 bible-reading-quest-2025）
 
