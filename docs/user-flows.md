@@ -112,9 +112,11 @@ sequenceDiagram
     participant SB as Supabase
     participant RT as Realtime channel
 
-    A->>App: 輸入 Bob 嘅 email
-    App->>SB: INSERT partner_invites<br/>(inviter=Alice, email=bob@x.com, token=ABC)
-    SB->>B: Email: "Alice 邀請你做讀經拍檔"<br/>link: /invite/ABC
+    A->>App: 點 "邀請拍檔" → 顯示 copy-link + WhatsApp share buttons
+    A->>App: 點 WhatsApp share
+    App->>A: 開 wa.me/?text=...<br/>自動帶 message template
+    A->>App: 喺 WhatsApp 揀 contact → send
+    A->>App: INSERT partner_invites<br/>(inviter=Alice, token=ABC)
 
     alt Bob 已有帳號
         B->>App: 點 link

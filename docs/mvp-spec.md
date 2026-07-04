@@ -22,12 +22,47 @@
 | 5 | **1-on-1 accountability partner** | 邀請同伴、互相睇 streak（唔做 chat） |
 | 6 | **Push notification** | 每日 20:00 提醒（用戶可選時間） |
 
-### 唔做嘅（MVP 唔包）
+### 唔做嘅嘢（MVP 唔包）
 - ❌ 以色列地圖 / 得地為業（舊 quest 反饋差）
 - ❌ 跑道式 leaderboard（用 XP 數字排行取代）
 - ❌ Leagues（競爭感 vs 靈修初心有衝突）
 - ❌ In-app chat / group chat（避免 moderation 負擔）
 - ❌ Gems / 商店（後加）
+- ❌ Multi-partner（Stage 2+）
+- ❌ Email 邀請（Stage 1 用 WhatsApp + copy-link）
+- ❌ 屬靈書閱讀、教會聚會報名、禱告事項（Stage 2+ future modules）
+
+### 跨裝置設計（mobile-first）
+
+| 平台 | 要求 |
+|---|---|
+| **Mobile (primary)** | Touch target ≥ 44px、bottom nav、portrait-optimized、PWA install prompt |
+| **Tablet** | 同 mobile，但可以用 2-column layout（dashboard + sidebar） |
+| **Desktop** | Same React tree，max-width container，nav 可以變 top bar |
+
+**核心策略**：Mobile-first responsive，一份 React code + Tailwind responsive utilities (`sm:`, `md:`, `lg:`)，唔做 separate desktop app。
+
+### 預擴展 Layout 設計
+
+```
+┌─────────────────────────────────────────┐
+│  Top Bar: app name + notifications 🔔   │
+├─────────────────────────────────────────┤
+│         Main content area                │
+│         (route-based, modular)           │
+├─────────────────────────────────────────┤
+│  Bottom Nav:                            │
+│  [讀經 📖] [進度 📊] [社群 👥] [我 👤]   │
+└─────────────────────────────────────────┘
+```
+
+Stage 2+ 加新 tab（聚會、書籍、禱告）唔需要 redesign 個 nav。
+
+### 預擴展 Component 設計
+
+- `bottom-nav` 已經喺 DESIGN.md tokenized
+- Schema 將來可以加 `module` column，但 Stage 1 唔加
+- 待 future modules 設計時再 extend
 
 ## 3. Reading Plan — Hybrid Model
 
@@ -319,9 +354,39 @@ typography:
 
 ---
 
-## 11. 開放問題（待 user 回應）
+### Partner 邀請機制
 
-1. ~~Curated plan 邊個做 content？~~ → 預設「30 日約翰福音」要唔要請人寫每日反思？
-2. ~~Partner 邀請機制~~ → 用 email 邀請？定要已經係 app user？
-3. ~~Push notification provider~~ → Vercel + OneSignal / Supabase functions？
-4. ~~Standard plans 內容審核~~ → 編輯流程點樣？
+**Stage 1**：
+- 用戶點「邀請拍檔」→ 系統 generate invite token → 顯示兩個按鈕
+  - 📋 **複製連結**：`bq.app/i/{token}`，用戶自己貼任何地方
+  - 💬 **用 WhatsApp 分享**：用 `wa.me/?text=...` deep link，自動帶 message template
+- Receiver 點 link：
+  - 已 signup → 直接 accept
+  - 未 signup → 強制註冊後 auto-accept
+- **單一 partner**：Stage 1 限制 user 只可以有 1 個 active partner
+  - Schema: `create unique index on partner_pairs (user_id) where status = 'active';`
+  - Stage 2 drop 呢個 index 就可以開 multi-partner
+
+**Stage 2+**：
+- Multi-partner (1-to-many) 支援
+- Partner 之間互相唔知對方存在（`v_partner_progress` view 已 support）
+- 可能加「拍檔群」(3-5 人) — 待 spec
+
+### WhatsApp share template
+
+```
+我喺度用「聖經任務」讀經！一齊嚟做我嘅讀經拍檔：
+https://bq.app/i/{token}
+```
+
+**Implementation**：
+```js
+const link = `https://bq.app/i/${token}`;
+const text = `我喺度用「聖經任務」讀經！一齊嚟做我嘅讀經拍檔：${link}`;
+window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+```
+
+### 唔做嘅嘢（Stage 1）
+- ❌ WhatsApp Business API（要 business account）
+- ❌ 自動偵測 WhatsApp 是否安裝（universal link 已覆蓋）
+- ❌ Email 邀請（Stage 1 skip，用戶用 copy-link 解決）

@@ -131,6 +131,12 @@ create table public.partner_pairs (
 );
 create index on public.partner_pairs (partner_id) where status = 'active';
 
+-- Stage 1: enforce single active partner per user
+-- Stage 2+: drop this index to allow multi-partner
+create unique index partner_pairs_one_active_per_user
+  on public.partner_pairs (user_id)
+  where status = 'active';
+
 -- =====================================================================
 -- 8. achievements — catalog of badge definitions
 -- =====================================================================
