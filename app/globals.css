@@ -1,0 +1,39 @@
+:root {
+  --color-primary: #1F2937;
+  --color-streak: #FF9600;
+  --color-success: #58CC02;
+  --color-gem: #1CB0F6;
+  --color-xp: #FFC800;
+  --color-danger: #FF4B4B;
+  --color-surface: #FFFFFF;
+  --color-background: #F7F7F7;
+  --color-muted: #9CA3AF;
+  --color-accent: #CE82FF;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Nunito', system-ui, sans-serif;
+  background-color: var(--color-background);
+  color: var(--color-primary);
+  min-height: 100vh;
+}
+
+h1, h2, h3 {
+  font-weight: 700;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
