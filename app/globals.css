@@ -1,4 +1,7 @@
-:root {
+@import "tailwindcss";
+
+@theme {
+  /* DESIGN.md color tokens */
   --color-primary: #1F2937;
   --color-streak: #FF9600;
   --color-success: #58CC02;
@@ -9,31 +12,60 @@
   --color-background: #F7F7F7;
   --color-muted: #9CA3AF;
   --color-accent: #CE82FF;
+
+  /* Typography */
+  --font-sans: "Nunito", "Noto Sans TC", system-ui, sans-serif;
+  --font-serif: "Noto Serif TC", "Noto Serif", Georgia, serif;
+
+  /* Spacing */
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 16px;
+  --spacing-lg: 24px;
+  --spacing-xl: 32px;
+  --spacing-xxl: 48px;
+
+  /* Border radius */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 20px;
+  --radius-xl: 28px;
+  --radius-full: 9999px;
+
+  /* Shadows */
+  --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.06);
+  --shadow-floating: 0 8px 24px rgba(0, 0, 0, 0.12);
+  --shadow-button: 0 2px 0 rgba(0, 0, 0, 0.15);
 }
 
-* {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
+/* Base styles */
+html {
+  font-family: var(--font-sans);
+  background-color: var(--color-background);
+  color: var(--color-primary);
+  -webkit-tap-highlight-color: transparent;
 }
 
 body {
-  font-family: 'Nunito', system-ui, sans-serif;
-  background-color: var(--color-background);
+  min-height: 100dvh;
+  overscroll-behavior: none;
+}
+
+/* Scripture reading text */
+.scripture-text {
+  font-family: var(--font-serif);
+  font-size: 1.125rem;
+  line-height: 1.8;
   color: var(--color-primary);
-  min-height: 100vh;
 }
 
-h1, h2, h3 {
-  font-weight: 700;
+/* Touch targets */
+button, a, [role="button"] {
+  min-height: 44px;
+  min-width: 44px;
 }
 
-button {
-  font-family: inherit;
-  cursor: pointer;
-}
-
-a {
-  color: inherit;
-  text-decoration: none;
+/* Bottom nav safe area */
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 16px);
 }

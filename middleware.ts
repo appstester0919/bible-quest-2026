@@ -45,15 +45,14 @@ export async function middleware(request: NextRequest) {
     }
   )
 
-  await supabase.auth.getSession()
-
   const { data: { user } } = await supabase.auth.getUser()
 
-  const protectedPaths = ['/dashboard', '/map', '/leaderboard', '/plan', '/profile']
+  const protectedPaths = ['/dashboard', '/onboarding', '/plan', '/profile']
   const isProtected = protectedPaths.some(p => request.nextUrl.pathname.startsWith(p))
   const authPaths = ['/login', '/signup']
   const isAuthPath = authPaths.some(p => request.nextUrl.pathname.startsWith(p))
 
+  // Homepage: redirect to /dashboard if logged in, /login if not
   if (request.nextUrl.pathname === '/') {
     if (user) {
       return NextResponse.redirect(new URL('/dashboard', request.url))
@@ -62,12 +61,27 @@ export async function middleware(request: NextRequest) {
     }
   }
 
+  // Authenticated user accessing login/signup → redirect to dashboard
+  if (user && isAuthPath) {
+    return NextResponse.redirect(new URL('/dashboard', request.url))
+  }
+
+  // Not authenticated user accessing protected path → redirect to login
   if (!user && isProtected) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
 
-  if (user && isAuthPath) {
-    return NextResponse.redirect(new URL('/dashboard', request.url))
+  // Check onboarding status for authenticated users on protected routes
+  if (user && isProtected && !request.nextUrl.pathname.startsWith('/onboarding')) {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('onboarding_done')
+      .eq('id', user.id)
+      .single()
+    
+    if (profile && !profile.onboarding_done) {
+      return NextResponse.redirect(new URL('/onboarding', request.url))
+    }
   }
 
   return response
@@ -75,6 +89,6 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|api/auth/callback).*)',
+    '/((?!_next/static|_next/image|favicon.ico|api/auth/callback|/auth/callback).*)',
   ],
 }

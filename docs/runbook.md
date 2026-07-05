@@ -95,11 +95,13 @@ git push -u origin main
 ### `npm run dev` hangs / shows blank page
 
 Check Supabase env vars are set in `.env.local`:
+
 ```bash
 grep SUPABASE .env.local
 ```
 
 Test Supabase connection directly in browser console:
+
 ```js
 const { createClient } = require('@supabase/supabase-js')
 console.log('URL:', process.env.NEXT_PUBLIC_SUPABASE_URL)
@@ -158,6 +160,7 @@ Every `git commit` automatically runs:
 2. `prettier --write` (format code)
 
 To bypass (never do this for production code):
+
 ```bash
 git commit --no-verify -m "wip"
 ```

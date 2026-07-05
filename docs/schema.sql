@@ -230,44 +230,7 @@ join public.profiles prof on prof.id = p.partner_id
 join public.user_stats  s  on s.user_id  = p.partner_id
 where p.status = 'active';
 
--- v_user_dashboard — aggregated for /dashboard route
-create or replace view public.v_user_dashboard as
-select
-  prof.id                                                as user_id,
-  prof.display_name,
-  s.current_streak,
-  s.longest_streak,
-  s.last_completed_date,
-  (s.last_completed_date = current_date)                 as completed_today,
-  s.streak_freezes_available,
-  s.total_xp,
-  s.level,
-  (
-    select json_agg(json_build_object(
-      'enrollment_id', e.id,
-      'plan_slug',     e.plan_slug,
-      'plan_name',     c.name_zh,
-      'current_day',   e.current_day,
-      'duration_days', c.duration_days,
-      'status',        e.status,
-      'today',         (
-        select json_build_object(
-          'book_zh',  rs.book_zh,
-          'chapter',  rs.chapter,
-          'day',      rs.day_number
-        )
-        from public.reading_sessions rs
-        where rs.enrollment_id = e.id
-          and rs.date_local    = current_date
-        limit 1
-      )
-    ))
-    from public.user_plan_enrollments e
-    join public.reading_plans_catalog c on c.slug = e.plan_slug
-    where e.user_id = prof.id and e.status = 'active'
-  ) as active_plans
-from public.profiles prof
-join public.user_stats s on s.user_id = prof.id;
+-- v_user_dashboard: REMOVED - was referencing reading_plans_catalog (Stage 1 DROP) and non-existent columns
 
 -- =====================================================================
 -- FUNCTIONS / TRIGGERS
@@ -327,7 +290,6 @@ create trigger trg_user_stats_updated_at
   before update on public.user_stats
   for each row execute function public.touch_updated_at();
 
--- (reading_plans_catalog trigger removed — table dropped in Stage 1)
 
 create trigger trg_enrollments_updated_at
   before update on public.user_plan_enrollments
@@ -339,7 +301,6 @@ create trigger trg_enrollments_updated_at
 
 alter table public.profiles                 enable row level security;
 alter table public.user_stats               enable row level security;
-alter table public.reading_plans_catalog    enable row level security;
 alter table public.user_plan_enrollments    enable row level security;
 alter table public.reading_sessions         enable row level security;
 alter table public.partner_invites          enable row level security;
@@ -359,7 +320,6 @@ create policy "profiles_public_read"  on public.profiles for select to authentic
 create policy "user_stats_self_read"   on public.user_stats for select using (auth.uid() = user_id);
 create policy "user_stats_self_update" on public.user_stats for update using (auth.uid() = user_id);
 
--- reading_plans_catalog: DROPPED in Stage 1 (user plans are dynamic)
 -- RLS for catalog is no longer applicable; enrollment RLS below
 
 -- enrollments: own rows only
@@ -407,6 +367,5 @@ insert into public.achievements (code, name_zh, description_zh, tier, criteria) 
   ('level_5',          'LEVEL 5',      '達到 Level 5',               'silver', '{"type":"level","min":5}'),
   ('level_10',         'LEVEL 10',     '達到 Level 10',              'gold',   '{"type":"level","min":10}');
 
--- (reading_plans_catalog seeds removed — table dropped in Stage 1)
 -- Plan metadata now lives directly on user_plan_enrollments.
 -- Stage 2+ may re-add catalog table for curated "official" challenges.
