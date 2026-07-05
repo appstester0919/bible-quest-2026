@@ -1,47 +1,48 @@
-'use client';
+'use client'
 
-import { useState, FormEvent } from 'react';
-import { createClient } from '@/lib/supabase/client';
-import { useRouter } from 'next/navigation';
+import { useState, FormEvent } from 'react'
+import { createClient } from '@/lib/supabase/client'
+import { useRouter } from 'next/navigation'
 
 export default function LoginPage() {
-  const router = useRouter();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
-  const supabase = createClient();
+  const router = useRouter()
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
 
   async function handleSubmit(e: FormEvent) {
-    e.preventDefault();
-    setError('');
-    setLoading(true);
+    e.preventDefault()
+    setError('')
+    setLoading(true)
 
+    const supabase = createClient()
     const { error: signInError } = await supabase.auth.signInWithPassword({
       email,
       password,
-    });
+    })
 
     if (signInError) {
-      setError(signInError.message);
-      setLoading(false);
-      return;
+      setError(signInError.message)
+      setLoading(false)
+      return
     }
 
-    router.push('/dashboard');
-    router.refresh();
+    router.push('/dashboard')
+    router.refresh()
   }
 
   async function handleGoogleSignIn() {
-    setError('');
+    setError('')
+    const supabase = createClient()
     const { error: googleError } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
         redirectTo: `${window.location.origin}/dashboard`,
       },
-    });
+    })
     if (googleError) {
-      setError(googleError.message);
+      setError(googleError.message)
     }
   }
 

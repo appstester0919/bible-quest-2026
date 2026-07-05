@@ -1,62 +1,61 @@
-'use client';
+'use client'
 
-import { useState, FormEvent } from 'react';
-import { createClient } from '@/lib/supabase/client';
-import { useRouter } from 'next/navigation';
+import { useState, FormEvent } from 'react'
+import { createClient } from '@/lib/supabase/client'
+import { useRouter } from 'next/navigation'
 
 export default function SignupPage() {
-  const router = useRouter();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
-  const supabase = createClient();
+  const router = useRouter()
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
 
   async function handleSubmit(e: FormEvent) {
-    e.preventDefault();
-    setError('');
+    e.preventDefault()
+    setError('')
 
     if (password !== confirmPassword) {
-      setError('兩次輸入的密碼不相同');
-      return;
+      setError('兩次輸入的密碼不相同')
+      return
     }
 
     if (password.length < 6) {
-      setError('密碼至少需要 6 個字元');
-      return;
+      setError('密碼至少需要 6 個字元')
+      return
     }
 
-    setLoading(true);
-
+    setLoading(true)
+    const supabase = createClient()
     const { error: signUpError } = await supabase.auth.signUp({
       email,
       password,
       options: {
         emailRedirectTo: `${window.location.origin}/dashboard`,
       },
-    });
+    })
 
     if (signUpError) {
-      setError(signUpError.message);
-      setLoading(false);
-      return;
+      setError(signUpError.message)
+      setLoading(false)
+      return
     }
 
-    // Redirect to onboarding after successful signup
-    router.push('/onboarding');
+    router.push('/onboarding')
   }
 
   async function handleGoogleSignUp() {
-    setError('');
+    setError('')
+    const supabase = createClient()
     const { error: googleError } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
         redirectTo: `${window.location.origin}/onboarding`,
       },
-    });
+    })
     if (googleError) {
-      setError(googleError.message);
+      setError(googleError.message)
     }
   }
 

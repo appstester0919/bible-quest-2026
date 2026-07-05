@@ -1,19 +1,16 @@
-import js from '@eslint/js';
-import eslintConfigPrettier from 'eslint-config-prettier';
-import nextPlugin from 'eslint-config-next';
+// @ts-check
+const { FlatCompat } = require('@eslint/eslintrc')
 
-export default [
-  ...nextPlugin.configs.recommended,
-  js.configs.recommended,
-  eslintConfigPrettier,
-  {
+const compat = new FlatCompat({
+  baseDirectory: process.cwd(),
+})
+
+module.exports = [
+  ...compat.config({
+    extends: ['next/core-web-vitals', 'prettier'],
     rules: {
-      'no-unused-vars': 'warn',
-      'no-console': 'off',
+      'no-unused-vars': 'off',
       'react/no-unescaped-entities': 'off',
     },
-  },
-  {
-    ignores: ['node_modules/**', '.next/**', 'out/**', 'build/**', 'next-env.d.ts'],
-  },
-];
+  }),
+]
