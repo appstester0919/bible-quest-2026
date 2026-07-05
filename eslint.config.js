@@ -1,11 +1,11 @@
 // @ts-check
-const { FlatCompat } = require('@eslint/eslintrc')
+import { FlatCompat } from '@eslint/eslintrc'
 
 const compat = new FlatCompat({
   baseDirectory: process.cwd(),
 })
 
-module.exports = [
+const eslintConfig = [
   ...compat.config({
     extends: ['next/core-web-vitals', 'prettier'],
     rules: {
@@ -14,3 +14,5 @@ module.exports = [
     },
   }),
 ]
+
+export default eslintConfig
