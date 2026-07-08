@@ -164,3 +164,44 @@ To bypass (never do this for production code):
 ```bash
 git commit --no-verify -m "wip"
 ```
+
+---
+
+## §6 — Reader Preferences
+
+BibleQuest2026 supports two per-user reading preferences persisted in `localStorage`:
+
+| Key | Default | Range | Steps |
+|---|---|---|---|
+| `bq_audio_rate` | `1.0` | `1.0` – `2.0` | `1.0, 1.25, 1.5, 1.75, 2.0` |
+| `bq_font_size` | `20` | `14` – `32` px | step 4 (`14, 18, 20, 24, 28, 32`) |
+
+### Components
+
+- `components/AudioPlayer.tsx` — speed pills + play/pause + progress bar. Reads/writes `bq_audio_rate` via `lib/user-prefs.ts`.
+- `components/FontSizeControl.tsx` — A− / Npx / A+ 3-button group. Reads/writes `bq_font_size` via `lib/user-prefs.ts`.
+- `lib/user-prefs.ts` — SSR-safe wrappers (`typeof window === 'undefined'` guard).
+
+### Usage in dashboard
+
+```tsx
+const [fontSize, setFontSize] = useState(20)
+useEffect(() => { setFontSize(getFontSize()) }, [])
+
+// Header
+<FontSizeControl value={fontSize} onChange={setFontSize} />
+
+// Scripture area
+<div style={{ fontSize: `${fontSize}px` }}>{verses}</div>
+
+// Audio
+<AudioPlayer src={audioUrl} onEnded={() => {}} />
+```
+
+### Stage 4+ Roadmap
+
+- Volume control (separate from speed)
+- Loop current chapter toggle
+- Sleep timer (stop after N minutes)
+- Font size in settings page (not just header)
+- Per-enrollment reading speed memory

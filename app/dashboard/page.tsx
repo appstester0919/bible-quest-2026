@@ -1,10 +1,14 @@
 'use client'
 
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { markLessonComplete } from './actions'
 import { useRouter } from 'next/navigation'
 import { getChapter, getAudioUrl, type BookMeta } from '@/lib/bible/lookup'
+import { AudioPlayer } from '@/components/AudioPlayer'
+import { FontSizeControl } from '@/components/FontSizeControl'
+import { getFontSize } from '@/lib/user-prefs'
+import { getXpForLevel, getXpProgress } from '@/lib/xp'
 
 interface Profile {
   id: string
@@ -137,26 +141,26 @@ function getTodayReading(
   }
 }
 
-function getXpForLevel(level: number): number {
-  return level * 100
-}
-
 export default function DashboardPage() {
   const router = useRouter()
   const [user, setUser] = useState<{ id?: string; email?: string } | null>(null)
   const [profile, setProfile] = useState<Profile | null>(null)
+  const [levelUp, setLevelUp] = useState<number | null>(null) // null = no animation
+  const [showConfetti, setShowConfetti] = useState(false)
   const [enrollment, setEnrollment] = useState<Enrollment | null>(null)
   const [todaySession, setTodaySession] = useState<ReadingSession | null>(null)
   const [todayReading, setTodayReading] = useState<TodayReading | null>(null)
   const [loading, setLoading] = useState(true)
   const [isCompleting, setIsCompleting] = useState(false)
   const [books, setBooks] = useState<BookMeta[]>([])
-  const [sessionAudio, setSessionAudio] = useState<HTMLAudioElement | null>(null)
-  const [isPlaying, setIsPlaying] = useState(false)
-  const [currentVerseIdx, setCurrentVerseIdx] = useState(0)
-  const audioRef = useRef<HTMLAudioElement>(null)
+  const [fontSize, setFontSize] = useState(20)
 
   useEffect(() => {
+    // Register service worker
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').catch(() => {})
+    }
+
     const fetchData = async () => {
       const supabase = createClient()
       const { data: { user: authUser } } = await supabase.auth.getUser()
@@ -245,23 +249,15 @@ export default function DashboardPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [todayReading?.book.abbr, todayReading?.chapterStart])
 
-  const handlePlayAudio = () => {
-    if (!todayReading) return
-    const audio = audioRef.current
-    if (!audio) return
-    if (isPlaying) {
-      audio.pause()
-      setIsPlaying(false)
-    } else {
-      audio.src = todayReading.audioUrl
-      audio.play()
-      setIsPlaying(true)
-    }
-  }
+  // Load font size preference on mount
+  useEffect(() => {
+    setFontSize(getFontSize())
+  }, [])
 
-  const handleAudioEnded = () => {
-    setIsPlaying(false)
-    setCurrentVerseIdx(0)
+  const handleSignOut = async () => {
+    const supabase = createClient()
+    await supabase.auth.signOut()
+    router.push('/login')
   }
 
   const handleComplete = async () => {
@@ -270,6 +266,7 @@ export default function DashboardPage() {
     setIsCompleting(true)
     try {
       const xpEarned = 10
+      const oldLevel = profile?.level ?? 1
       await markLessonComplete(
         enrollment.id,
         `${todayReading.book.name} ${todayReading.chapterStart}`,
@@ -277,9 +274,20 @@ export default function DashboardPage() {
       )
 
       const now = new Date()
+      const newXp = (profile?.total_xp ?? 0) + xpEarned
+      // Compute new level: same formula as DB trigger
+      const newLevel = Math.floor(Math.sqrt(newXp / 100)) + 1
+
+      // Fire confetti + optional level-up
+      setShowConfetti(true)
+      setTimeout(() => setShowConfetti(false), 3000)
+      if (newLevel > oldLevel) {
+        setLevelUp(newLevel)
+        setTimeout(() => setLevelUp(null), 3000)
+      }
+
       const hktDate = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Hong_Kong' }))
       const dateLocal = hktDate.toISOString().split('T')[0]
-
       setTodaySession({
         id: 'new',
         enrollment_id: enrollment.id,
@@ -290,7 +298,7 @@ export default function DashboardPage() {
       if (profile) {
         setProfile({
           ...profile,
-          total_xp: profile.total_xp + xpEarned,
+          total_xp: newXp,
         })
       }
     } catch (error) {
@@ -309,21 +317,31 @@ export default function DashboardPage() {
   }
 
   const xpForNextLevel = profile ? getXpForLevel(profile.level + 1) : 100
-  const xpProgress = profile ? ((profile.total_xp % 100) / 100) * 100 : 0
+  const xpProgress = profile ? getXpProgress(profile.total_xp, profile.level) : 0
 
   return (
     <div className="min-h-screen bg-[var(--color-background)]">
-      {/* Hidden audio element */}
-      <audio ref={audioRef} onEnded={handleAudioEnded} />
-
       {/* Top Bar */}
       <header className="bg-white px-4 py-3 flex items-center justify-between shadow-sm">
-        <h1 className="text-xl font-bold text-[var(--color-primary)]">Bible Quest</h1>
-        <button className="p-2 text-[var(--color-muted)] hover:text-[var(--color-primary)] transition-colors" aria-label="Notifications">
-          🔔
-        </button>
+        <h1 className="text-xl font-extrabold text-[var(--color-primary)]">Bible Quest</h1>
+        <div className="flex items-center gap-3">
+          {/* XP + Level badge */}
+          {profile && (
+            <div className="flex items-center gap-1.5 bg-[var(--color-xp)]/10 px-2.5 py-1 rounded-full">
+              <span className="text-sm font-extrabold text-[var(--color-xp)]">Lv.{profile.level}</span>
+              <div className="w-16 h-1.5 bg-[var(--color-muted)]/20 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-[var(--color-xp)] rounded-full transition-all"
+                  style={{ width: `${xpProgress}%` }}
+                />
+              </div>
+            </div>
+          )}
+          <FontSizeControl value={fontSize} onChange={setFontSize} />
+          <a href="/settings" className="text-xl" aria-label="設定">⚙️</a>
+          <button onClick={handleSignOut} className="text-sm font-bold text-[var(--color-muted)] hover:text-[var(--color-primary)]" aria-label="登出">登出</button>
+        </div>
       </header>
-
       <main className="max-w-sm mx-auto px-4 py-6 space-y-4">
         {/* Streak Card */}
         <div className="bg-[var(--color-streak)] text-white rounded-2xl p-5 shadow-lg" role="region" aria-label="連續天數">
@@ -356,28 +374,22 @@ export default function DashboardPage() {
                 </p>
               </div>
 
-              {/* Audio player */}
-              <div className="flex items-center gap-3 mb-4 p-3 bg-[var(--color-background)] rounded-xl">
-                <button
-                  onClick={handlePlayAudio}
-                  className="w-10 h-10 flex items-center justify-center rounded-full bg-[var(--color-primary)] text-white text-lg"
-                  aria-label={isPlaying ? '暫停' : '播放'}
-                >
-                  {isPlaying ? '⏸' : '▶'}
-                </button>
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-[var(--color-primary)]">
-                    {isPlaying ? '播放中...' : '點擊播放粵語朗讀'}
-                  </p>
+              {/* Audio player toolbar */}
+              {todayReading && (
+                <div className="mb-4">
+                  <AudioPlayer
+                    src={todayReading.audioUrl}
+                    onEnded={() => {}}
+                  />
                 </div>
-              </div>
+              )}
 
               {/* Verse preview */}
               {todayReading.verses.length > 0 ? (
-                <div className="mb-4 space-y-2">
+                <div className="mb-4 scripture-text" style={{ fontSize: `${fontSize}px` }}>
                   {todayReading.verses.slice(0, 3).map(([num, text]) => (
-                    <p key={num} className={`text-sm leading-relaxed ${num === 1 ? 'font-bold' : ''}`}>
-                      <span className="text-[var(--color-xp)] font-bold mr-1">{num}</span>
+                    <p key={num} className="leading-[1.8]">
+                      <span className="text-[var(--color-xp)] font-bold mr-2 align-text-top" style={{ fontSize: '0.875rem' }}>{num}</span>
                       {text}
                     </p>
                   ))}
@@ -432,16 +444,57 @@ export default function DashboardPage() {
           </p>
         </div>
 
-        {/* Partner Card (placeholder) */}
-        <div className="bg-white rounded-2xl p-5 shadow-sm">
+        {/* Partner Card */}
+        <a href="/partner" className="block bg-white rounded-2xl p-5 shadow-sm hover:shadow-md transition-shadow">
           <h2 className="text-lg font-bold text-[var(--color-primary)] mb-3">
             👥 讀經夥伴
           </h2>
           <p className="text-[var(--color-muted)] text-sm">
-            還沒有配對夥伴。邀請朋友一起讀經！
+            查看夥伴進度或邀請新朋友
           </p>
-        </div>
+        </a>
       </main>
+
+      {/* ── Level-up animation overlay ───────────────────────────────── */}
+      {levelUp && (
+        <div
+          className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/50 animate-fade-in"
+          onClick={() => setLevelUp(null)}
+          role="dialog"
+          aria-modal="true"
+          aria-label={`升級到Lv${levelUp}`}
+        >
+          <div className="bg-white rounded-3xl p-8 text-center shadow-2xl animate-level-up">
+            <div className="text-6xl mb-3">⬆️</div>
+            <div className="text-xs font-bold text-[var(--color-gem)] uppercase tracking-widest mb-1">
+              Level Up!
+            </div>
+            <div className="text-5xl font-extrabold text-[var(--color-gem)]">
+              Lv.{levelUp}
+            </div>
+            <p className="text-sm text-[var(--color-muted)] mt-2">
+              繼續努力！
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* ── Confetti overlay ──────────────────────────────────────────── */}
+      {showConfetti && (
+        <div className="fixed inset-0 z-40 pointer-events-none" aria-hidden="true">
+          {Array.from({ length: 24 }).map((_, i) => (
+            <div
+              key={i}
+              className="confetti-piece"
+              style={{
+                left: `${(i * 4.17) % 100}%`,
+                animationDelay: `${(i * 0.07) % 0.5}s`,
+                backgroundColor: ['#58CC02', '#FF9600', '#FFC800', '#1CB0F6', '#CE82FF'][i % 5],
+              }}
+            />
+          ))}
+        </div>
+      )}
     </div>
   )
 }

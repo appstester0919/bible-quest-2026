@@ -15,7 +15,13 @@
     "incremental": true,
     "plugins": [{ "name": "next" }],
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*", "./app/*"],
+      "@/components/*": ["./components/*"],
+      "@/lib/*": ["./lib/*"],
+      "@/lib/user-prefs": ["./lib/user-prefs"],
+      "@/lib/bible/*": ["./lib/bible/*"],
+      "@/lib/supabase/*": ["./lib/supabase/*"],
+      "@/lib/push": ["./lib/push"]
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
