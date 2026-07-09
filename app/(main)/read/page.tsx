@@ -333,39 +333,39 @@ export default function ReadPage() {
         </div>
 
         {/* Prev — smaller icon button */}
-        <button onClick={goPrev} title="上一章" style={{
-          width: '28px !important', height: '28px !important', flexShrink: 0,
-          display: 'flex !important', alignItems: 'center', justifyContent: 'center',
-          background: 'transparent !important',
-          border: `1px solid ${C.borderColor} !important`, borderRadius: '50% !important',
+        <button onClick={goPrev} title="上一章" className="ab-prev ab-btn" style={{
+          width: '28px', height: '28px', flexShrink: 0,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          background: 'transparent',
+          border: `1px solid ${C.borderColor}`, borderRadius: '50%',
           color: C.textSecondary, cursor: 'pointer', fontSize: '0.8rem',
-          transition: 'all 0.2s', padding: '0 !important',
+          transition: 'all 0.2s', padding: 0,
         }}>
           ◀
         </button>
 
         {/* Play/Pause */}
-        <button onClick={togglePlay} title={isPlaying ? '暫停' : '播放'} style={{
-          width: '38px !important', height: '38px !important', flexShrink: 0,
-          display: 'flex !important', alignItems: 'center', justifyContent: 'center',
-          background: (isPlaying ? C.accentGold : C.bgCard) + ' !important',
-          border: `1px solid ${isPlaying ? C.accentGold : C.borderColor} !important`,
-          borderRadius: '50% !important',
+        <button onClick={togglePlay} title={isPlaying ? '暫停' : '播放'} className="ab-play ab-btn" style={{
+          width: '38px', height: '38px', flexShrink: 0,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          background: isPlaying ? C.accentGold : C.bgCard,
+          border: `1px solid ${isPlaying ? C.accentGold : C.borderColor}`,
+          borderRadius: '50%',
           color: isPlaying ? 'white' : C.textPrimary,
           cursor: 'pointer', fontSize: '1rem',
-          transition: 'all 0.2s', padding: '0 !important',
+          transition: 'all 0.2s', padding: 0,
         }}>
           {isPlaying ? '⏸' : '▶'}
         </button>
 
         {/* Next — smaller icon button */}
-        <button onClick={goNext} title="下一章" style={{
-          width: '28px !important', height: '28px !important', flexShrink: 0,
-          display: 'flex !important', alignItems: 'center', justifyContent: 'center',
-          background: 'transparent !important',
-          border: `1px solid ${C.borderColor} !important`, borderRadius: '50% !important',
+        <button onClick={goNext} title="下一章" className="ab-next ab-btn" style={{
+          width: '28px', height: '28px', flexShrink: 0,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          background: 'transparent',
+          border: `1px solid ${C.borderColor}`, borderRadius: '50%',
           color: C.textSecondary, cursor: 'pointer', fontSize: '0.8rem',
-          transition: 'all 0.2s', padding: '0 !important',
+          transition: 'all 0.2s', padding: 0,
         }}>
           ▶
         </button>
@@ -378,10 +378,11 @@ export default function ReadPage() {
             setPlaybackRate(rate)
             if (audioRef.current) audioRef.current.playbackRate = rate
           }}
+          className="ab-speed"
           style={{
             appearance: 'none', WebkitAppearance: 'none',
             background: `${C.bgCard} url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%236B5344' stroke-width='2.5'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E") no-repeat right 6px center`,
-            border: `1px solid ${C.borderColor} !important`, borderRadius: '20px !important',
+            border: `1px solid ${C.borderColor}`, borderRadius: '20px',
             padding: '5px 22px 5px 10px',
             fontSize: '0.78rem', fontFamily: 'inherit', color: C.textPrimary,
             cursor: 'pointer', minWidth: '54px', textAlign: 'center',
@@ -392,27 +393,38 @@ export default function ReadPage() {
         </select>
 
         {/* Font size A− */}
-        <button onClick={() => setFontSize(f => Math.max(14, f - 2))} title="縮小字體" style={{
-          width: '26px !important', height: '26px !important', flexShrink: 0,
-          display: 'flex !important', alignItems: 'center', justifyContent: 'center',
-          background: C.bgCard + ' !important',
-          border: `1px solid ${C.borderColor} !important`,
-          borderRadius: '50% !important', color: C.textSecondary,
+        <button onClick={() => setFontSize(f => Math.max(14, f - 2))} title="縮小字體" className="ab-font-dec ab-btn" style={{
+          width: '26px', height: '26px', flexShrink: 0,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          background: C.bgCard, border: `1px solid ${C.borderColor}`,
+          borderRadius: '50%', color: C.textSecondary,
           cursor: 'pointer', fontSize: '0.7rem', fontWeight: 700,
-          transition: 'all 0.2s', padding: '0 !important',
+          transition: 'all 0.2s', padding: 0,
         }}>A−</button>
 
         {/* Font size A+ */}
-        <button onClick={() => setFontSize(f => Math.min(36, f + 2))} title="放大字體" style={{
-          width: '26px !important', height: '26px !important', flexShrink: 0,
-          display: 'flex !important', alignItems: 'center', justifyContent: 'center',
-          background: C.bgCard + ' !important',
-          border: `1px solid ${C.borderColor} !important`,
-          borderRadius: '50% !important', color: C.textSecondary,
+        <button onClick={() => setFontSize(f => Math.min(36, f + 2))} title="放大字體" className="ab-font-inc ab-btn" style={{
+          width: '26px', height: '26px', flexShrink: 0,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          background: C.bgCard, border: `1px solid ${C.borderColor}`,
+          borderRadius: '50%', color: C.textSecondary,
           cursor: 'pointer', fontSize: '0.8rem', fontWeight: 700,
-          transition: 'all 0.2s', padding: '0 !important',
+          transition: 'all 0.2s', padding: 0,
         }}>A+</button>
       </div>
+
+      {/* Audio bar button size CSS — injected once, no Tailwind override possible */}
+      <style>{`
+        .ab-btn { all: unset !important; box-sizing: border-box !important; min-width: unset !important; min-height: unset !important; }
+        .ab-prev, .ab-next { width: 28px !important; height: 28px !important; }
+        .ab-play { width: 38px !important; height: 38px !important; }
+        .ab-font-dec, .ab-font-inc { width: 26px !important; height: 26px !important; }
+        .ab-btn { display: flex !important; align-items: center !important; justify-content: center !important; border-radius: 50% !important; border: 1px solid ${C.borderColor} !important; color: ${C.textSecondary} !important; cursor: pointer !important; transition: all 0.2s !important; padding: 0 !important; flex-shrink: 0 !important; }
+        .ab-play { background: ${C.bgCard} !important; border-color: ${C.borderColor} !important; color: ${C.textPrimary} !important; }
+        .ab-font-dec, .ab-font-inc { background: ${C.bgCard} !important; font-size: 0.7rem !important; font-weight: 700 !important; }
+        .ab-prev, .ab-next { background: transparent !important; font-size: 0.8rem !important; }
+        .ab-speed { border: 1px solid ${C.borderColor} !important; border-radius: 20px !important; padding: 5px 22px 5px 10px !important; font-size: 0.78rem !important; color: ${C.textPrimary} !important; cursor: pointer !important; text-align: center !important; flex-shrink: 0 !important; outline: none !important; }
+      `}</style>
 
       {/* ── Main content ──────────────────────────────────────────────── */}
       <div style={{ maxWidth: '900px', margin: '0 auto', padding: '20px 16px' }}>
