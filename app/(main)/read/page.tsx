@@ -307,9 +307,9 @@ export default function ReadPage() {
       <audio ref={audioRef} />
 
       {/* ── Fixed Top Audio Bar ──────────────────────────────────────── */}
-      <div style={{
+      <div id="audioBar" style={{
         position: 'fixed', top: 0, left: 0, right: 0,
-        height: '60px',
+        minHeight: '52px',
         background: 'rgba(245,240,232,0.97)', backdropFilter: 'blur(8px)',
         borderBottom: `1px solid ${C.borderColor}`,
         zIndex: 1000, boxShadow: '0 2px 12px rgba(61,41,20,0.06)',
@@ -318,11 +318,8 @@ export default function ReadPage() {
         gap: '6px',
         overflowX: 'auto', overflowY: 'hidden',
         WebkitOverflowScrolling: 'touch',
-        whiteSpace: 'nowrap',
         scrollbarWidth: 'none',
       }}>
-        {/* Hide scrollbar */}
-        <style>{`.audio-bar::-webkit-scrollbar{display:none}.audio-bar{scrollbar-width:none}`}</style>
 
         {/* Chapter display */}
         <div style={{
@@ -436,6 +433,24 @@ export default function ReadPage() {
           </div>
         )}
       </div>
+
+      {/* Mobile media queries injected once */}
+      <style>{`
+        @media (max-width: 768px) {
+          #audioBar { min-height: 50px !important; gap: 4px !important; padding: 0 8px !important; }
+          #audioBar > * { display: none !important; }
+          #audioBar > :nth-child(1) { display: flex !important; min-width: 88px !important; max-width: 96px !important; font-size: 0.78rem !important; padding: 4px 7px !important; flex-shrink: 0 !important; }
+          #audioBar > :nth-child(2) { display: flex !important; width: 32px !important; height: 32px !important; font-size: 0.85rem !important; padding: 0 !important; justify-content: center !important; }
+          #audioBar > :nth-child(3) { display: flex !important; width: 40px !important; height: 40px !important; font-size: 1rem !important; padding: 0 !important; justify-content: center !important; }
+          #audioBar > :nth-child(4) { display: flex !important; width: 32px !important; height: 32px !important; font-size: 0.8rem !important; padding: 0 !important; justify-content: center !important; }
+          #audioBar > :nth-child(5) { display: flex !important; width: 32px !important; height: 32px !important; font-size: 0.85rem !important; padding: 0 !important; justify-content: center !important; }
+          #audioBar > :nth-child(6) { display: flex !important; appearance: none !important; -webkit-appearance: none !important; background: ${C.bgCard} url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%236B5344' stroke-width='2.5'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E") no-repeat right 5px center !important; border: 1px solid ${C.borderColor} !important; border-radius: 20px !important; padding: 4px 20px 4px 8px !important; font-size: 0.75rem !important; min-width: 50px !important; text-align: center !important; color: ${C.textPrimary} !important; cursor: pointer !important; flex-shrink: 0 !important; outline: none !important; }
+          #audioBar > :nth-child(7) { display: flex !important; width: 26px !important; height: 26px !important; font-size: 0.7rem !important; padding: 0 !important; border-radius: 50% !important; justify-content: center !important; }
+          #audioBar > :nth-child(8) { display: flex !important; width: 26px !important; height: 26px !important; font-size: 0.8rem !important; padding: 0 !important; border-radius: 50% !important; justify-content: center !important; }
+          #audioBar > :nth-child(n+9) { display: flex !important; flex-shrink: 0 !important; }
+          #audioBar::-webkit-scrollbar { display: none !important; }
+        }
+      `}</style>
 
       {/* ── Main content ──────────────────────────────────────────────── */}
       <div style={{ maxWidth: '900px', margin: '0 auto', padding: '20px 16px' }}>
