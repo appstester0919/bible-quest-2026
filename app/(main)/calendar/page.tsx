@@ -31,9 +31,17 @@ interface DayPlan {
   completed: boolean
 }
 
-function getHKTDate(date: Date = new Date()): string {
-  return new Date(date.toLocaleString('en-US', { timeZone: 'Asia/Hong_Kong' }))
-    .toISOString().split('T')[0]
+function toHKDateString(date: Date): string {
+  return date.toLocaleDateString('en-CA', { timeZone: 'Asia/Hong_Kong' })
+}
+
+function dateToHKDateString(date: Date): string {
+  return date.toLocaleDateString('en-CA', { timeZone: 'Asia/Hong_Kong' })
+}
+
+function getHKToday(): Date {
+  const [y, m, d] = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Hong_Kong' }).split('-').map(Number)
+  return new Date(y, m - 1, d)
 }
 
 function buildPlan(enrollment: Enrollment, books: BookMeta[]): Map<string, string[]> {
@@ -46,15 +54,23 @@ function buildPlan(enrollment: Enrollment, books: BookMeta[]): Map<string, strin
 
   let bookIdx = 0
   let chapterInBook = 1
-  let start = new Date(enrollment.started_at ? enrollment.started_at : enrollment.created_at)
-  if (isNaN(start.getTime())) {
-    // Fallback: start from today minus completed days
-    start = new Date()
+  let start: Date
+  if (enrollment.started_at) {
+    const [y, m, d] = enrollment.started_at.split('T')[0].split('-').map(Number)
+    start = new Date(y, m - 1, d)
+  } else if (enrollment.created_at) {
+    const [y, m, d] = enrollment.created_at.split('T')[0].split('-').map(Number)
+    start = new Date(y, m - 1, d)
+  } else {
+    start = getHKToday()
   }
-  const today = new Date(getHKTDate())
-  let current = new Date(start)
 
-  while (current <= today && bookIdx < scopeBooks.length) {
+  const today = getHKToday()
+  const startStr = toHKDateString(start)
+  const todayStr = toHKDateString(today)
+  let currentStr = startStr
+
+  while (currentStr <= todayStr && bookIdx < scopeBooks.length) {
     const dayRefs: string[] = []
     for (let i = 0; i < enrollment.chapters_per_day && bookIdx < scopeBooks.length; i++) {
       const book = scopeBooks[bookIdx]
@@ -65,9 +81,11 @@ function buildPlan(enrollment: Enrollment, books: BookMeta[]): Map<string, strin
         chapterInBook = 1
       }
     }
-    const key = current.toISOString().split('T')[0]
-    plan.set(key, dayRefs)
-    current.setDate(current.getDate() + 1)
+    plan.set(currentStr, dayRefs)
+    // Advance by one day (local HK date)
+    const [cy, cm, cd] = currentStr.split('-').map(Number)
+    const next = new Date(cy, cm - 1, cd + 1)
+    currentStr = toHKDateString(next)
   }
 
   return plan
@@ -83,7 +101,7 @@ export default function CalendarPage() {
   const [showSuccess, setShowSuccess] = useState(false)
   const [loading, setLoading] = useState(true)
 
-  const hktToday = useMemo(() => getHKTDate(), [])
+  const hktToday = useMemo(() => dateToHKDateString(new Date()), [])
 
   useEffect(() => {
     const fetchData = async () => {
@@ -127,7 +145,7 @@ export default function CalendarPage() {
   }, [sessions])
 
   const tileContent = useCallback(({ date }: { date: Date }) => {
-    const key = date.toISOString().split('T')[0]
+    const key = dateToHKDateString(date)
     const refs = plan.get(key)
     if (!refs || refs.length === 0) return null
     const completed = completedDays.has(key)
@@ -144,11 +162,11 @@ export default function CalendarPage() {
   }, [plan, completedDays])
 
   const tileClassName = useCallback(({ date }: { date: Date }) => {
-    const key = date.toISOString().split('T')[0]
+    const key = dateToHKDateString(date)
     const refs = plan.get(key)
     const completed = completedDays.has(key)
     const isToday = key === hktToday
-    const isSelected = selectedDate?.toISOString().split('T')[0] === key
+    const isSelected = selectedDate && dateToHKDateString(selectedDate) === key
 
     let cls = 'relative '
     if (completed) {
@@ -164,7 +182,7 @@ export default function CalendarPage() {
 
   const handleDateClick = useCallback(async (date: Date) => {
     setSelectedDate(date)
-    const key = date.toISOString().split('T')[0]
+    const key = dateToHKDateString(date)
     const refs = plan.get(key)
     if (!refs || refs.length === 0) return
     if (completedDays.has(key) || !enrollment) return
@@ -175,8 +193,8 @@ export default function CalendarPage() {
       const { data: { user: authUser } } = await supabase.auth.getUser()
       if (!authUser) return
 
-      const hktDate = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Hong_Kong' }))
-      const dateLocal = hktDate.toISOString().split('T')[0]
+      const hktDate = new Date()
+      const dateLocal = dateToHKDateString(hktDate)
 
       await Promise.all(refs.map(ref =>
         supabase.from('reading_sessions').insert({
@@ -204,7 +222,7 @@ export default function CalendarPage() {
   }, [plan, completedDays, enrollment])
 
   const todayRefs = plan.get(hktToday) ?? []
-  const selectedKey = selectedDate?.toISOString().split('T')[0]
+  const selectedKey = selectedDate ? dateToHKDateString(selectedDate) : ''
   const selectedRefs = selectedKey ? (plan.get(selectedKey) ?? []) : []
 
   const totalPlanDays = plan.size
