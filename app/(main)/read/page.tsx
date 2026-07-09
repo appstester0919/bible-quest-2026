@@ -332,7 +332,19 @@ export default function ReadPage() {
           {currentAudioItem ? getAudioLabel(currentAudioItem.book, currentAudioItem.chapter) : '馬太福音 1 章'}
         </div>
 
-        {/* Play/Pause — prominent circular button */}
+        {/* Prev — smaller icon button */}
+        <button onClick={goPrev} title="上一章" style={{
+          width: '28px', height: '28px', flexShrink: 0,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          background: 'transparent',
+          border: `1px solid ${C.borderColor}`, borderRadius: '50%',
+          color: C.textSecondary, cursor: 'pointer', fontSize: '0.8rem',
+          transition: 'all 0.2s', padding: 0,
+        }}>
+          ◀
+        </button>
+
+        {/* Play/Pause */}
         <button onClick={togglePlay} title={isPlaying ? '暫停' : '播放'} style={{
           width: '38px', height: '38px', flexShrink: 0,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -344,6 +356,18 @@ export default function ReadPage() {
           transition: 'all 0.2s', padding: 0,
         }}>
           {isPlaying ? '⏸' : '▶'}
+        </button>
+
+        {/* Next — smaller icon button */}
+        <button onClick={goNext} title="下一章" style={{
+          width: '28px', height: '28px', flexShrink: 0,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          background: 'transparent',
+          border: `1px solid ${C.borderColor}`, borderRadius: '50%',
+          color: C.textSecondary, cursor: 'pointer', fontSize: '0.8rem',
+          transition: 'all 0.2s', padding: 0,
+        }}>
+          ▶
         </button>
 
         {/* Speed dropdown */}
