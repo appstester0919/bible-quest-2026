@@ -85,12 +85,12 @@ export default function CustomCalendar({ plan, completedDays, selectedDate, onSe
         >›</button>
       </div>
 
-      {/* Weekday header */}
-      <div className="grid grid-cols-7 text-center pb-2">
+      {/* Weekday header — separate grid, 7 cols */}
+      <div className="grid grid-cols-7 px-3 pb-1">
         {WEEKDAY_LABELS.map((label, i) => (
           <div
             key={i}
-            className="text-xs font-bold tracking-wide"
+            className="text-center text-xs font-bold tracking-wide"
             style={{ color: i === 5 ? '#ef4444' : '#9ca3af' }}
           >
             {label}
@@ -98,7 +98,7 @@ export default function CustomCalendar({ plan, completedDays, selectedDate, onSe
         ))}
       </div>
 
-      {/* Days grid */}
+      {/* Days grid — separate grid, 7 cols */}
       <div className="grid grid-cols-7 gap-1 px-3 pb-3">
         {calendarDays.map((day, idx) => {
           if (!day.date) {
@@ -110,16 +110,18 @@ export default function CustomCalendar({ plan, completedDays, selectedDate, onSe
           const completed = completedDays.has(key)
           const isToday = key === hktToday
           const isSelected = key === selectedKey
-
-          // Saturday column (col 5, 0-based since Sun is col 6)
           const col = idx % 7
           const isSat = col === 5
           const isSun = col === 6
-          const isWeekend = isSat || isSun
+          const hasColoredBg = completed || isToday || (refs && refs.length > 0)
+          const dayColor = hasColoredBg
+            ? '#1f2937'
+            : isSat ? '#ef4444'
+              : isSun ? '#374151'
+              : '#1f2937'
 
           let bgClass = 'bg-transparent'
           let ringClass = ''
-          
           if (completed) {
             bgClass = isToday ? 'bg-green-300' : 'bg-green-200'
             ringClass = isToday ? 'ring-2 ring-green-500' : ''
@@ -129,15 +131,6 @@ export default function CustomCalendar({ plan, completedDays, selectedDate, onSe
           } else if (refs && refs.length > 0) {
             bgClass = 'bg-amber-50'
           }
-          
-          // Text color: red Saturday only for normal days (no colored bg), otherwise dark
-          const hasColoredBg = completed || isToday || (refs && refs.length > 0)
-          const dayColor = hasColoredBg
-            ? '#1f2937'  // dark for contrast on colored bg
-            : isSat ? '#ef4444'   // red Saturday for normal days
-              : isSun ? '#374151' // dark Sunday for normal days
-              : '#1f2937'         // dark Mon-Fri for normal days
-
           if (isSelected && !isToday) {
             ringClass = 'ring-2 ring-green-500'
           }
