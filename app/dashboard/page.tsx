@@ -226,9 +226,10 @@ export default function DashboardPage() {
       const bibleJson = await res.json()
       setBooks(getBooksMeta(bibleJson))
 
-      // Compute today's reading
-      if (enrollmentData && sessionsData) {
-        const reading = getTodayReading(enrollmentData, sessionsData, bibleJson.books)
+      // Compute today's reading — pass transformed books (BookMeta[]), not raw bibleJson.books
+      const transformedBooks = getBooksMeta(bibleJson)
+      if (enrollmentData && sessionsData !== null) {
+        const reading = getTodayReading(enrollmentData, sessionsData, transformedBooks)
         setTodayReading(reading)
       }
 
