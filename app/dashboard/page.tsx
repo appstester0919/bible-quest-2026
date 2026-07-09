@@ -189,15 +189,18 @@ export default function DashboardPage() {
 
       setProfile({ ...profileData, ...statsData } as Profile)
 
-      // Fetch active enrollment
-      const { data: enrollmentData } = await supabase
+      // Fetch active enrollment — use maybeSingle to avoid PGRST116 crash when >1 row
+      const { data: enrollmentData, error: enrollmentError } = await supabase
         .from('user_plan_enrollments')
         .select('*')
         .eq('user_id', authUser.id)
         .eq('status', 'active')
-        .single()
+        .maybeSingle()
 
-      setEnrollment(enrollmentData)
+      if (enrollmentError) {
+        console.error('Enrollment query failed:', enrollmentError)
+      }
+      setEnrollment(enrollmentError ? null : enrollmentData)
 
       // Fetch all reading sessions for this enrollment
       const { data: sessionsData } = enrollmentData
