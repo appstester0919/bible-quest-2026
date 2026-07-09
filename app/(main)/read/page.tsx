@@ -102,11 +102,11 @@ export default function ReadPage() {
       const { data: { user: authUser } } = await supabase.auth.getUser()
       if (!authUser) { router.push('/login'); return }
 
-      const [{ data: statsData }, { data: enrollmentData }, { data: sessionsData }] = await Promise.all([
-        supabase.from('user_stats').select('current_streak, total_xp, level').eq('user_id', authUser.id).single(),
-        supabase.from('user_plan_enrollments').select('*').eq('user_id', authUser.id).eq('status', 'active').maybeSingle(),
-        enrollmentData ? supabase.from('reading_sessions').select('*').eq('enrollment_id', enrollmentData.id) : { data: Promise.resolve(null) },
-      ])
+      const { data: statsData } = await supabase.from('user_stats').select('current_streak, total_xp, level').eq('user_id', authUser.id).single()
+      const { data: enrollmentData } = await supabase.from('user_plan_enrollments').select('*').eq('user_id', authUser.id).eq('status', 'active').maybeSingle()
+      const sessionsData = enrollmentData
+        ? await supabase.from('reading_sessions').select('*').eq('enrollment_id', enrollmentData.id)
+        : null
 
       setProfile(statsData as Profile)
       setEnrollment(enrollmentData as Enrollment)
