@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import { markLessonComplete } from './actions'
 import { useRouter } from 'next/navigation'
 import { getChapter, getAudioUrl, type BookMeta } from '@/lib/bible/lookup'
+import { getBooksMeta } from '@/lib/bible/lookup'
 import { AudioPlayer } from '@/components/AudioPlayer'
 import { FontSizeControl } from '@/components/FontSizeControl'
 import { getFontSize } from '@/lib/user-prefs'
@@ -220,7 +221,7 @@ export default function DashboardPage() {
       // Load bible data
       const res = await fetch('/bible-data.json')
       const bibleJson = await res.json()
-      setBooks(bibleJson.books)
+      setBooks(getBooksMeta(bibleJson))
 
       // Compute today's reading
       if (enrollmentData && sessionsData) {
