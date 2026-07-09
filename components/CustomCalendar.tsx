@@ -90,7 +90,8 @@ export default function CustomCalendar({ plan, completedDays, selectedDate, onSe
         {WEEKDAY_LABELS.map((label, i) => (
           <div
             key={i}
-            className={`text-xs font-bold tracking-wide ${i === 5 ? 'text-red-500' : 'text-gray-400'}`}
+            className="text-xs font-bold tracking-wide"
+            style={{ color: i === 5 ? '#ef4444' : '#9ca3af' }}
           >
             {label}
           </div>
@@ -118,7 +119,6 @@ export default function CustomCalendar({ plan, completedDays, selectedDate, onSe
 
           let bgClass = 'bg-transparent'
           let ringClass = ''
-          let textColor = isSat ? 'text-red-500' : isSun ? 'text-gray-700' : 'text-gray-800'
           
           if (completed) {
             bgClass = isToday ? 'bg-green-300' : 'bg-green-200'
@@ -129,6 +129,14 @@ export default function CustomCalendar({ plan, completedDays, selectedDate, onSe
           } else if (refs && refs.length > 0) {
             bgClass = 'bg-amber-50'
           }
+          
+          // Text color: red Saturday only for normal days (no colored bg), otherwise dark
+          const hasColoredBg = completed || isToday || (refs && refs.length > 0)
+          const dayColor = hasColoredBg
+            ? '#1f2937'  // dark for contrast on colored bg
+            : isSat ? '#ef4444'   // red Saturday for normal days
+              : isSun ? '#374151' // dark Sunday for normal days
+              : '#1f2937'         // dark Mon-Fri for normal days
 
           if (isSelected && !isToday) {
             ringClass = 'ring-2 ring-green-500'
@@ -141,10 +149,11 @@ export default function CustomCalendar({ plan, completedDays, selectedDate, onSe
               className={`
                 relative aspect-square flex flex-col items-center justify-center
                 rounded-xl transition-all text-sm font-semibold
-                ${bgClass} ${ringClass} ${textColor}
+                ${bgClass} ${ringClass}
                 ${refs && refs.length > 0 && !completed ? 'font-bold' : ''}
                 ${!refs || refs.length === 0 ? 'opacity-40' : 'opacity-100'}
               `}
+              style={{ color: dayColor }}
             >
               <span>{day.date.getDate()}</span>
               {refs && refs.length > 0 && (
