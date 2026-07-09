@@ -110,7 +110,8 @@ export default function ReadPage() {
 
       setProfile(statsData as Profile)
       setEnrollment(enrollmentData as Enrollment)
-      if (sessionsData) setSessions(sessionsData as ReadingSession[])
+      const sessions = sessionsData?.data as ReadingSession[] | null
+      if (sessions) setSessions(sessions)
 
       // Load bible data
       const res = await fetch('/bible-data.json')
