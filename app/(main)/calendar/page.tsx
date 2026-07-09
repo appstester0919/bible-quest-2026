@@ -274,9 +274,6 @@ export default function CalendarPage() {
           <CustomCalendar plan={plan} completedDays={completedDays} selectedDate={selectedDate} onSelect={handleDateClick} />
         </div>
 
-        {/* Old Calendar (hidden) */}
-        <div style={{ display: 'none' }}>
-
         {/* Selected Day Detail */}
         {selectedDate && (
           <div className="bg-white rounded-2xl p-5 shadow-sm">
