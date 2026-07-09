@@ -309,13 +309,13 @@ export default function ReadPage() {
       {/* ── Fixed Top Audio Bar ──────────────────────────────────────── */}
       <div id="audioBar" style={{
         position: 'fixed', top: 0, left: 0, right: 0,
-        minHeight: '52px',
+        height: '52px',
         background: 'rgba(245,240,232,0.97)', backdropFilter: 'blur(8px)',
         borderBottom: `1px solid ${C.borderColor}`,
         zIndex: 1000, boxShadow: '0 2px 12px rgba(61,41,20,0.06)',
         display: 'flex', alignItems: 'center',
         padding: '0 10px',
-        gap: '6px',
+        gap: '8px',
         overflowX: 'auto', overflowY: 'hidden',
         WebkitOverflowScrolling: 'touch',
         scrollbarWidth: 'none',
@@ -323,7 +323,7 @@ export default function ReadPage() {
 
         {/* Chapter display */}
         <div style={{
-          minWidth: '90px', maxWidth: '110px', padding: '5px 8px',
+          minWidth: '80px', maxWidth: '96px', padding: '5px 8px',
           background: C.bgSecondary, border: `1px solid ${C.borderColor}`,
           borderRadius: '6px', fontFamily: 'Georgia, serif',
           fontSize: '0.8rem', color: C.textPrimary, flexShrink: 0,
@@ -332,54 +332,18 @@ export default function ReadPage() {
           {currentAudioItem ? getAudioLabel(currentAudioItem.book, currentAudioItem.chapter) : '馬太福音 1 章'}
         </div>
 
-        {/* Prev — icon only, rounded */}
-        <button onClick={goPrev} title="上一章" style={{
-          width: '34px', height: '34px', flexShrink: 0,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          background: 'transparent',
-          border: `1px solid ${C.borderColor}`, borderRadius: '50%',
-          color: C.textSecondary, cursor: 'pointer', fontSize: '1rem',
-          transition: 'all 0.2s', padding: 0,
-        }}>
-          ◀
-        </button>
-
-        {/* Play — prominent circular button */}
+        {/* Play/Pause — prominent circular button */}
         <button onClick={togglePlay} title={isPlaying ? '暫停' : '播放'} style={{
-          width: '42px', height: '42px', flexShrink: 0,
+          width: '38px', height: '38px', flexShrink: 0,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           background: isPlaying ? C.accentGold : C.bgCard,
           border: `1px solid ${isPlaying ? C.accentGold : C.borderColor}`,
           borderRadius: '50%',
           color: isPlaying ? 'white' : C.textPrimary,
-          cursor: 'pointer', fontSize: '1.1rem',
+          cursor: 'pointer', fontSize: '1rem',
           transition: 'all 0.2s', padding: 0,
         }}>
           {isPlaying ? '⏸' : '▶'}
-        </button>
-
-        {/* Stop */}
-        <button onClick={() => { audioRef.current?.pause(); audioRef.current!.currentTime = 0; setIsPlaying(false); }} title="停止" style={{
-          width: '34px', height: '34px', flexShrink: 0,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          background: 'transparent',
-          border: `1px solid ${C.borderColor}`, borderRadius: '50%',
-          color: C.textSecondary, cursor: 'pointer', fontSize: '0.9rem',
-          transition: 'all 0.2s', padding: 0,
-        }}>
-          ■
-        </button>
-
-        {/* Next — icon only, rounded */}
-        <button onClick={goNext} title="下一章" style={{
-          width: '34px', height: '34px', flexShrink: 0,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          background: 'transparent',
-          border: `1px solid ${C.borderColor}`, borderRadius: '50%',
-          color: C.textSecondary, cursor: 'pointer', fontSize: '1rem',
-          transition: 'all 0.2s', padding: 0,
-        }}>
-          ▶
         </button>
 
         {/* Speed dropdown */}
@@ -394,63 +358,35 @@ export default function ReadPage() {
             appearance: 'none', WebkitAppearance: 'none',
             background: `${C.bgCard} url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%236B5344' stroke-width='2.5'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E") no-repeat right 6px center`,
             border: `1px solid ${C.borderColor}`, borderRadius: '20px',
-            padding: '5px 24px 5px 10px',
+            padding: '5px 22px 5px 10px',
             fontSize: '0.78rem', fontFamily: 'inherit', color: C.textPrimary,
-            cursor: 'pointer', minWidth: '56px', textAlign: 'center',
+            cursor: 'pointer', minWidth: '54px', textAlign: 'center',
             flexShrink: 0, outline: 'none',
           }}
         >
           {SPEEDS.map(s => <option key={s} value={s}>{s}×</option>)}
         </select>
 
-        {/* Font size controls */}
+        {/* Font size A− */}
         <button onClick={() => setFontSize(f => Math.max(14, f - 2))} title="縮小字體" style={{
-          width: '28px', height: '28px', flexShrink: 0,
+          width: '26px', height: '26px', flexShrink: 0,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           background: C.bgCard, border: `1px solid ${C.borderColor}`,
           borderRadius: '50%', color: C.textSecondary,
-          cursor: 'pointer', fontSize: '0.75rem', fontWeight: 700,
+          cursor: 'pointer', fontSize: '0.7rem', fontWeight: 700,
           transition: 'all 0.2s', padding: 0,
         }}>A−</button>
 
+        {/* Font size A+ */}
         <button onClick={() => setFontSize(f => Math.min(36, f + 2))} title="放大字體" style={{
-          width: '28px', height: '28px', flexShrink: 0,
+          width: '26px', height: '26px', flexShrink: 0,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           background: C.bgCard, border: `1px solid ${C.borderColor}`,
           borderRadius: '50%', color: C.textSecondary,
-          cursor: 'pointer', fontSize: '0.85rem', fontWeight: 700,
+          cursor: 'pointer', fontSize: '0.8rem', fontWeight: 700,
           transition: 'all 0.2s', padding: 0,
         }}>A+</button>
-
-        {/* Profile badge */}
-        {profile && (
-          <div style={{
-            padding: '4px 10px', background: `${C.accentGold}15`,
-            borderRadius: '20px', fontSize: '0.75rem', fontWeight: 700,
-            color: '#b8943f', flexShrink: 0,
-          }}>
-            ⭐ Lv.{profile.level}
-          </div>
-        )}
       </div>
-
-      {/* Mobile media queries injected once */}
-      <style>{`
-        @media (max-width: 768px) {
-          #audioBar { min-height: 50px !important; gap: 4px !important; padding: 0 8px !important; }
-          #audioBar > * { display: none !important; }
-          #audioBar > :nth-child(1) { display: flex !important; min-width: 88px !important; max-width: 96px !important; font-size: 0.78rem !important; padding: 4px 7px !important; flex-shrink: 0 !important; }
-          #audioBar > :nth-child(2) { display: flex !important; width: 32px !important; height: 32px !important; font-size: 0.85rem !important; padding: 0 !important; justify-content: center !important; }
-          #audioBar > :nth-child(3) { display: flex !important; width: 40px !important; height: 40px !important; font-size: 1rem !important; padding: 0 !important; justify-content: center !important; }
-          #audioBar > :nth-child(4) { display: flex !important; width: 32px !important; height: 32px !important; font-size: 0.8rem !important; padding: 0 !important; justify-content: center !important; }
-          #audioBar > :nth-child(5) { display: flex !important; width: 32px !important; height: 32px !important; font-size: 0.85rem !important; padding: 0 !important; justify-content: center !important; }
-          #audioBar > :nth-child(6) { display: flex !important; appearance: none !important; -webkit-appearance: none !important; background: ${C.bgCard} url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%236B5344' stroke-width='2.5'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E") no-repeat right 5px center !important; border: 1px solid ${C.borderColor} !important; border-radius: 20px !important; padding: 4px 20px 4px 8px !important; font-size: 0.75rem !important; min-width: 50px !important; text-align: center !important; color: ${C.textPrimary} !important; cursor: pointer !important; flex-shrink: 0 !important; outline: none !important; }
-          #audioBar > :nth-child(7) { display: flex !important; width: 26px !important; height: 26px !important; font-size: 0.7rem !important; padding: 0 !important; border-radius: 50% !important; justify-content: center !important; }
-          #audioBar > :nth-child(8) { display: flex !important; width: 26px !important; height: 26px !important; font-size: 0.8rem !important; padding: 0 !important; border-radius: 50% !important; justify-content: center !important; }
-          #audioBar > :nth-child(n+9) { display: flex !important; flex-shrink: 0 !important; }
-          #audioBar::-webkit-scrollbar { display: none !important; }
-        }
-      `}</style>
 
       {/* ── Main content ──────────────────────────────────────────────── */}
       <div style={{ maxWidth: '900px', margin: '0 auto', padding: '20px 16px' }}>
