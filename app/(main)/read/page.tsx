@@ -121,6 +121,7 @@ export default function ReadPage() {
   const [sessions, setSessions] = useState<ReadingSession[]>([])
   const [todaySession, setTodaySession] = useState<ReadingSession | null>(null)
   const [todayReading, setTodayReading] = useState<TodayReading | null>(null)
+  const [versesLoading, setVersesLoading] = useState(false)
   const [loading, setLoading] = useState(true)
   const [isCompleting, setIsCompleting] = useState(false)
   const [fontSize, setFontSize] = useState(20)
@@ -183,12 +184,15 @@ export default function ReadPage() {
 
   useEffect(() => {
     if (!todayReading) return
+    setVersesLoading(true)
     const loadVerses = async () => {
       try {
         const verses = await getChapter(todayReading.book.abbr, todayReading.chapterStart)
         setTodayReading(prev => prev ? { ...prev, verses, preview: verses[0]?.[1] ?? '' } : null)
       } catch (e) {
         console.error('Failed to load verses', e)
+      } finally {
+        setVersesLoading(false)
       }
     }
     loadVerses()
@@ -304,20 +308,24 @@ export default function ReadPage() {
               </div>
 
               {/* Scripture */}
-              {todayReading.verses.length > 0 ? (
+              {versesLoading ? (
+                <div className="mb-4 space-y-3 animate-pulse">
+                  {[1,2,3].map(i => (
+                    <div key={i} className="h-5 bg-gray-100 rounded w-full" />
+                  ))}
+                  <div className="h-5 bg-gray-100 rounded w-3/4" />
+                </div>
+              ) : todayReading.verses.length > 0 ? (
                 <div className="mb-4 scripture-text" style={{ fontSize: `${fontSize}px` }}>
-                  {todayReading.verses.slice(0, 5).map(([num, text]) => (
-                    <p key={num} className="leading-[1.8]">
-                      <span className="text-[var(--color-xp)] font-bold mr-2 align-text-top" style={{ fontSize: '0.875rem' }}>{num}</span>
+                  {todayReading.verses.map(([num, text]) => (
+                    <p key={num} className="leading-[1.9]">
+                      <span className="text-[var(--color-xp)] font-bold mr-2 align-text-top" style={{ fontSize: '0.8rem', minWidth: '1.5rem', display: 'inline-block' }}>{num}</span>
                       {text}
                     </p>
                   ))}
-                  {todayReading.verses.length > 5 && (
-                    <p className="text-xs text-[var(--color-muted)] mt-2">... 共 {todayReading.verses.length} 節</p>
-                  )}
                 </div>
               ) : (
-                <p className="text-[var(--color-muted)] text-sm mb-4">載入經文...</p>
+                <p className="text-[var(--color-muted)] text-sm mb-4">無法載入經文</p>
               )}
 
               {/* Complete Button */}
