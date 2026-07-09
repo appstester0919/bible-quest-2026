@@ -86,7 +86,7 @@ export default function CustomCalendar({ plan, completedDays, selectedDate, onSe
       </div>
 
       {/* Weekday header — separate grid, 7 cols */}
-      <div className="grid grid-cols-7 px-3 pb-1">
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', paddingLeft: '12px', paddingRight: '12px', paddingBottom: '4px' }}>
         {WEEKDAY_LABELS.map((label, i) => (
           <div
             key={i}
@@ -99,7 +99,7 @@ export default function CustomCalendar({ plan, completedDays, selectedDate, onSe
       </div>
 
       {/* Days grid — separate grid, 7 cols */}
-      <div className="grid grid-cols-7 gap-1 px-3 pb-3">
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px', paddingLeft: '12px', paddingRight: '12px', paddingBottom: '12px' }}>
         {calendarDays.map((day, idx) => {
           if (!day.date) {
             return <div key={`empty-${idx}`} className="aspect-square" />
