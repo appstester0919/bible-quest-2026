@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useMemo, useCallback } from 'react'
-import Calendar from 'react-calendar'
+import CustomCalendar from '@/components/CustomCalendar'
 import 'react-calendar/dist/Calendar.css'
 import { createClient } from '@/lib/supabase/client'
 import { getBooksMeta, type BookMeta } from '@/lib/bible/lookup'
@@ -269,127 +269,13 @@ export default function CalendarPage() {
           </div>
         </div>
 
-        {/* Calendar */}
+        {/* Custom Mon-first Calendar */}
         <div className="bg-white rounded-2xl overflow-hidden shadow-sm">
-          <Calendar
-            onChange={(value) => { if (value instanceof Date) handleDateClick(value) }}
-            value={selectedDate}
-            tileContent={tileContent}
-            tileClassName={tileClassName}
-            showNeighboringMonth={false}
-            navigationLabel={({ date }) => `${date.getFullYear()}年${date.getMonth() + 1}月`}
-            formatMonthYear={() => ''}
-            prevLabel="‹"
-            nextLabel="›"
-            prev2Label={null}
-            next2Label={null}
-            locale="zh-TW"
-            formatShortWeekday={() => ''}
-            minDetail="month"
-            maxDetail="month"
-          />
+          <CustomCalendar plan={plan} completedDays={completedDays} selectedDate={selectedDate} onSelect={handleDateClick} />
         </div>
 
-        <style>{`
-          /* Weekday headers — Monday-first, Sunday-last */
-          .react-calendar__month-view__weekdays {
-            display: grid !important;
-            grid-template-columns: repeat(7, 1fr) !important;
-            text-align: center !important;
-          }
-          .react-calendar__month-view__weekdays abbr {
-            text-decoration: none !important;
-          }
-          /* Mon-first column order (hide default, inject custom) */
-          .react-calendar__month-view__weekdays > div {
-            display: none !important;
-          }
-          /* Show custom labels instead */
-          .react-calendar__month-view__weekdays::after {
-            content: '一 二 三 四 五 六 日';
-            display: grid !important;
-            grid-template-columns: repeat(7, 1fr) !important;
-            text-align: center !important;
-            font-weight: 700 !important;
-            font-size: 0.75rem !important;
-            padding: 10px 0 6px !important;
-            color: var(--color-muted, #9CA3AF) !important;
-            letter-spacing: 0.05em !important;
-          }
-          .react-calendar__month-view__weekdays::after > span {
-            display: block !important;
-          }
-          /* Saturday column = 6th (index 5, 0-based), red text */
-          .react-calendar__month-view__days {
-            display: grid !important;
-            grid-template-columns: repeat(7, 1fr) !important;
-          }
-          /* Hide default weekday divs, use custom via ::after content */
-          /* Reorder days: Mon=col0, Tue=col1, ..., Sun=col6 */
-          .react-calendar__month-view__days > button:nth-child(7n+1) { grid-column: 1; }
-          .react-calendar__month-view__days > button:nth-child(7n+2) { grid-column: 2; }
-          .react-calendar__month-view__days > button:nth-child(7n+3) { grid-column: 3; }
-          .react-calendar__month-view__days > button:nth-child(7n+4) { grid-column: 4; }
-          .react-calendar__month-view__days > button:nth-child(7n+5) { grid-column: 5; }
-          .react-calendar__month-view__days > button:nth-child(7n+6) { grid-column: 6; }
-          .react-calendar__month-view__days > button:nth-child(7n) { grid-column: 7; }
-          /* Saturday text red */
-          .react-calendar__month-view__days > button:nth-child(7n) .react-calendar__day {
-            color: #dc2626 !important;
-          }
-          .react-calendar__month-view__days > button:nth-child(7n) abbr {
-            color: #dc2626 !important;
-          }
-          /* Sunday text normal (not red) */
-          .react-calendar__month-view__days > button:nth-child(7n+1) abbr {
-            color: var(--color-text, #1F2937) !important;
-          }
-          /* Tile styling */
-          .react-calendar__tile {
-            aspect-ratio: 1 !important;
-            display: flex !important;
-            flex-direction: column !important;
-            align-items: center !important;
-            justify-content: center !important;
-            font-family: 'Nunito', sans-serif !important;
-            font-size: 0.8rem !important;
-            border-radius: 12px !important;
-          }
-          .react-calendar__tile abbr {
-            text-decoration: none !important;
-            display: block !important;
-          }
-          /* Navigation */
-          .react-calendar__navigation {
-            padding: 12px 8px !important;
-          }
-          .react-calendar__navigation button {
-            font-family: 'Nunito', sans-serif !important;
-            font-weight: 800 !important;
-            font-size: 1.1rem !important;
-            color: var(--color-primary, #1F2937) !important;
-            background: transparent !important;
-            border-radius: 8px !important;
-            min-width: 36px !important;
-            height: 36px !important;
-          }
-          .react-calendar__navigation button:hover {
-            background: #f0f0f0 !important;
-          }
-          .react-calendar__navigation__label {
-            font-size: 1rem !important;
-            font-weight: 700 !important;
-          }
-          /* Remove default react-calendar border */
-          .react-calendar {
-            border: none !important;
-            background: transparent !important;
-            font-family: 'Nunito', sans-serif !important;
-          }
-          .react-calendar__month-view {
-            border: none !important;
-          }
-        `}</style>
+        {/* Old Calendar (hidden) */}
+        <div style={{ display: 'none' }}>
 
         {/* Selected Day Detail */}
         {selectedDate && (
