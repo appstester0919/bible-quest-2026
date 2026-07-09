@@ -180,6 +180,9 @@ export default function CalendarPage() {
 
   const handleDateClick = useCallback(async (date: Date) => {
     setSelectedDate(date)
+  }, [])
+
+  const handleCompleteDay = useCallback(async (date: Date) => {
     const key = dateToHKDateString(date)
     const refs = plan.get(key)
     if (!refs || refs.length === 0) return
@@ -203,7 +206,6 @@ export default function CalendarPage() {
         })
       ))
 
-      celebrate({ type: 'burst', particleCount: 120 })
       setShowSuccess(true)
       setTimeout(() => setShowSuccess(false), 3000)
       setSessions(prev => [...prev, ...refs.map((ref, i) => ({
@@ -271,7 +273,7 @@ export default function CalendarPage() {
 
         {/* Custom Mon-first Calendar */}
         <div className="bg-white rounded-2xl overflow-hidden shadow-sm">
-          <CustomCalendar plan={plan} completedDays={completedDays} selectedDate={selectedDate} onSelect={handleDateClick} />
+          <CustomCalendar plan={plan} completedDays={completedDays} selectedDate={selectedDate} onSelect={handleDateClick} onComplete={handleCompleteDay} />
         </div>
 
         {/* Selected Day Detail */}
