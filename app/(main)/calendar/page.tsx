@@ -65,12 +65,10 @@ function buildPlan(enrollment: Enrollment, books: BookMeta[]): Map<string, strin
     start = getHKToday()
   }
 
-  const today = getHKToday()
-  const startStr = toHKDateString(start)
-  const todayStr = toHKDateString(today)
-  let currentStr = startStr
+  let currentStr = toHKDateString(start)
+  const MAX_DAYS = 400 // generate up to 400 days of plan
 
-  while (currentStr <= todayStr && bookIdx < scopeBooks.length) {
+  for (let day = 0; day < MAX_DAYS && bookIdx < scopeBooks.length; day++) {
     const dayRefs: string[] = []
     for (let i = 0; i < enrollment.chapters_per_day && bookIdx < scopeBooks.length; i++) {
       const book = scopeBooks[bookIdx]
