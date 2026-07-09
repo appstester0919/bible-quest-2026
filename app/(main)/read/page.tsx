@@ -1,238 +1,286 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { markLessonComplete } from '@/lib/actions'
 import { useRouter } from 'next/navigation'
-import { getChapter, getAudioUrl, getBooksMeta, type BookMeta } from '@/lib/bible/lookup'
-import { AudioPlayer } from '@/components/AudioPlayer'
-import { FontSizeControl } from '@/components/FontSizeControl'
+import { getChapter, getBooksMeta, type BookMeta } from '@/lib/bible/lookup'
 import { celebrate } from '@/lib/confetti'
 
-interface Profile {
-  id: string
-  email: string
-  current_streak: number
-  total_xp: number
-  level: number
-  onboarding_done: boolean
+// ─── Bible Read Aloud color scheme ─────────────────────────────────────────
+const C = {
+  bgPrimary: '#F5F0E8',
+  bgSecondary: '#EDE5D8',
+  bgCard: '#FAF7F2',
+  bgInput: '#E8E0D0',
+  textPrimary: '#3D2914',
+  textSecondary: '#6B5344',
+  textMuted: '#9C7B5E',
+  accentGold: '#C9A84C',
+  accentGoldHover: '#B8943F',
+  chapterTitle: '#8B5E3C',
+  verseNumber: '#9C7B5E',
+  borderColor: '#D4C4A8',
+  borderLight: '#E0D5C0',
+  success: '#16a34a',
 }
 
-interface Enrollment {
-  id: string
-  user_id: string
-  scope: 'nt' | 'ot' | 'nt_ot'
-  reading_order: string | null
-  total_days: number
-  chapters_per_day: number
-  status: string
-  created_at: string
+// ─── Book categories ─────────────────────────────────────────────────────────
+const BOOK_CATEGORIES = {
+  pentateuch: { name: '摩西五經', bg: '#E8DCC8', text: '#5D4C37', books: ['創','出','利','民','申'] },
+  history: { name: '歷史書', bg: '#D4E0ED', text: '#2A4A6D', books: ['書','士','得','撒上','撒下','王上','王下','代上','代下','拉','尼','斯'] },
+  wisdom: { name: '智慧書', bg: '#EDE8D4', text: '#5C4D1A', books: ['伯','詩','箴','傳','歌'] },
+  majorProphets: { name: '大先知書', bg: '#E8D8EC', text: '#5C2A6D', books: ['賽','耶','哀','結','但'] },
+  minorProphets: { name: '小先知書', bg: '#D4EDE0', text: '#1A5C3A', books: ['何','珥','摩','俄','拿','彌','鴻','哈','番','該','亞','瑪'] },
+  gospels: { name: '福音書', bg: '#F0DCD4', text: '#6D2A2A', books: ['太','可','路','約','徒'] },
+  pauline: { name: '保羅書信', bg: '#F0E8D4', text: '#6D4A1A', books: ['羅','林前','林後','加','弗','腓','西','帖前','帖後','提前','提後','多','門'] },
+  general: { name: '一般書信', bg: '#D4EEF0', text: '#1A5C6D', books: ['來','雅','彼前','彼後','約壹','約貳','約參','猶','啟'] },
 }
 
-interface ReadingSession {
-  id: string
-  enrollment_id: string
-  chapter_ref: string
-  date_local: string
-}
-
-interface TodayReading {
-  book: BookMeta
-  chapterStart: number
-  preview: string
-  verses: Array<[number, string]>
-  audioUrl: string
-}
-
-function parseChapterRef(ref: string): { book: string; chapter: number } | null {
-  const match = ref.match(/^(.+?)\s+(\d+)$/)
-  if (!match) return null
-  return { book: match[1], chapter: parseInt(match[2]) }
-}
-
-function nextChapterAfter(
-  book: BookMeta,
-  currentChapter: number,
-  allBooks: BookMeta[]
-): { book: BookMeta; chapter: number } | null {
-  const idx = allBooks.findIndex(b => b.abbr === book.abbr)
-  if (idx === -1) return null
-  if (currentChapter < book.chapters) {
-    return { book, chapter: currentChapter + 1 }
-  }
-  const next = allBooks[idx + 1]
-  return next ? { book: next, chapter: 1 } : null
-}
-
-function getTodayReading(
-  enrollment: Enrollment,
-  sessions: ReadingSession[],
-  books: BookMeta[]
-): TodayReading | null {
-  let scopeBooks = books
-  if (enrollment.scope === 'nt') {
-    scopeBooks = books.filter((_, i) => i >= 39)
-  } else if (enrollment.scope === 'ot') {
-    scopeBooks = books.filter((_, i) => i < 39)
-  }
-
-  let lastBook: BookMeta | null = null
-  let lastChapter = 0
-  const sorted = [...sessions].sort((a, b) => a.id.localeCompare(b.id))
-
-  for (const session of sorted) {
-    const parsed = parseChapterRef(session.chapter_ref)
-    if (!parsed) continue
-    const bookIdx = scopeBooks.findIndex(b => b.name === parsed.book || b.abbr === parsed.book)
-    if (bookIdx === -1) continue
-    const b = scopeBooks[bookIdx]
-    const lastBookIdx = lastBook ? scopeBooks.indexOf(lastBook) : -1
-    if (!lastBook || bookIdx > lastBookIdx) {
-      lastBook = b
-      lastChapter = parsed.chapter
-    } else if (bookIdx === lastBookIdx && parsed.chapter > lastChapter) {
-      lastChapter = parsed.chapter
-    }
-  }
-
-  let target: { book: BookMeta; chapter: number }
-  if (!lastBook) {
-    target = { book: scopeBooks[0], chapter: 1 }
-  } else {
-    const next = nextChapterAfter(lastBook, lastChapter, scopeBooks)
-    if (!next) return null
-    target = next
-  }
-
-  return {
-    book: target.book,
-    chapterStart: target.chapter,
-    preview: '',
-    verses: [],
-    audioUrl: getAudioUrl(target.book.abbr, target.chapter),
+const bookToCategory: Record<string, keyof typeof BOOK_CATEGORIES> = {}
+for (const [cat, data] of Object.entries(BOOK_CATEGORIES)) {
+  for (const abbr of data.books) {
+    bookToCategory[abbr] = cat as keyof typeof BOOK_CATEGORIES
   }
 }
 
+// ─── Types ───────────────────────────────────────────────────────────────────
+interface Enrollment { id: string; user_id: string; scope: 'nt' | 'ot' | 'nt_ot'; total_days: number; chapters_per_day: number; status: string }
+interface ReadingSession { id: string; enrollment_id: string; chapter_ref: string; date_local: string }
+interface ChapterData { bookAbbr: string; bookName: string; chapter: number; verses: [number, string][] }
+interface Profile { current_streak: number; total_xp: number; level: number }
+
+// ─── Speed options ────────────────────────────────────────────────────────────
+const SPEEDS = [1, 1.25, 1.5, 1.75, 2] as const
+
+// ─── Main Page ────────────────────────────────────────────────────────────────
 export default function ReadPage() {
   const router = useRouter()
-  const [user, setUser] = useState<{ id?: string; email?: string } | null>(null)
+  const audioRef = useRef<HTMLAudioElement>(null)
+
+  // Auth & data
   const [profile, setProfile] = useState<Profile | null>(null)
   const [enrollment, setEnrollment] = useState<Enrollment | null>(null)
   const [sessions, setSessions] = useState<ReadingSession[]>([])
-  const [todaySession, setTodaySession] = useState<ReadingSession | null>(null)
-  const [todayReading, setTodayReading] = useState<TodayReading | null>(null)
-  const [versesLoading, setVersesLoading] = useState(false)
   const [loading, setLoading] = useState(true)
-  const [isCompleting, setIsCompleting] = useState(false)
-  const [fontSize, setFontSize] = useState(20)
 
+  // Books
+  const [books, setBooks] = useState<BookMeta[]>([])
+
+  // Scripture selection
+  const [startBook, setStartBook] = useState<BookMeta | null>(null)
+  const [startChapter, setStartChapter] = useState<number | null>(null)
+  const [endBook, setEndBook] = useState<BookMeta | null>(null)
+  const [endChapter, setEndChapter] = useState<number | null>(null)
+
+  // UI state
+  const [showStartBookGrid, setShowStartBookGrid] = useState(false)
+  const [showStartChapterGrid, setShowStartChapterGrid] = useState(false)
+  const [showEndBookGrid, setSetShowEndBookGrid] = useState(false)
+  const [showEndChapterGrid, setSetShowEndChapterGrid] = useState(false)
+
+  // Scripture display
+  const [chapters, setChapters] = useState<ChapterData[]>([])
+  const [showVerseNumbers, setShowVerseNumbers] = useState(true)
+  const [fontSize, setFontSize] = useState(20)
+  const [scriptureLoading, setScriptureLoading] = useState(false)
+
+  // Audio
+  const [audioQueue, setAudioQueue] = useState<{ book: BookMeta; chapter: number }[]>([])
+  const [currentChapterIdx, setCurrentChapterIdx] = useState(0)
+  const [isPlaying, setIsPlaying] = useState(false)
+  const [playbackRate, setPlaybackRate] = useState(1)
+
+  // Today reading
+  const [todaySession, setTodaySession] = useState<ReadingSession | null>(null)
+  const [isCompleting, setIsCompleting] = useState(false)
+
+  // Load data
   useEffect(() => {
     const fetchData = async () => {
       const supabase = createClient()
       const { data: { user: authUser } } = await supabase.auth.getUser()
-
       if (!authUser) { router.push('/login'); return }
-      setUser(authUser)
 
-      const { data: profileData } = await supabase
-        .from('profiles').select('*').eq('id', authUser.id).single()
+      const [{ data: statsData }, { data: enrollmentData }, { data: sessionsData }] = await Promise.all([
+        supabase.from('user_stats').select('current_streak, total_xp, level').eq('user_id', authUser.id).single(),
+        supabase.from('user_plan_enrollments').select('*').eq('user_id', authUser.id).eq('status', 'active').maybeSingle(),
+        enrollmentData ? supabase.from('reading_sessions').select('*').eq('enrollment_id', enrollmentData.id) : { data: Promise.resolve(null) },
+      ])
 
-      const { data: statsData } = await supabase
-        .from('user_stats')
-        .select('current_streak, total_xp, level')
-        .eq('user_id', authUser.id)
-        .single()
+      setProfile(statsData as Profile)
+      setEnrollment(enrollmentData as Enrollment)
+      if (sessionsData) setSessions(sessionsData as ReadingSession[])
 
-      setProfile({ ...profileData, ...statsData } as Profile)
-
-      const { data: enrollmentData, error: enrollmentError } = await supabase
-        .from('user_plan_enrollments')
-        .select('*')
-        .eq('user_id', authUser.id)
-        .eq('status', 'active')
-        .maybeSingle()
-
-      if (enrollmentError) console.error('Enrollment query failed:', enrollmentError)
-      setEnrollment(enrollmentError ? null : enrollmentData)
-
-      const { data: sessionsData } = enrollmentData
-        ? await supabase.from('reading_sessions').select('*').eq('enrollment_id', enrollmentData.id)
-        : { data: null as ReadingSession[] | null }
-      setSessions(sessionsData ?? [])
-
-      const now = new Date()
-      const hktDate = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Hong_Kong' }))
-      const dateLocal = hktDate.toISOString().split('T')[0]
-
-      const todaySess = sessionsData?.find((s: ReadingSession) => s.date_local === dateLocal) ?? null
-      setTodaySession(todaySess)
-
+      // Load bible data
       const res = await fetch('/bible-data.json')
       const bibleJson = await res.json()
-      const books = getBooksMeta(bibleJson)
+      setBooks(getBooksMeta(bibleJson))
 
-      if (enrollmentData && sessionsData !== null) {
-        const reading = getTodayReading(enrollmentData, sessionsData, books)
-        setTodayReading(reading)
+      // Today session
+      if (enrollmentData && sessionsData) {
+        const now = new Date()
+        const hkt = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Hong_Kong' }))
+        const dateLocal = hkt.toISOString().split('T')[0]
+        setTodaySession((sessionsData as ReadingSession[]).find((s: ReadingSession) => s.date_local === dateLocal) ?? null)
       }
 
       setLoading(false)
     }
-
     fetchData()
   }, [router])
 
+  // Audio setup
   useEffect(() => {
-    if (!todayReading) return
-    setVersesLoading(true)
-    const loadVerses = async () => {
-      try {
-        const verses = await getChapter(todayReading.book.abbr, todayReading.chapterStart)
-        setTodayReading(prev => prev ? { ...prev, verses, preview: verses[0]?.[1] ?? '' } : null)
-      } catch (e) {
-        console.error('Failed to load verses', e)
-      } finally {
-        setVersesLoading(false)
+    const audio = audioRef.current
+    if (!audio) return
+    audio.playbackRate = playbackRate
+  }, [playbackRate])
+
+  useEffect(() => {
+    const audio = audioRef.current
+    if (!audio) return
+    const onEnded = () => {
+      if (currentChapterIdx < audioQueue.length - 1) {
+        setCurrentChapterIdx(i => i + 1)
+      } else {
+        setIsPlaying(false)
+        setCurrentChapterIdx(0)
       }
     }
-    loadVerses()
-  }, [todayReading?.book.abbr, todayReading?.chapterStart])
+    audio.addEventListener('ended', onEnded)
+    return () => audio.removeEventListener('ended', onEnded)
+  }, [currentChapterIdx, audioQueue])
 
+  // Auto-play when queue changes
   useEffect(() => {
-    const saved = localStorage.getItem('bq_font_size')
-    if (saved) setFontSize(Number(saved))
-  }, [])
+    if (audioQueue.length === 0) return
+    const item = audioQueue[currentChapterIdx]
+    if (!item) return
+    const audio = audioRef.current
+    if (!audio) return
+    audio.src = `/audio/${item.book.abbr}/${item.book.abbr}${item.chapter}.mp3`
+    if (isPlaying) {
+      audio.play().catch(() => setIsPlaying(false))
+    }
+  }, [currentChapterIdx, audioQueue])
 
+  // ─── Computed helpers ─────────────────────────────────────────────────────
+  const getAudioLabel = (book: BookMeta, chapter: number) => `${book.name} ${chapter} 章`
+
+  const currentAudioItem = audioQueue[currentChapterIdx]
+
+  // ─── Book/Chapter selection ───────────────────────────────────────────────
+  const handleStartBookClick = (book: BookMeta) => {
+    setStartBook(book)
+    setStartChapter(null)
+    setEndBook(null)
+    setEndChapter(null)
+    setChapters([])
+    setShowStartBookGrid(false)
+    setShowStartChapterGrid(true)
+  }
+
+  const handleStartChapterClick = (ch: number) => {
+    setStartChapter(ch)
+    setShowStartChapterGrid(false)
+    setSetShowEndBookGrid(true)
+  }
+
+  const handleEndBookClick = (book: BookMeta) => {
+    if (startBook) {
+      const startIdx = books.findIndex(b => b.abbr === startBook.abbr)
+      const endIdx = books.findIndex(b => b.abbr === book.abbr)
+      if (endIdx < startIdx) return // Can't select book before start
+    }
+    setEndBook(book)
+    setEndChapter(null)
+    setSetShowEndBookGrid(false)
+    setSetShowEndChapterGrid(true)
+  }
+
+  const handleEndChapterClick = (ch: number) => {
+    setEndChapter(ch)
+    setSetShowEndChapterGrid(false)
+  }
+
+  const handleDisplay = async () => {
+    if (!startBook || !startChapter || !endBook || !endChapter) return
+    setScriptureLoading(true)
+
+    const startIdx = books.findIndex(b => b.abbr === startBook.abbr)
+    const endIdx = books.findIndex(b => b.abbr === endBook.abbr)
+
+    const loaded: ChapterData[] = []
+    const queue: { book: BookMeta; chapter: number }[] = []
+
+    for (let bi = startIdx; bi <= endIdx; bi++) {
+      const book = books[bi]
+      const cStart = bi === startIdx ? startChapter : 1
+      const cEnd = bi === endIdx ? endChapter : book.chapters
+      for (let ch = cStart; ch <= cEnd; ch++) {
+        const verses = await getChapter(book.abbr, ch)
+        loaded.push({ bookAbbr: book.abbr, bookName: book.name, chapter: ch, verses })
+        queue.push({ book, chapter: ch })
+      }
+    }
+
+    setChapters(loaded)
+    setAudioQueue(queue)
+    setCurrentChapterIdx(0)
+    setIsPlaying(false)
+    setScriptureLoading(false)
+  }
+
+  // ─── Audio controls ───────────────────────────────────────────────────────
+  const togglePlay = () => {
+    const audio = audioRef.current
+    if (!audio || audioQueue.length === 0) return
+    if (isPlaying) {
+      audio.pause()
+      setIsPlaying(false)
+    } else {
+      if (!audio.src || audio.currentTime === audio.duration && audio.duration > 0) {
+        // Reset, play from start
+        audio.currentTime = 0
+      }
+      audio.play().catch(() => {})
+      setIsPlaying(true)
+    }
+  }
+
+  const goPrev = () => {
+    if (audioQueue.length === 0) return
+    const audio = audioRef.current
+    if (audio) audio.pause()
+    setCurrentChapterIdx(i => Math.max(0, i - 1))
+    setIsPlaying(false)
+  }
+
+  const goNext = () => {
+    if (audioQueue.length === 0) return
+    const audio = audioRef.current
+    if (audio) audio.pause()
+    setCurrentChapterIdx(i => Math.min(audioQueue.length - 1, i + 1))
+    setIsPlaying(false)
+  }
+
+  // ─── Complete today reading ──────────────────────────────────────────────
   const handleComplete = async () => {
-    if (!enrollment || !todayReading || !profile) return
+    if (!enrollment || !profile || audioQueue.length === 0) return
     setIsCompleting(true)
     try {
-      const xpEarned = 10
-      await markLessonComplete(
-        enrollment.id,
-        `${todayReading.book.name} ${todayReading.chapterStart}`,
-        xpEarned
-      )
-
+      const current = audioQueue[currentChapterIdx]
+      await markLessonComplete(enrollment.id, `${current.book.name} ${current.chapter}`, 10)
       celebrate({ type: 'burst', particleCount: 120 })
-
       const now = new Date()
-      const hktDate = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Hong_Kong' }))
-      const dateLocal = hktDate.toISOString().split('T')[0]
-      setTodaySession({
-        id: 'new',
-        enrollment_id: enrollment.id,
-        chapter_ref: `${todayReading.book.name} ${todayReading.chapterStart}`,
-        date_local: dateLocal,
-      })
-
-      if (profile) {
-        const newXp = (profile.total_xp ?? 0) + xpEarned
-        const newLevel = Math.floor(Math.sqrt(newXp / 100)) + 1
-        setProfile({ ...profile, total_xp: newXp, level: newLevel })
-      }
-    } catch (error) {
-      console.error('Error completing lesson:', error)
+      const hkt = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Hong_Kong' }))
+      setTodaySession({ id: 'new', enrollment_id: enrollment.id, chapter_ref: `${current.book.name} ${current.chapter}`, date_local: hkt.toISOString().split('T')[0] })
+      const newXp = profile.total_xp + 10
+      const newLevel = Math.floor(Math.sqrt(newXp / 100)) + 1
+      setProfile({ ...profile, total_xp: newXp, level: newLevel })
+    } catch (e) {
+      console.error(e)
     } finally {
       setIsCompleting(false)
     }
@@ -240,135 +288,452 @@ export default function ReadPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[var(--color-background)]">
-        <div className="text-[var(--color-muted)]">載入中...</div>
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: C.bgPrimary }}>
+        <div style={{ color: C.textMuted }}>載入中...</div>
       </div>
     )
   }
 
-  const xpForNext = profile ? (profile.level * profile.level * 100) : 100
-  const xpInCurrent = profile ? (profile.total_xp % 100) : 0
-  const xpNeeded = 100
+  const canDisplay = startBook && startChapter && endBook && endChapter
+  const catOf = (abbr: string) => bookToCategory[abbr] ?? null
+  const catData = (abbr: string) => BOOK_CATEGORIES[catOf(abbr) ?? 'gospels']
+
+  const todayBook = audioQueue[currentChapterIdx]?.book
+  const todayChapter = audioQueue[currentChapterIdx]?.chapter
 
   return (
-    <div className="min-h-screen bg-[var(--color-background)]">
-      {/* Header */}
-      <header className="bg-white px-4 py-3 flex items-center justify-between shadow-sm">
-        <h1 className="text-xl font-extrabold text-[var(--color-primary)]">📖 讀經</h1>
-        <div className="flex items-center gap-3">
-          {profile && (
-            <div className="flex items-center gap-1.5 bg-[var(--color-xp)]/10 px-2.5 py-1 rounded-full">
-              <span className="text-sm font-extrabold text-[var(--color-xp)]">Lv.{profile.level}</span>
-              <div className="w-16 h-1.5 bg-[var(--color-muted)]/20 rounded-full overflow-hidden">
-                <div className="h-full bg-[var(--color-xp)] rounded-full transition-all" style={{ width: `${(xpInCurrent / xpNeeded) * 100}%` }} />
+    <div style={{ minHeight: '100vh', background: C.bgPrimary, paddingTop: '72px', paddingBottom: '90px' }}>
+      <audio ref={audioRef} />
+
+      {/* ── Fixed Top Audio Bar ──────────────────────────────────────── */}
+      <div style={{
+        position: 'fixed', top: 0, left: 0, right: 0, height: '72px',
+        background: 'rgba(245,240,232,0.97)', backdropFilter: 'blur(8px)',
+        borderBottom: `1px solid ${C.borderColor}`,
+        zIndex: 1000, boxShadow: '0 2px 12px rgba(61,41,20,0.06)',
+        display: 'flex', alignItems: 'center', padding: '0 16px', gap: '12px',
+      }}>
+        {/* Chapter display */}
+        <div style={{
+          minWidth: '150px', padding: '6px 12px',
+          background: C.bgSecondary, border: `1px solid ${C.borderColor}`,
+          borderRadius: '6px', fontFamily: 'Georgia, serif',
+          fontSize: '0.9rem', color: C.textPrimary,
+        }}>
+          {currentAudioItem ? getAudioLabel(currentAudioItem.book, currentAudioItem.chapter) : '馬太福音 1 章'}
+        </div>
+
+        {/* Prev */}
+        <button onClick={goPrev} style={{
+          display: 'flex', alignItems: 'center', gap: '4px',
+          padding: '8px 12px', background: 'transparent',
+          border: `1px solid ${C.borderColor}`, borderRadius: '6px',
+          color: C.textSecondary, cursor: 'pointer', fontSize: '0.85rem',
+          transition: 'all 0.2s',
+        }}
+          onMouseEnter={e => { (e.target as HTMLElement).style.background = `${C.accentGold}22`; (e.target as HTMLElement).style.borderColor = C.accentGold }}
+          onMouseLeave={e => { (e.target as HTMLElement).style.background = 'transparent'; (e.target as HTMLElement).style.borderColor = C.borderColor }}
+        >
+          ◀ 上一章
+        </button>
+
+        {/* Play/Pause */}
+        <button onClick={togglePlay} style={{
+          display: 'flex', alignItems: 'center', gap: '6px',
+          padding: '8px 18px',
+          background: isPlaying ? C.accentGold : C.bgCard,
+          border: `1px solid ${isPlaying ? C.accentGold : C.borderColor}`,
+          borderRadius: '6px', color: isPlaying ? 'white' : C.textPrimary,
+          cursor: 'pointer', fontSize: '0.9rem', fontWeight: 500,
+          transition: 'all 0.2s',
+        }}>
+          {isPlaying ? '⏸ 暫停' : '▶ 播放'}
+        </button>
+
+        {/* Next */}
+        <button onClick={goNext} style={{
+          display: 'flex', alignItems: 'center', gap: '4px',
+          padding: '8px 12px', background: 'transparent',
+          border: `1px solid ${C.borderColor}`, borderRadius: '6px',
+          color: C.textSecondary, cursor: 'pointer', fontSize: '0.85rem',
+          transition: 'all 0.2s',
+        }}
+          onMouseEnter={e => { (e.target as HTMLElement).style.background = `${C.accentGold}22`; (e.target as HTMLElement).style.borderColor = C.accentGold }}
+          onMouseLeave={e => { (e.target as HTMLElement).style.background = 'transparent'; (e.target as HTMLElement).style.borderColor = C.borderColor }}
+        >
+          下一章 ▶
+        </button>
+
+        {/* Speed */}
+        <div style={{ display: 'flex', gap: '4px', marginLeft: 'auto' }}>
+          {SPEEDS.map(s => (
+            <button key={s} onClick={() => {
+              setPlaybackRate(s)
+              if (audioRef.current) audioRef.current.playbackRate = s
+            }} style={{
+              padding: '5px 9px', border: `1px solid ${playbackRate === s ? C.accentGold : C.borderColor}`,
+              borderRadius: '4px', background: playbackRate === s ? C.accentGold : C.bgCard,
+              color: playbackRate === s ? 'white' : C.textSecondary,
+              cursor: 'pointer', fontSize: '0.78rem', transition: 'all 0.2s',
+            }}>
+              {s}×
+            </button>
+          ))}
+        </div>
+
+        {/* Font size */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <button onClick={() => setFontSize(f => Math.max(14, f - 2))} style={{
+            width: '30px', height: '30px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+            background: C.bgCard, border: `1px solid ${C.borderColor}`, borderRadius: '5px',
+            color: C.textSecondary, cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600,
+          }}>A−</button>
+          <span style={{ fontSize: '0.8rem', color: C.textMuted, minWidth: '24px', textAlign: 'center' }}>{fontSize}</span>
+          <button onClick={() => setFontSize(f => Math.min(36, f + 2))} style={{
+            width: '30px', height: '30px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+            background: C.bgCard, border: `1px solid ${C.borderColor}`, borderRadius: '5px',
+            color: C.textSecondary, cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600,
+          }}>A+</button>
+        </div>
+
+        {/* Profile badge */}
+        {profile && (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: '6px',
+            padding: '4px 10px', background: `${C.accentGold}15`,
+            borderRadius: '20px', fontSize: '0.8rem', fontWeight: 700, color: '#b8943f',
+          }}>
+            ⭐ Lv.{profile.level}
+          </div>
+        )}
+      </div>
+
+      {/* ── Main content ──────────────────────────────────────────────── */}
+      <div style={{ maxWidth: '900px', margin: '0 auto', padding: '20px 16px' }}>
+
+        {/* ── Range Selector ─────────────────────────────────────── */}
+        <div style={{
+          background: C.bgCard, borderRadius: '10px', padding: '20px',
+          boxShadow: '0 2px 12px rgba(61,41,20,0.06)',
+          border: `1px solid ${C.borderLight}`, marginBottom: '20px',
+        }}>
+          <div style={{ fontFamily: 'Georgia, serif', fontSize: '1.8rem', color: C.textPrimary, marginBottom: '4px', fontWeight: 600 }}>
+            📖 聖經朗讀
+          </div>
+          <div style={{ color: C.textMuted, fontSize: '0.9rem', marginBottom: '20px' }}>
+            選擇書卷和章節範圍，或直接使用今日功課
+          </div>
+
+          {/* Today reading hint */}
+          {todaySession ? (
+            <div style={{
+              padding: '10px 14px', background: `${C.success}15`,
+              border: `1px solid ${C.success}40`, borderRadius: '8px',
+              color: C.success, fontSize: '0.9rem', fontWeight: 500,
+              marginBottom: '16px', textAlign: 'center',
+            }}>
+              ✅ 今日讀經已完成：{todaySession.chapter_ref}
+            </div>
+          ) : audioQueue.length > 0 && (
+            <div style={{
+              padding: '10px 14px', background: `${C.accentGold}15`,
+              border: `1px solid ${C.accentGold}40`, borderRadius: '8px',
+              color: C.chapterTitle, fontSize: '0.9rem', fontWeight: 500,
+              marginBottom: '16px', textAlign: 'center',
+            }}>
+              📖 今日功課：{todayBook?.name} {todayChapter} 章
+            </div>
+          )}
+
+          {/* Start selector */}
+          <div style={{ marginBottom: '16px' }}>
+            <div style={{ fontSize: '0.85rem', color: C.textSecondary, marginBottom: '6px', fontWeight: 500 }}>
+              起始書卷與章節
+            </div>
+            <div style={{ display: 'flex', gap: '12px' }}>
+              {/* Start book dropdown */}
+              <div style={{ position: 'relative', flex: 2 }}>
+                <div
+                  onClick={() => { setShowStartBookGrid(v => !v); setShowStartChapterGrid(false); setSetShowEndBookGrid(false); setSetShowEndChapterGrid(false) }}
+                  style={{
+                    padding: '10px 14px', background: C.bgInput,
+                    border: `1px solid ${C.borderColor}`, borderRadius: '8px',
+                    cursor: 'pointer', color: startBook ? C.textPrimary : C.textMuted,
+                    fontSize: '0.95rem', minHeight: '44px', display: 'flex', alignItems: 'center',
+                    justifyContent: 'space-between', userSelect: 'none',
+                  }}
+                >
+                  <span>{startBook ? `${startBook.name}${startChapter ? ` 第${startChapter}章` : ''}` : '選擇起始書卷'}</span>
+                  <span style={{ fontSize: '0.7rem', color: C.textMuted }}>▼</span>
+                </div>
+                {/* Book grid dropdown */}
+                {showStartBookGrid && (
+                  <div style={{
+                    position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 200,
+                    background: C.bgCard, border: `1px solid ${C.borderColor}`,
+                    borderRadius: '8px', padding: '8px',
+                    boxShadow: '0 4px 16px rgba(61,41,20,0.12)',
+                    maxHeight: '300px', overflowY: 'auto',
+                  }}>
+                    {Object.entries(BOOK_CATEGORIES).map(([cat, data]) => (
+                      <div key={cat}>
+                        <div style={{ fontSize: '0.75rem', color: data.text, fontWeight: 600, padding: '4px 6px', marginTop: '6px', marginBottom: '4px', opacity: 0.8 }}>{data.name}</div>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '4px' }}>
+                          {data.books.map(abbr => (
+                            <div key={abbr} onClick={() => { const b = books.find(x => x.abbr === abbr); if (b) handleStartBookClick(b) }}
+                              style={{
+                                padding: '6px 2px', textAlign: 'center', borderRadius: '5px',
+                                cursor: 'pointer', fontSize: '0.8rem', fontWeight: 500,
+                                background: data.bg, color: data.text,
+                                border: startBook?.abbr === abbr ? `2px solid ${C.accentGold}` : '2px solid transparent',
+                              }}>
+                              {abbr}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* End selector */}
+          {startBook && startChapter && (
+            <div style={{ marginBottom: '16px' }}>
+              <div style={{ fontSize: '0.85rem', color: C.textSecondary, marginBottom: '6px', fontWeight: 500 }}>
+                結束書卷與章節
+              </div>
+              <div style={{ display: 'flex', gap: '12px' }}>
+                <div style={{ position: 'relative', flex: 2 }}>
+                  <div
+                    onClick={() => { setSetShowEndBookGrid(v => !v); setSetShowEndChapterGrid(false); setShowStartBookGrid(false); setShowStartChapterGrid(false) }}
+                    style={{
+                      padding: '10px 14px', background: C.bgInput,
+                      border: `1px solid ${C.borderColor}`, borderRadius: '8px',
+                      cursor: 'pointer', color: endBook ? C.textPrimary : C.textMuted,
+                      fontSize: '0.95rem', minHeight: '44px', display: 'flex', alignItems: 'center',
+                      justifyContent: 'space-between', userSelect: 'none',
+                    }}
+                  >
+                    <span>{endBook ? `${endBook.name}${endChapter ? ` 第${endChapter}章` : ''}` : '選擇結束書卷'}</span>
+                    <span style={{ fontSize: '0.7rem', color: C.textMuted }}>▼</span>
+                  </div>
+                  {showEndBookGrid && (
+                    <div style={{
+                      position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 200,
+                      background: C.bgCard, border: `1px solid ${C.borderColor}`,
+                      borderRadius: '8px', padding: '8px',
+                      boxShadow: '0 4px 16px rgba(61,41,20,0.12)',
+                      maxHeight: '300px', overflowY: 'auto',
+                    }}>
+                      {Object.entries(BOOK_CATEGORIES).map(([cat, data]) => {
+                        const startIdx = books.findIndex(b => b.abbr === startBook.abbr)
+                        const catBooks = data.books
+                        return (
+                          <div key={cat}>
+                            <div style={{ fontSize: '0.75rem', color: data.text, fontWeight: 600, padding: '4px 6px', marginTop: '6px', marginBottom: '4px', opacity: 0.8 }}>{data.name}</div>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '4px' }}>
+                              {catBooks.map(abbr => {
+                                const idx = books.findIndex(b => b.abbr === abbr)
+                                const disabled = idx < startIdx
+                                return (
+                                  <div key={abbr} onClick={() => { if (!disabled) { const b = books.find(x => x.abbr === abbr); if (b) handleEndBookClick(b) } }}
+                                    style={{
+                                      padding: '6px 2px', textAlign: 'center', borderRadius: '5px',
+                                      cursor: disabled ? 'not-allowed' : 'pointer', fontSize: '0.8rem', fontWeight: 500,
+                                      background: disabled ? C.bgSecondary : data.bg,
+                                      color: disabled ? C.textMuted : data.text,
+                                      opacity: disabled ? 0.4 : 1,
+                                      border: endBook?.abbr === abbr ? `2px solid ${C.accentGold}` : '2px solid transparent',
+                                    }}>
+                                    {abbr}
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           )}
-          <FontSizeControl
-            value={fontSize}
-            onChange={(size) => { setFontSize(size); localStorage.setItem('bq_font_size', String(size)) }}
-          />
-        </div>
-      </header>
 
-      <main className="max-w-sm mx-auto px-4 py-6 space-y-4">
-        {/* Streak */}
-        <div className="bg-[var(--color-streak)] text-white rounded-2xl p-5 shadow-lg">
-          <div className="flex items-center gap-3">
-            <span className="text-3xl">🔥</span>
-            <div>
-              <p className="text-sm opacity-90">連續學習</p>
-              <p className="text-3xl font-bold">{profile?.current_streak ?? 0}<span className="text-lg ml-1">日</span></p>
+          {/* Chapter grids */}
+          {showStartChapterGrid && startBook && (
+            <div style={{
+              background: C.bgCard, border: `1px solid ${C.borderColor}`,
+              borderRadius: '8px', padding: '10px', marginBottom: '12px',
+              boxShadow: '0 2px 8px rgba(61,41,20,0.08)',
+            }}>
+              <div style={{ fontSize: '0.8rem', color: C.textSecondary, textAlign: 'center', paddingBottom: '8px', borderBottom: `1px solid ${C.borderColor}`, marginBottom: '8px' }}>
+                {startBook.name} — 選擇起始章節
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(10, 1fr)', gap: '4px' }}>
+                {Array.from({ length: startBook.chapters }, (_, i) => i + 1).map(ch => (
+                  <div key={ch} onClick={() => handleStartChapterClick(ch)}
+                    style={{
+                      padding: '8px 4px', textAlign: 'center', borderRadius: '4px',
+                      cursor: 'pointer', background: startChapter === ch ? C.accentGold : C.bgSecondary,
+                      color: startChapter === ch ? 'white' : C.textPrimary,
+                      fontSize: '0.88rem', transition: 'all 0.15s',
+                      border: startChapter === ch ? `1px solid ${C.accentGold}` : '1px solid transparent',
+                    }}>
+                    {ch}
+                  </div>
+                ))}
+              </div>
             </div>
+          )}
+
+          {showEndChapterGrid && endBook && (
+            <div style={{
+              background: C.bgCard, border: `1px solid ${C.borderColor}`,
+              borderRadius: '8px', padding: '10px', marginBottom: '12px',
+              boxShadow: '0 2px 8px rgba(61,41,20,0.08)',
+            }}>
+              <div style={{ fontSize: '0.8rem', color: C.textSecondary, textAlign: 'center', paddingBottom: '8px', borderBottom: `1px solid ${C.borderColor}`, marginBottom: '8px' }}>
+                {endBook.name} — 選擇結束章節
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(10, 1fr)', gap: '4px' }}>
+                {Array.from({ length: endBook.chapters }, (_, i) => i + 1).map(ch => {
+                  const disabled = startBook?.abbr === endBook.abbr && ch < (startChapter ?? 0)
+                  return (
+                    <div key={ch} onClick={() => !disabled && handleEndChapterClick(ch)}
+                      style={{
+                        padding: '8px 4px', textAlign: 'center', borderRadius: '4px',
+                        cursor: disabled ? 'not-allowed' : 'pointer',
+                        background: disabled ? C.bgSecondary : endChapter === ch ? C.accentGold : C.bgSecondary,
+                        color: disabled ? C.textMuted : endChapter === ch ? 'white' : C.textPrimary,
+                        fontSize: '0.88rem', transition: 'all 0.15s',
+                        opacity: disabled ? 0.4 : 1,
+                        border: endChapter === ch ? `1px solid ${C.accentGold}` : '1px solid transparent',
+                      }}>
+                      {ch}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Display button */}
+          <button
+            onClick={handleDisplay}
+            disabled={!canDisplay || scriptureLoading}
+            style={{
+              width: '100%', padding: '14px',
+              background: canDisplay ? C.accentGold : `${C.borderColor}60`,
+              border: 'none', borderRadius: '8px',
+              color: canDisplay ? 'white' : C.textMuted,
+              fontSize: '1.05rem', fontWeight: 600, cursor: canDisplay ? 'pointer' : 'not-allowed',
+              transition: 'all 0.2s',
+              boxShadow: canDisplay ? '0 4px 12px rgba(201,168,76,0.3)' : 'none',
+            }}
+          >
+            {scriptureLoading ? '載入經文中...' : `📖 顯示經文${canDisplay ? `（${startBook?.name}${startChapter}章${startBook?.abbr !== endBook?.abbr ? ` - ${endBook?.name}${endChapter}章` : ` - 第${endChapter}章`}）` : ''}`}
+          </button>
+
+          {/* Verse number toggle */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '12px' }}>
+            <input
+              type="checkbox"
+              checked={showVerseNumbers}
+              onChange={e => setShowVerseNumbers(e.target.checked)}
+              style={{ accentColor: C.accentGold, width: '16px', height: '16px', cursor: 'pointer' }}
+            />
+            <span style={{ fontSize: '0.85rem', color: C.textSecondary }}>顯示經節號碼</span>
           </div>
         </div>
 
-        {/* Reading Card */}
-        <div className="bg-white rounded-2xl p-5 shadow-sm">
-          <h2 className="text-lg font-bold text-[var(--color-primary)] mb-1">今日功課</h2>
-          {enrollment && (
-            <p className="text-xs text-[var(--color-muted)] mb-3">
-              {enrollment.scope === 'nt' ? '新約' : enrollment.scope === 'ot' ? '舊約' : '新舊約'}
-              {' · '}{enrollment.chapters_per_day}章/日
-            </p>
-          )}
-
-          {todayReading ? (
-            <>
-              <p className="text-3xl font-extrabold text-[var(--color-primary)] mb-1">
-                {todayReading.book.name} {todayReading.chapterStart}
-              </p>
-              <p className="text-sm text-[var(--color-muted)] mb-4">
-                {todayReading.book.abbr}{todayReading.chapterStart}.mp3
-              </p>
-
-              {/* Audio */}
-              <div className="mb-4">
-                <AudioPlayer src={todayReading.audioUrl} onEnded={() => {}} />
-              </div>
-
-              {/* Scripture */}
-              {versesLoading ? (
-                <div className="mb-4 space-y-3 animate-pulse">
-                  {[1,2,3].map(i => (
-                    <div key={i} className="h-5 bg-gray-100 rounded w-full" />
-                  ))}
-                  <div className="h-5 bg-gray-100 rounded w-3/4" />
-                </div>
-              ) : todayReading.verses.length > 0 ? (
-                <div className="mb-4 scripture-text" style={{ fontSize: `${fontSize}px` }}>
-                  {todayReading.verses.map(([num, text]) => (
-                    <p key={num} className="leading-[1.9]">
-                      <span className="text-[var(--color-xp)] font-bold mr-2 align-text-top" style={{ fontSize: '0.8rem', minWidth: '1.5rem', display: 'inline-block' }}>{num}</span>
+        {/* ── Scripture Display ─────────────────────────────────── */}
+        {chapters.length > 0 && (
+          <div>
+            {chapters.map(chapter => (
+              <div key={`${chapter.bookAbbr}-${chapter.chapter}`} style={{
+                background: C.bgCard, borderRadius: '10px',
+                padding: '20px', marginBottom: '20px',
+                border: `1px solid ${C.borderLight}`,
+                borderLeft: `4px solid ${C.accentGold}`,
+                boxShadow: '0 2px 8px rgba(61,41,20,0.06)',
+              }}>
+                <h2 style={{
+                  fontFamily: 'Georgia, serif', fontSize: '1.3em',
+                  fontWeight: 600, color: C.chapterTitle,
+                  marginBottom: '16px', paddingBottom: '10px',
+                  borderBottom: `1px solid ${C.borderColor}`,
+                }}>
+                  {chapter.bookName} {chapter.chapter} 章
+                </h2>
+                {chapter.verses.map(([num, text]) => (
+                  <div key={num} style={{
+                    marginBottom: '12px', display: 'flex', gap: '12px',
+                    alignItems: 'flex-start',
+                  }}>
+                    {showVerseNumbers && (
+                      <span style={{
+                        fontFamily: 'Georgia, serif', color: C.verseNumber,
+                        fontWeight: 500, fontSize: '0.75em',
+                        minWidth: '2.5em', textAlign: 'right',
+                        flexShrink: 0, paddingTop: '2px',
+                      }}>
+                        {num}
+                      </span>
+                    )}
+                    <span style={{
+                      flex: 1, color: C.textPrimary, lineHeight: 1.9,
+                      fontSize: `${fontSize}px`,
+                    }}>
                       {text}
-                    </p>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-[var(--color-muted)] text-sm mb-4">無法載入經文</p>
-              )}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ))}
 
-              {/* Complete Button */}
+            {/* Complete button */}
+            {audioQueue.length > 0 && (
               <button
                 onClick={handleComplete}
                 disabled={!!todaySession || isCompleting}
-                className={`w-full py-4 px-4 rounded-2xl font-extrabold text-white text-lg transition-all shadow-sm ${
-                  todaySession
-                    ? 'bg-[var(--color-success)] cursor-default'
-                    : 'bg-[var(--color-success)] hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-50'
-                }`}
+                style={{
+                  width: '100%', padding: '16px',
+                  background: todaySession ? C.success : C.accentGold,
+                  border: 'none', borderRadius: '10px',
+                  color: 'white', fontSize: '1.1rem',
+                  fontWeight: 700, cursor: todaySession || isCompleting ? 'default' : 'pointer',
+                  transition: 'all 0.2s', marginBottom: '20px',
+                  boxShadow: todaySession ? 'none' : '0 4px 12px rgba(201,168,76,0.3)',
+                  opacity: isCompleting ? 0.7 : 1,
+                }}
               >
-                {todaySession ? '✓ 已完成讀經' : isCompleting ? '處理中...' : '完成讀經 ✓'}
+                {todaySession ? '✅ 今日讀經已完成' : isCompleting ? '處理中...' : `完成讀經 ✓（+10 XP）`}
               </button>
-            </>
-          ) : (
-            <div className="text-center py-8">
-              <p className="text-4xl mb-3">🎉</p>
-              <p className="text-xl font-bold text-[var(--color-success)]">恭喜！</p>
-              <p className="text-[var(--color-muted)] mt-1">你已完成全部閱讀計劃！</p>
-            </div>
-          )}
-        </div>
-
-        {/* XP Card */}
-        {profile && (
-          <div className="bg-white rounded-2xl p-5 shadow-sm">
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-lg font-bold text-[var(--color-primary)]">等級 {profile.level}</h2>
-              <div className="flex items-center gap-1 text-[var(--color-xp)]">
-                <span>⭐</span>
-                <span className="font-bold">{profile.total_xp} XP</span>
-              </div>
-            </div>
-            <div className="h-3 bg-[var(--color-muted)]/20 rounded-full overflow-hidden">
-              <div className="h-full bg-[var(--color-xp)] rounded-full transition-all" style={{ width: `${(xpInCurrent / xpNeeded) * 100}%` }} />
-            </div>
-            <p className="text-xs text-[var(--color-muted)] mt-2 text-right">
-              {xpNeeded - xpInCurrent} XP 到下一級
-            </p>
+            )}
           </div>
         )}
-      </main>
+
+        {/* Empty state */}
+        {chapters.length === 0 && !scriptureLoading && (
+          <div style={{
+            textAlign: 'center', padding: '40px 20px',
+            color: C.textMuted, background: C.bgCard,
+            borderRadius: '10px', border: `1px solid ${C.borderLight}`,
+          }}>
+            <div style={{ fontSize: '3rem', marginBottom: '12px' }}>📖</div>
+            <div style={{ fontSize: '1.1rem', fontWeight: 600, color: C.textSecondary, marginBottom: '8px' }}>
+              選擇書卷和章節開始朗讀
+            </div>
+            <div style={{ fontSize: '0.9rem' }}>
+              使用上方選擇器揀選聖經範圍，即可開始閱讀和聆聽
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   )
 }
