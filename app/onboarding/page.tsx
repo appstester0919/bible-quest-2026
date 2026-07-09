@@ -112,7 +112,7 @@ export default function OnboardingPage() {
     const fd = new FormData()
     fd.append('scope', scope)
     fd.append('total_days', String(totalDays))
-    fd.append('reading_order', scope === 'nt' ? 'nt_ot' : readingOrder)
+    if (scope === 'nt_ot') fd.append('reading_order', readingOrder)
     const result = await completeOnboarding(fd)
     if (result.error) {
       setError(result.error)
