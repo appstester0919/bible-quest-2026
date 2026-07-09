@@ -208,7 +208,6 @@ export default function DashboardPage() {
             .from('reading_sessions')
             .select('*')
             .eq('enrollment_id', enrollmentData.id)
-            .order('created_at', { ascending: true })
         : { data: null }
 
       // Fetch today's session
