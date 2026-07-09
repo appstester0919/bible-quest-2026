@@ -337,7 +337,13 @@ export default function DashboardPage() {
               </div>
             </div>
           )}
-          <FontSizeControl value={fontSize} onChange={setFontSize} />
+          <FontSizeControl
+            value={fontSize}
+            onChange={(size) => {
+              setFontSize(size)
+              localStorage.setItem('bq_font_size', String(size))
+            }}
+          />
           <a href="/settings" className="text-xl" aria-label="設定">⚙️</a>
           <button onClick={handleSignOut} className="text-sm font-bold text-[var(--color-muted)] hover:text-[var(--color-primary)]" aria-label="登出">登出</button>
         </div>

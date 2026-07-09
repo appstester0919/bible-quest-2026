@@ -2,13 +2,17 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Bible Quest 2026",
+  title: "Bible Quest 聖經任務",
   description: "每日讀經，養成習慣。為大專基督徒而設的讀經計劃應用。",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
     title: "Bible Quest",
+  },
+  icons: {
+    icon: [{ url: "/icons/icon-192.png" }],
+    apple: [{ url: "/icons/icon-192.png" }],
   },
 };
 
@@ -17,7 +21,7 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
-  themeColor: "#FF9600",
+  themeColor: "#58CC02",
 };
 
 export default function RootLayout({
@@ -35,7 +39,9 @@ export default function RootLayout({
           rel="stylesheet"
         />
       </head>
-      <body>{children}</body>
+      <body>
+        {children}
+      </body>
     </html>
   );
 }
