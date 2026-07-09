@@ -334,38 +334,38 @@ export default function ReadPage() {
 
         {/* Prev — smaller icon button */}
         <button onClick={goPrev} title="上一章" style={{
-          width: '28px', height: '28px', flexShrink: 0,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          background: 'transparent',
-          border: `1px solid ${C.borderColor}`, borderRadius: '50%',
+          width: '28px !important', height: '28px !important', flexShrink: 0,
+          display: 'flex !important', alignItems: 'center', justifyContent: 'center',
+          background: 'transparent !important',
+          border: `1px solid ${C.borderColor} !important`, borderRadius: '50% !important',
           color: C.textSecondary, cursor: 'pointer', fontSize: '0.8rem',
-          transition: 'all 0.2s', padding: 0,
+          transition: 'all 0.2s', padding: '0 !important',
         }}>
           ◀
         </button>
 
         {/* Play/Pause */}
         <button onClick={togglePlay} title={isPlaying ? '暫停' : '播放'} style={{
-          width: '38px', height: '38px', flexShrink: 0,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          background: isPlaying ? C.accentGold : C.bgCard,
-          border: `1px solid ${isPlaying ? C.accentGold : C.borderColor}`,
-          borderRadius: '50%',
+          width: '38px !important', height: '38px !important', flexShrink: 0,
+          display: 'flex !important', alignItems: 'center', justifyContent: 'center',
+          background: (isPlaying ? C.accentGold : C.bgCard) + ' !important',
+          border: `1px solid ${isPlaying ? C.accentGold : C.borderColor} !important`,
+          borderRadius: '50% !important',
           color: isPlaying ? 'white' : C.textPrimary,
           cursor: 'pointer', fontSize: '1rem',
-          transition: 'all 0.2s', padding: 0,
+          transition: 'all 0.2s', padding: '0 !important',
         }}>
           {isPlaying ? '⏸' : '▶'}
         </button>
 
         {/* Next — smaller icon button */}
         <button onClick={goNext} title="下一章" style={{
-          width: '28px', height: '28px', flexShrink: 0,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          background: 'transparent',
-          border: `1px solid ${C.borderColor}`, borderRadius: '50%',
+          width: '28px !important', height: '28px !important', flexShrink: 0,
+          display: 'flex !important', alignItems: 'center', justifyContent: 'center',
+          background: 'transparent !important',
+          border: `1px solid ${C.borderColor} !important`, borderRadius: '50% !important',
           color: C.textSecondary, cursor: 'pointer', fontSize: '0.8rem',
-          transition: 'all 0.2s', padding: 0,
+          transition: 'all 0.2s', padding: '0 !important',
         }}>
           ▶
         </button>
@@ -381,7 +381,7 @@ export default function ReadPage() {
           style={{
             appearance: 'none', WebkitAppearance: 'none',
             background: `${C.bgCard} url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%236B5344' stroke-width='2.5'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E") no-repeat right 6px center`,
-            border: `1px solid ${C.borderColor}`, borderRadius: '20px',
+            border: `1px solid ${C.borderColor} !important`, borderRadius: '20px !important',
             padding: '5px 22px 5px 10px',
             fontSize: '0.78rem', fontFamily: 'inherit', color: C.textPrimary,
             cursor: 'pointer', minWidth: '54px', textAlign: 'center',
@@ -393,22 +393,24 @@ export default function ReadPage() {
 
         {/* Font size A− */}
         <button onClick={() => setFontSize(f => Math.max(14, f - 2))} title="縮小字體" style={{
-          width: '26px', height: '26px', flexShrink: 0,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          background: C.bgCard, border: `1px solid ${C.borderColor}`,
-          borderRadius: '50%', color: C.textSecondary,
+          width: '26px !important', height: '26px !important', flexShrink: 0,
+          display: 'flex !important', alignItems: 'center', justifyContent: 'center',
+          background: C.bgCard + ' !important',
+          border: `1px solid ${C.borderColor} !important`,
+          borderRadius: '50% !important', color: C.textSecondary,
           cursor: 'pointer', fontSize: '0.7rem', fontWeight: 700,
-          transition: 'all 0.2s', padding: 0,
+          transition: 'all 0.2s', padding: '0 !important',
         }}>A−</button>
 
         {/* Font size A+ */}
         <button onClick={() => setFontSize(f => Math.min(36, f + 2))} title="放大字體" style={{
-          width: '26px', height: '26px', flexShrink: 0,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          background: C.bgCard, border: `1px solid ${C.borderColor}`,
-          borderRadius: '50%', color: C.textSecondary,
+          width: '26px !important', height: '26px !important', flexShrink: 0,
+          display: 'flex !important', alignItems: 'center', justifyContent: 'center',
+          background: C.bgCard + ' !important',
+          border: `1px solid ${C.borderColor} !important`,
+          borderRadius: '50% !important', color: C.textSecondary,
           cursor: 'pointer', fontSize: '0.8rem', fontWeight: 700,
-          transition: 'all 0.2s', padding: 0,
+          transition: 'all 0.2s', padding: '0 !important',
         }}>A+</button>
       </div>
 
