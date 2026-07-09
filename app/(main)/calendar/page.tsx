@@ -239,12 +239,12 @@ export default function CalendarPage() {
 
   if (!enrollment) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[var(--color-background)]">
-        <div className="text-center p-8">
-          <p className="text-4xl mb-4">📅</p>
-          <h2 className="text-xl font-bold mb-2">尚未有讀經計劃</h2>
-          <p className="text-[var(--color-muted)] mb-6">請先建立讀經計劃</p>
-          <a href="/onboarding" className="px-6 py-3 bg-[var(--color-primary)] text-white rounded-2xl font-bold">
+      <div className="min-h-screen flex items-center justify-center px-[var(--spacing-md)] bg-[var(--color-background)]">
+        <div className="card text-center max-w-sm w-full animate-scale-in">
+          <div style={{ fontSize: 56, marginBottom: 16 }}>📅</div>
+          <h2 className="h-section mb-2">尚未有讀經計劃</h2>
+          <p className="text-muted mb-6">請先建立讀經計劃</p>
+          <a href="/onboarding" className="btn btn-primary btn-block">
             開始計劃
           </a>
         </div>
@@ -255,31 +255,32 @@ export default function CalendarPage() {
   return (
     <div className="min-h-screen bg-[var(--color-background)]">
       {/* Header */}
-      <header className="bg-white px-4 py-3 shadow-sm">
-        <h1 className="text-xl font-extrabold text-[var(--color-primary)]">📅 讀經日曆</h1>
+      <header className="bg-[var(--color-surface)] px-4 py-3 shadow-sm sticky top-0 z-10">
+        <h1 className="h-section flex items-center gap-2">📅 讀經日曆</h1>
       </header>
 
-      <main className="max-w-sm mx-auto px-4 py-6 space-y-4">
-        {/* Progress */}
-        <div className="bg-white rounded-2xl p-5 shadow-sm">
-          <div className="flex justify-between items-center mb-2">
+      <main className="max-w-sm mx-auto px-4 py-6 space-y-4 pb-24">
+        {/* Progress card */}
+        <div className="card">
+          <div className="flex justify-between items-center mb-3">
             <span className="font-bold text-[var(--color-primary)]">完成進度</span>
-            <span className="text-sm text-[var(--color-muted)]">{completedCount}/{totalPlanDays} 天</span>
+            <span className="badge badge-success">{completedCount}/{totalPlanDays} 天</span>
           </div>
-          <div className="h-3 bg-[var(--color-muted)]/20 rounded-full overflow-hidden">
-            <div className="h-full bg-[#22c55e] rounded-full transition-all" style={{ width: `${progress}%` }} />
+          <div className="progress-track">
+            <div className="progress-fill" style={{ width: `${progress}%` }} />
           </div>
+          <p className="text-xs text-muted mt-2 text-right">{progress}% 完成</p>
         </div>
 
         {/* Custom Mon-first Calendar */}
-        <div className="bg-white rounded-2xl overflow-hidden shadow-sm">
+        <div className="card overflow-hidden">
           <CustomCalendar plan={plan} completedDays={completedDays} selectedDate={selectedDate} onSelect={handleDateClick} onComplete={handleCompleteDay} />
         </div>
 
         {/* Selected Day Detail */}
         {selectedDate && (
-          <div className="bg-white rounded-2xl p-5 shadow-sm">
-            <h3 className="font-bold text-[var(--color-primary)] mb-3">
+          <div className="card animate-scale-in">
+            <h3 className="h-section mb-3">
               {selectedDate.toLocaleDateString('zh-TW', {
                 year: 'numeric', month: 'long', day: 'numeric',
               })}
@@ -289,67 +290,69 @@ export default function CalendarPage() {
                 <div className="space-y-2 mb-4">
                   {selectedRefs.map((ref, i) => (
                     <div key={i} className={`flex items-center gap-3 p-3 rounded-xl ${
-                      completedDays.has(selectedKey!) ? 'bg-green-100' : 'bg-[var(--color-muted)]/10'
+                      completedDays.has(selectedKey!) ? 'bg-[#D7FFB8]' : 'bg-[var(--color-background)]'
                     }`}>
-                      <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
-                        completedDays.has(selectedKey!) ? 'bg-[#22c55e] text-white' : 'bg-[var(--color-muted)]/30'
+                      <span className={`w-7 h-7 rounded-full flex items-center justify-center text-sm font-extrabold ${
+                        completedDays.has(selectedKey!) ? 'bg-[var(--color-success)] text-white' : 'bg-[var(--color-line)] text-[var(--color-ink-soft)]'
                       }`}>
                         {completedDays.has(selectedKey!) ? '✓' : i + 1}
                       </span>
-                      <span className="font-medium">{ref}</span>
+                      <span className={`font-bold ${completedDays.has(selectedKey!) ? 'line-through text-muted' : ''}`}>{ref}</span>
                     </div>
                   ))}
                 </div>
                 {completedDays.has(selectedKey!) ? (
-                  <div className="text-center py-2 bg-green-100 rounded-xl text-green-700 font-bold">
+                  <div className="text-center py-3 bg-[#D7FFB8] rounded-xl text-[#2D7A01] font-extrabold">
                     ✓ 已完成
                   </div>
                 ) : (
                   <button
                     onClick={() => handleDateClick(selectedDate)}
                     disabled={isCompleting}
-                    className="w-full py-3 bg-[#22c55e] text-white rounded-2xl font-bold hover:shadow-lg disabled:opacity-50"
+                    className="btn btn-primary btn-block"
                   >
                     {isCompleting ? '處理中...' : '標記完成 ✓'}
                   </button>
                 )}
               </>
             ) : (
-              <p className="text-[var(--color-muted)]">此日沒有讀經計劃</p>
+              <p className="text-muted text-center py-4">此日沒有讀經計劃</p>
             )}
           </div>
         )}
 
         {/* Today's Reading */}
         {todayRefs.length > 0 && (
-          <div className="bg-white rounded-2xl p-5 shadow-sm">
-            <h3 className="font-bold text-[var(--color-primary)] mb-3">
-              📖 今日功課 ({hktToday})
-            </h3>
+          <div className="card">
+            <div className="flex items-center gap-2 mb-3">
+              <span style={{ fontSize: 20 }}>📖</span>
+              <h3 className="h-section">今日功課</h3>
+              <span className="badge badge-gem ml-auto">{hktToday}</span>
+            </div>
             <div className="space-y-2">
               {todayRefs.map((ref, i) => (
                 <div key={i} className={`flex items-center gap-3 p-3 rounded-xl ${
-                  completedDays.has(hktToday) ? 'bg-green-100' : 'bg-amber-50'
+                  completedDays.has(hktToday) ? 'bg-[#D7FFB8]' : 'bg-[#FFF1A8]'
                 }`}>
-                  <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
-                    completedDays.has(hktToday) ? 'bg-[#22c55e] text-white' : 'bg-amber-300 text-amber-900'
+                  <span className={`w-7 h-7 rounded-full flex items-center justify-center text-sm font-extrabold ${
+                    completedDays.has(hktToday) ? 'bg-[var(--color-success)] text-white' : 'bg-[var(--color-xp)] text-[var(--color-primary)]'
                   }`}>
                     {completedDays.has(hktToday) ? '✓' : i + 1}
                   </span>
-                  <span className="font-medium">{ref}</span>
+                  <span className={`font-bold ${completedDays.has(hktToday) ? 'line-through text-muted' : ''}`}>{ref}</span>
                 </div>
               ))}
             </div>
           </div>
         )}
-
-        {/* Success Banner */}
-        {showSuccess && (
-          <div className="fixed top-8 left-1/2 -translate-x-1/2 z-50 bg-[#22c55e] text-white px-6 py-3 rounded-2xl shadow-lg font-bold animate-bounce">
-            ✓ 讀經完成！繼續努力！
-          </div>
-        )}
       </main>
+
+      {/* Success Banner */}
+      {showSuccess && (
+        <div className="fixed top-8 left-1/2 -translate-x-1/2 z-50 bg-[var(--color-success)] text-white px-6 py-3 rounded-2xl shadow-lg font-extrabold animate-level-up">
+          ✓ 讀經完成！繼續努力！
+        </div>
+      )}
     </div>
   )
 }
