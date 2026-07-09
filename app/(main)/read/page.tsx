@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { markLessonComplete } from '@/app/(main)/dashboard/actions'
+import { markLessonComplete } from '@/lib/actions'
 import { useRouter } from 'next/navigation'
 import { getChapter, getAudioUrl, getBooksMeta, type BookMeta } from '@/lib/bible/lookup'
 import { AudioPlayer } from '@/components/AudioPlayer'
