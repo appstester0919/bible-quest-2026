@@ -308,101 +308,129 @@ export default function ReadPage() {
 
       {/* ── Fixed Top Audio Bar ──────────────────────────────────────── */}
       <div style={{
-        position: 'fixed', top: 0, left: 0, right: 0, height: '72px',
+        position: 'fixed', top: 0, left: 0, right: 0,
+        height: '60px',
         background: 'rgba(245,240,232,0.97)', backdropFilter: 'blur(8px)',
         borderBottom: `1px solid ${C.borderColor}`,
         zIndex: 1000, boxShadow: '0 2px 12px rgba(61,41,20,0.06)',
-        display: 'flex', alignItems: 'center', padding: '0 16px', gap: '12px',
+        display: 'flex', alignItems: 'center',
+        padding: '0 10px',
+        gap: '6px',
+        overflowX: 'auto', overflowY: 'hidden',
+        WebkitOverflowScrolling: 'touch',
+        whiteSpace: 'nowrap',
+        scrollbarWidth: 'none',
       }}>
+        {/* Hide scrollbar */}
+        <style>{`.audio-bar::-webkit-scrollbar{display:none}.audio-bar{scrollbar-width:none}`}</style>
+
         {/* Chapter display */}
         <div style={{
-          minWidth: '150px', padding: '6px 12px',
+          minWidth: '90px', maxWidth: '110px', padding: '5px 8px',
           background: C.bgSecondary, border: `1px solid ${C.borderColor}`,
           borderRadius: '6px', fontFamily: 'Georgia, serif',
-          fontSize: '0.9rem', color: C.textPrimary,
+          fontSize: '0.8rem', color: C.textPrimary, flexShrink: 0,
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
         }}>
           {currentAudioItem ? getAudioLabel(currentAudioItem.book, currentAudioItem.chapter) : '馬太福音 1 章'}
         </div>
 
-        {/* Prev */}
-        <button onClick={goPrev} style={{
-          display: 'flex', alignItems: 'center', gap: '4px',
-          padding: '8px 12px', background: 'transparent',
-          border: `1px solid ${C.borderColor}`, borderRadius: '6px',
-          color: C.textSecondary, cursor: 'pointer', fontSize: '0.85rem',
-          transition: 'all 0.2s',
-        }}
-          onMouseEnter={e => { (e.target as HTMLElement).style.background = `${C.accentGold}22`; (e.target as HTMLElement).style.borderColor = C.accentGold }}
-          onMouseLeave={e => { (e.target as HTMLElement).style.background = 'transparent'; (e.target as HTMLElement).style.borderColor = C.borderColor }}
-        >
-          ◀ 上一章
+        {/* Prev — icon only, rounded */}
+        <button onClick={goPrev} title="上一章" style={{
+          width: '34px', height: '34px', flexShrink: 0,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          background: 'transparent',
+          border: `1px solid ${C.borderColor}`, borderRadius: '50%',
+          color: C.textSecondary, cursor: 'pointer', fontSize: '1rem',
+          transition: 'all 0.2s', padding: 0,
+        }}>
+          ◀
         </button>
 
-        {/* Play/Pause */}
-        <button onClick={togglePlay} style={{
-          display: 'flex', alignItems: 'center', gap: '6px',
-          padding: '8px 18px',
+        {/* Play — prominent circular button */}
+        <button onClick={togglePlay} title={isPlaying ? '暫停' : '播放'} style={{
+          width: '42px', height: '42px', flexShrink: 0,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
           background: isPlaying ? C.accentGold : C.bgCard,
           border: `1px solid ${isPlaying ? C.accentGold : C.borderColor}`,
-          borderRadius: '6px', color: isPlaying ? 'white' : C.textPrimary,
-          cursor: 'pointer', fontSize: '0.9rem', fontWeight: 500,
-          transition: 'all 0.2s',
+          borderRadius: '50%',
+          color: isPlaying ? 'white' : C.textPrimary,
+          cursor: 'pointer', fontSize: '1.1rem',
+          transition: 'all 0.2s', padding: 0,
         }}>
-          {isPlaying ? '⏸ 暫停' : '▶ 播放'}
+          {isPlaying ? '⏸' : '▶'}
         </button>
 
-        {/* Next */}
-        <button onClick={goNext} style={{
-          display: 'flex', alignItems: 'center', gap: '4px',
-          padding: '8px 12px', background: 'transparent',
-          border: `1px solid ${C.borderColor}`, borderRadius: '6px',
-          color: C.textSecondary, cursor: 'pointer', fontSize: '0.85rem',
-          transition: 'all 0.2s',
-        }}
-          onMouseEnter={e => { (e.target as HTMLElement).style.background = `${C.accentGold}22`; (e.target as HTMLElement).style.borderColor = C.accentGold }}
-          onMouseLeave={e => { (e.target as HTMLElement).style.background = 'transparent'; (e.target as HTMLElement).style.borderColor = C.borderColor }}
+        {/* Stop */}
+        <button onClick={() => { audioRef.current?.pause(); audioRef.current!.currentTime = 0; setIsPlaying(false); }} title="停止" style={{
+          width: '34px', height: '34px', flexShrink: 0,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          background: 'transparent',
+          border: `1px solid ${C.borderColor}`, borderRadius: '50%',
+          color: C.textSecondary, cursor: 'pointer', fontSize: '0.9rem',
+          transition: 'all 0.2s', padding: 0,
+        }}>
+          ■
+        </button>
+
+        {/* Next — icon only, rounded */}
+        <button onClick={goNext} title="下一章" style={{
+          width: '34px', height: '34px', flexShrink: 0,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          background: 'transparent',
+          border: `1px solid ${C.borderColor}`, borderRadius: '50%',
+          color: C.textSecondary, cursor: 'pointer', fontSize: '1rem',
+          transition: 'all 0.2s', padding: 0,
+        }}>
+          ▶
+        </button>
+
+        {/* Speed dropdown */}
+        <select
+          value={playbackRate}
+          onChange={e => {
+            const rate = parseFloat(e.target.value)
+            setPlaybackRate(rate)
+            if (audioRef.current) audioRef.current.playbackRate = rate
+          }}
+          style={{
+            appearance: 'none', WebkitAppearance: 'none',
+            background: `${C.bgCard} url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%236B5344' stroke-width='2.5'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E") no-repeat right 6px center`,
+            border: `1px solid ${C.borderColor}`, borderRadius: '20px',
+            padding: '5px 24px 5px 10px',
+            fontSize: '0.78rem', fontFamily: 'inherit', color: C.textPrimary,
+            cursor: 'pointer', minWidth: '56px', textAlign: 'center',
+            flexShrink: 0, outline: 'none',
+          }}
         >
-          下一章 ▶
-        </button>
+          {SPEEDS.map(s => <option key={s} value={s}>{s}×</option>)}
+        </select>
 
-        {/* Speed */}
-        <div style={{ display: 'flex', gap: '4px', marginLeft: 'auto' }}>
-          {SPEEDS.map(s => (
-            <button key={s} onClick={() => {
-              setPlaybackRate(s)
-              if (audioRef.current) audioRef.current.playbackRate = s
-            }} style={{
-              padding: '5px 9px', border: `1px solid ${playbackRate === s ? C.accentGold : C.borderColor}`,
-              borderRadius: '4px', background: playbackRate === s ? C.accentGold : C.bgCard,
-              color: playbackRate === s ? 'white' : C.textSecondary,
-              cursor: 'pointer', fontSize: '0.78rem', transition: 'all 0.2s',
-            }}>
-              {s}×
-            </button>
-          ))}
-        </div>
+        {/* Font size controls */}
+        <button onClick={() => setFontSize(f => Math.max(14, f - 2))} title="縮小字體" style={{
+          width: '28px', height: '28px', flexShrink: 0,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          background: C.bgCard, border: `1px solid ${C.borderColor}`,
+          borderRadius: '50%', color: C.textSecondary,
+          cursor: 'pointer', fontSize: '0.75rem', fontWeight: 700,
+          transition: 'all 0.2s', padding: 0,
+        }}>A−</button>
 
-        {/* Font size */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <button onClick={() => setFontSize(f => Math.max(14, f - 2))} style={{
-            width: '30px', height: '30px', display: 'flex', alignItems: 'center', justifyContent: 'center',
-            background: C.bgCard, border: `1px solid ${C.borderColor}`, borderRadius: '5px',
-            color: C.textSecondary, cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600,
-          }}>A−</button>
-          <span style={{ fontSize: '0.8rem', color: C.textMuted, minWidth: '24px', textAlign: 'center' }}>{fontSize}</span>
-          <button onClick={() => setFontSize(f => Math.min(36, f + 2))} style={{
-            width: '30px', height: '30px', display: 'flex', alignItems: 'center', justifyContent: 'center',
-            background: C.bgCard, border: `1px solid ${C.borderColor}`, borderRadius: '5px',
-            color: C.textSecondary, cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600,
-          }}>A+</button>
-        </div>
+        <button onClick={() => setFontSize(f => Math.min(36, f + 2))} title="放大字體" style={{
+          width: '28px', height: '28px', flexShrink: 0,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          background: C.bgCard, border: `1px solid ${C.borderColor}`,
+          borderRadius: '50%', color: C.textSecondary,
+          cursor: 'pointer', fontSize: '0.85rem', fontWeight: 700,
+          transition: 'all 0.2s', padding: 0,
+        }}>A+</button>
 
         {/* Profile badge */}
         {profile && (
           <div style={{
-            display: 'flex', alignItems: 'center', gap: '6px',
             padding: '4px 10px', background: `${C.accentGold}15`,
-            borderRadius: '20px', fontSize: '0.8rem', fontWeight: 700, color: '#b8943f',
+            borderRadius: '20px', fontSize: '0.75rem', fontWeight: 700,
+            color: '#b8943f', flexShrink: 0,
           }}>
             ⭐ Lv.{profile.level}
           </div>
