@@ -123,7 +123,7 @@ export default function ReadPage() {
         const now = new Date()
         const hkt = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Hong_Kong' }))
         const dateLocal = hkt.toISOString().split('T')[0]
-        setTodaySession((sessionsData as ReadingSession[]).find((s: ReadingSession) => s.date_local === dateLocal) ?? null)
+        setTodaySession((sessions ?? []).find((s: ReadingSession) => s.date_local === dateLocal) ?? null)
       }
 
       setLoading(false)
