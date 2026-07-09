@@ -28,16 +28,24 @@ export default function SignupPage() {
 
     setLoading(true)
     const supabase = createClient()
-    const { error: signUpError } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        emailRedirectTo: `${window.location.origin}/dashboard`,
-      },
-    })
+    let result
+    try {
+      const { error: signUpError } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          emailRedirectTo: `${window.location.origin}/dashboard`,
+        },
+      })
+      result = signUpError
+    } catch (err) {
+      setError('網絡或服務異常，請稍後再試')
+      setLoading(false)
+      return
+    }
 
-    if (signUpError) {
-      setError(signUpError.message)
+    if (result) {
+      setError(result.message)
       setLoading(false)
       return
     }
@@ -47,16 +55,26 @@ export default function SignupPage() {
 
   async function handleGoogleSignUp() {
     setError('')
+    setLoading(true)
     const supabase = createClient()
-    const { error: googleError } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: `${window.location.origin}/onboarding`,
-      },
-    })
-    if (googleError) {
-      setError(googleError.message)
+    let result
+    try {
+      const { error: googleError } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: `${window.location.origin}/onboarding`,
+        },
+      })
+      result = googleError
+    } catch {
+      setError('網絡或服務異常，請稍後再試')
+      setLoading(false)
+      return
     }
+    if (result) {
+      setError(result.message)
+    }
+    setLoading(false)
   }
 
   return (
