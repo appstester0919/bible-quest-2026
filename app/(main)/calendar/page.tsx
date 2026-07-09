@@ -46,7 +46,11 @@ function buildPlan(enrollment: Enrollment, books: BookMeta[]): Map<string, strin
 
   let bookIdx = 0
   let chapterInBook = 1
-  const start = new Date(enrollment.started_at || enrollment.created_at)
+  let start = new Date(enrollment.started_at ? enrollment.started_at : enrollment.created_at)
+  if (isNaN(start.getTime())) {
+    // Fallback: start from today minus completed days
+    start = new Date()
+  }
   const today = new Date(getHKTDate())
   let current = new Date(start)
 
