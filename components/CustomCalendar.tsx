@@ -154,7 +154,12 @@ export default function CustomCalendar({ plan, completedDays, selectedDate, onSe
                   {refs.slice(0, 3).map((_, i) => (
                     <div
                       key={i}
-                      className={`w-1 h-1 rounded-full ${completed ? 'bg-green-600' : 'bg-blue-400'}`}
+                      className="rounded-full"
+                      style={{
+                        width: '4px',
+                        height: '4px',
+                        backgroundColor: completed ? '#16a34a' : '#60a5fa'
+                      }}
                     />
                   ))}
                   {refs.length > 3 && (
