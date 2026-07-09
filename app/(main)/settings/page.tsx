@@ -1,6 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
+import { createClient } from '@/lib/supabase/client'
 import { subscribeToPush, unsubscribeFromPush, getPushPermissionStatus } from '@/lib/push'
 
 const REMINDER_TIMES = [
@@ -13,11 +15,17 @@ const REMINDER_TIMES = [
 ]
 
 export default function SettingsPage() {
+  const router = useRouter()
   const [pushPermission, setPushPermission] = useState<NotificationPermission | 'unsupported'>('default')
   const [isSubscribed, setIsSubscribed] = useState(false)
   const [loading, setLoading] = useState(false)
   const [saved, setSaved] = useState(false)
   const [reminderTime, setReminderTime] = useState('20:00')
+  const [currentEnrollment, setCurrentEnrollment] = useState<{ id: string; scope: string; chapters_per_day: number; total_days: number } | null>(null)
+  const [completedPlans, setCompletedPlans] = useState(0)
+  const [updatingPlan, setUpdatingPlan] = useState(false)
+  const [confirmShow, setConfirmShow] = useState(false)
+  const [pendingPlan, setPendingPlan] = useState<{ scope: string; chaptersPerDay: number; totalDays: number } | null>(null)
 
   useEffect(() => {
     setPushPermission(getPushPermissionStatus())
@@ -27,7 +35,68 @@ export default function SettingsPage() {
         reg.pushManager.getSubscription().then((sub) => setIsSubscribed(!!sub))
       )
     }
+    fetchEnrollment()
   }, [])
+
+  async function fetchEnrollment() {
+    const supabase = createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+    const { data: enrollment } = await supabase
+      .from('user_plan_enrollments')
+      .select('id, scope, chapters_per_day, total_days, status')
+      .eq('user_id', user.id)
+      .eq('status', 'active')
+      .maybeSingle()
+    setCurrentEnrollment(enrollment)
+    const { data: stats } = await supabase
+      .from('user_stats')
+      .select('completed_plans')
+      .eq('user_id', user.id)
+      .maybeSingle()
+    setCompletedPlans(stats?.completed_plans ?? 0)
+  }
+
+  async function handleChangePlan() {
+    if (!currentEnrollment) {
+      router.push('/onboarding')
+      return
+    }
+    setUpdatingPlan(true)
+    try {
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+
+      // Mark old enrollment as abandoned, create new active one
+      await supabase
+        .from('user_plan_enrollments')
+        .update({ status: 'abandoned' })
+        .eq('id', currentEnrollment.id)
+
+      // Create new enrollment
+      const { error } = await supabase
+        .from('user_plan_enrollments')
+        .insert({
+          user_id: user.id,
+          scope: currentEnrollment.scope,
+          chapters_per_day: currentEnrollment.chapters_per_day,
+          total_days: currentEnrollment.total_days,
+          status: 'active',
+          started_at: new Date().toISOString(),
+        })
+      if (error) {
+        alert('更新計劃失敗：' + error.message)
+        return
+      }
+      await fetchEnrollment()
+      setConfirmShow(false)
+      alert('✅ 已開始新一週目！加油 💪')
+      router.push('/calendar')
+    } finally {
+      setUpdatingPlan(false)
+    }
+  }
 
   async function handleTogglePush() {
     setLoading(true)
@@ -111,6 +180,89 @@ export default function SettingsPage() {
             </>
           )}
         </div>
+
+        {/* Plan Management */}
+        <div className="bg-white rounded-2xl p-5 shadow-sm">
+          <h2 className="text-lg font-bold text-[var(--color-primary)] mb-1">📖 讀經計劃</h2>
+          <p className="text-sm text-[var(--color-muted)] mb-4">
+            查看或重啟你的讀經計劃
+          </p>
+
+          {currentEnrollment ? (
+            <>
+              <div className="bg-[var(--color-background)] rounded-xl p-4 mb-4 space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-[var(--color-muted)]">當前範圍</span>
+                  <span className="font-bold text-[var(--color-primary)]">
+                    {currentEnrollment.scope === 'nt' ? '新約' : currentEnrollment.scope === 'ot' ? '舊約' : '新舊約'}
+                  </span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-[var(--color-muted)]">每日章數</span>
+                  <span className="font-bold text-[var(--color-primary)]">{currentEnrollment.chapters_per_day} 章</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-[var(--color-muted)]">總天數</span>
+                  <span className="font-bold text-[var(--color-primary)]">{currentEnrollment.total_days} 天</span>
+                </div>
+                <div className="flex justify-between text-sm pt-2 border-t border-[var(--color-muted)]/10">
+                  <span className="text-[var(--color-muted)]">已完成週目</span>
+                  <span className="font-bold text-[var(--color-success)]">
+                    🏆 {completedPlans} 次
+                  </span>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setConfirmShow(true)}
+                disabled={updatingPlan}
+                className="w-full py-2.5 px-4 bg-[var(--color-primary)] text-white rounded-xl font-bold text-sm hover:bg-[#374151] active:translate-y-0.5 transition-all disabled:opacity-50"
+              >
+                🔄 重新開始新一週目
+              </button>
+              <p className="text-xs text-[var(--color-muted)] mt-2 text-center">
+                會保留你嘅完成次數，重新計算讀經進度
+              </p>
+            </>
+          ) : (
+            <a
+              href="/onboarding"
+              className="block w-full py-2.5 px-4 bg-[var(--color-success)] text-white rounded-xl font-bold text-sm text-center hover:bg-[#46A302] transition-all"
+            >
+              ➕ 建立讀經計劃
+            </a>
+          )}
+        </div>
+
+        {/* Confirm dialog */}
+        {confirmShow && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl p-6 max-w-sm w-full">
+              <h3 className="text-xl font-bold text-[var(--color-primary)] mb-2">
+                確認重新開始？
+              </h3>
+              <p className="text-sm text-[var(--color-muted)] mb-4">
+                將會把當前計劃標記為「已放棄」，並開始一個全新的讀經計劃。你嘅歷史完成次數會保留。
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setConfirmShow(false)}
+                  disabled={updatingPlan}
+                  className="flex-1 py-2.5 px-4 bg-[var(--color-muted)]/20 text-[var(--color-primary)] rounded-xl font-bold text-sm disabled:opacity-50"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={handleChangePlan}
+                  disabled={updatingPlan}
+                  className="flex-1 py-2.5 px-4 bg-[var(--color-primary)] text-white rounded-xl font-bold text-sm disabled:opacity-50"
+                >
+                  {updatingPlan ? '處理中...' : '確認'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* App Info */}
         <div className="bg-white rounded-2xl p-5 shadow-sm">

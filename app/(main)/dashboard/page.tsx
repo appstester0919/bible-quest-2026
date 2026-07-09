@@ -10,6 +10,7 @@ interface Profile {
   current_streak: number
   total_xp: number
   level: number
+  completed_plans: number
 }
 
 interface Enrollment {
@@ -24,6 +25,12 @@ interface ReadingSession {
   id: string
   chapter_ref: string
   date_local: string
+}
+
+interface GlobalStats {
+  total_chapters_read: number
+  active_readers: number
+  total_plans_completed: number
 }
 
 function getHKTDate(): string {
@@ -43,6 +50,7 @@ export default function DashboardPage() {
   const [profile, setProfile] = useState<Profile | null>(null)
   const [enrollment, setEnrollment] = useState<Enrollment | null>(null)
   const [sessions, setSessions] = useState<ReadingSession[]>([])
+  const [globalStats, setGlobalStats] = useState<GlobalStats>({ total_chapters_read: 0, active_readers: 0, total_plans_completed: 0 })
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -56,7 +64,7 @@ export default function DashboardPage() {
         .from('profiles').select('*').eq('id', authUser.id).single()
       const { data: statsData } = await supabase
         .from('user_stats')
-        .select('current_streak, total_xp, level')
+        .select('current_streak, total_xp, level, completed_plans')
         .eq('user_id', authUser.id)
         .single()
       setProfile({ ...profileData, ...statsData } as Profile)
@@ -74,6 +82,13 @@ export default function DashboardPage() {
         ? await supabase.from('reading_sessions').select('id, chapter_ref, date_local').eq('enrollment_id', enrollmentData.id)
         : { data: null as ReadingSession[] | null }
       setSessions(sessionsData ?? [])
+
+      // Fetch global stats (independent of user)
+      const { data: global } = await supabase
+        .from('global_stats')
+        .select('total_chapters_read, active_readers, total_plans_completed')
+        .maybeSingle()
+      if (global) setGlobalStats(global as GlobalStats)
 
       setLoading(false)
     }
@@ -119,6 +134,11 @@ export default function DashboardPage() {
             <p className="text-lg font-bold text-[var(--color-primary)]">
               {profile.email}
             </p>
+            {profile.completed_plans > 0 && (
+              <p className="text-xs text-[var(--color-success)] font-bold mt-1">
+                🏆 你已完成 {profile.completed_plans} 次聖經計劃
+              </p>
+            )}
           </div>
         )}
 
@@ -185,6 +205,28 @@ export default function DashboardPage() {
             </p>
           </div>
         )}
+
+        {/* Global Community Stats */}
+        <div className="bg-gradient-to-br from-[var(--color-primary)] to-[#374151] text-white rounded-2xl p-5 shadow-lg">
+          <h2 className="text-lg font-bold mb-3 flex items-center gap-2">
+            <span>🌍</span> 社群統計
+          </h2>
+          <div className="grid grid-cols-3 gap-3 text-center">
+            <div>
+              <p className="text-2xl font-bold">{globalStats.total_chapters_read.toLocaleString()}</p>
+              <p className="text-xs opacity-80 mt-1">總共讀咗</p>
+              <p className="text-xs opacity-80">章聖經</p>
+            </div>
+            <div className="border-l border-r border-white/20">
+              <p className="text-2xl font-bold">{globalStats.active_readers}</p>
+              <p className="text-xs opacity-80 mt-1">活躍讀者</p>
+            </div>
+            <div>
+              <p className="text-2xl font-bold">{globalStats.total_plans_completed}</p>
+              <p className="text-xs opacity-80 mt-1">完成計劃</p>
+            </div>
+          </div>
+        </div>
 
         {/* Quick Links */}
         <div className="grid grid-cols-2 gap-3">
