@@ -113,14 +113,18 @@ export default function CalendarPage() {
         .select('*')
         .eq('user_id', authUser.id)
         .eq('status', 'active')
-        .order('created_at', { ascending: false })
+        .order('started_at', { ascending: false })
         .limit(1)
         .maybeSingle()
 
-      if (enrollmentError) console.error('Enrollment error:', enrollmentError)
-      setEnrollment(enrollmentError ? null : enrollmentData)
+      if (enrollmentError) {
+        console.error('[calendar] enrollment error:', enrollmentError)
+        setEnrollment(null)
+      } else {
+        setEnrollment(enrollmentData)
+      }
 
-      const { data: sessionsData } = enrollmentData
+      const { data: sessionsData } = enrollmentData && !enrollmentError
         ? await supabase.from('reading_sessions').select('*').eq('enrollment_id', enrollmentData.id)
         : { data: null as ReadingSession[] | null }
       setSessions(sessionsData ?? [])
