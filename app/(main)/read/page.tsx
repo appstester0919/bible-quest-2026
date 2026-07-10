@@ -282,6 +282,7 @@ export default function ReadPage() {
       setProfile({ ...profile, total_xp: newXp, level: newLevel })
     } catch (e) {
       console.error(e)
+      alert(`失敗: ${e instanceof Error ? e.message : String(e)}`)
     } finally {
       setIsCompleting(false)
     }
