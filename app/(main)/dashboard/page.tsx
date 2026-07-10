@@ -89,17 +89,19 @@ export default function DashboardPage() {
           setProfile({ id: authUser.id, email: profileData?.email || authUser.email || '', ...profileData, ...statsData } as Profile)
         }
 
-        const { data: enrollmentData, error } = await supabase
+        const { data: enrollmentsData, error } = await supabase
           .from('user_plan_enrollments')
           .select('id, scope, chapters_per_day, total_days, status')
           .eq('user_id', authUser.id)
           .eq('status', 'active')
+          .order('created_at', { ascending: false })
+          .limit(1)
           .maybeSingle()
         if (error) errors.push(`enrollment: ${error.message}`)
-        setEnrollment(error ? null : enrollmentData)
+        setEnrollment(error ? null : enrollmentsData)
 
-        const { data: sessionsData, error: sessionsErr } = enrollmentData
-          ? await supabase.from('reading_sessions').select('id, chapter_ref, date_local').eq('enrollment_id', enrollmentData.id)
+        const { data: sessionsData, error: sessionsErr } = enrollmentsData
+          ? await supabase.from('reading_sessions').select('id, chapter_ref, date_local').eq('enrollment_id', enrollmentsData.id)
           : { data: null, error: null }
         if (sessionsErr) errors.push(`sessions: ${sessionsErr.message}`)
         setSessions(sessionsData ?? [])

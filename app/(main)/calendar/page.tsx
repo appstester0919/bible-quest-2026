@@ -113,6 +113,8 @@ export default function CalendarPage() {
         .select('*')
         .eq('user_id', authUser.id)
         .eq('status', 'active')
+        .order('created_at', { ascending: false })
+        .limit(1)
         .maybeSingle()
 
       if (enrollmentError) console.error('Enrollment error:', enrollmentError)
