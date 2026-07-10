@@ -20,6 +20,12 @@ export async function markLessonComplete(
 
   console.log('[markLessonComplete]', { user_id: user.id, enrollment_id: enrollmentId, chapter_ref: chapterRef, xp_earned: xpEarned, date_local: dateLocal })
 
+  // Parse "創 1" or "太 2:1" → book_zh="創", chapter=1
+  const parts = chapterRef.trim().split(/\s+/)
+  const book_zh = parts[0] || '創'
+  const chapterRaw = parts[1] || '1'
+  const chapter = parseInt(chapterRaw.replace(/[^0-9]/g, ''), 10) || 1
+
   const { data: insertResult, error } = await supabase
     .from('reading_sessions')
     .insert({
@@ -28,7 +34,9 @@ export async function markLessonComplete(
       chapter_ref: chapterRef,
       xp_earned: xpEarned,
       date_local: dateLocal,
-      day_number: 1, // TODO: compute from enrollment started_at
+      day_number: 1,
+      book_zh,
+      chapter,
     })
     .select()
     .single()
