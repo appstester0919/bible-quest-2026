@@ -62,44 +62,65 @@ export default function DashboardPage() {
     total_chapters_read: 0, active_readers: 0, total_plans_completed: 0,
   })
   const [loading, setLoading] = useState(true)
+  const [fetchErrors, setFetchErrors] = useState<string[]>([])
 
   useEffect(() => {
     const fetchData = async () => {
-      const supabase = createClient()
-      const { data: { user: authUser } } = await supabase.auth.getUser()
-      if (!authUser) { router.push('/login'); return }
-      setUser(authUser)
+      try {
+        const supabase = createClient()
+        const { data: { user: authUser } } = await supabase.auth.getUser()
+        if (!authUser) { router.push('/login'); return }
+        setUser(authUser)
 
-      const { data: profileData } = await supabase
-        .from('profiles').select('*').eq('id', authUser.id).single()
-      const { data: statsData } = await supabase
-        .from('user_stats')
-        .select('current_streak, total_xp, level, completed_plans')
-        .eq('user_id', authUser.id)
-        .single()
-      setProfile({ ...profileData, ...statsData } as Profile)
+        const errors: string[] = []
 
-      const { data: enrollmentData, error } = await supabase
-        .from('user_plan_enrollments')
-        .select('id, scope, chapters_per_day, total_days, status')
-        .eq('user_id', authUser.id)
-        .eq('status', 'active')
-        .maybeSingle()
-      if (error) console.error('Enrollment error:', error)
-      setEnrollment(error ? null : enrollmentData)
+        const { data: profileData, error: profileErr } = await supabase
+          .from('profiles').select('*').eq('id', authUser.id).single()
+        if (profileErr) errors.push(`profiles: ${profileErr.message}`)
 
-      const { data: sessionsData } = enrollmentData
-        ? await supabase.from('reading_sessions').select('id, chapter_ref, date_local').eq('enrollment_id', enrollmentData.id)
-        : { data: null as ReadingSession[] | null }
-      setSessions(sessionsData ?? [])
+        const { data: statsData, error: statsErr } = await supabase
+          .from('user_stats')
+          .select('current_streak, total_xp, level, completed_plans')
+          .eq('user_id', authUser.id)
+          .maybeSingle()
+        if (statsErr) errors.push(`user_stats: ${statsErr.message}`)
 
-      const { data: global } = await supabase
-        .from('global_stats')
-        .select('total_chapters_read, active_readers, total_plans_completed')
-        .maybeSingle()
-      if (global) setGlobalStats(global as GlobalStats)
+        if (profileData || statsData) {
+          setProfile({ id: authUser.id, email: profileData?.email || authUser.email || '', ...profileData, ...statsData } as Profile)
+        }
 
-      setLoading(false)
+        const { data: enrollmentData, error } = await supabase
+          .from('user_plan_enrollments')
+          .select('id, scope, chapters_per_day, total_days, status')
+          .eq('user_id', authUser.id)
+          .eq('status', 'active')
+          .maybeSingle()
+        if (error) errors.push(`enrollment: ${error.message}`)
+        setEnrollment(error ? null : enrollmentData)
+
+        const { data: sessionsData, error: sessionsErr } = enrollmentData
+          ? await supabase.from('reading_sessions').select('id, chapter_ref, date_local').eq('enrollment_id', enrollmentData.id)
+          : { data: null, error: null }
+        if (sessionsErr) errors.push(`sessions: ${sessionsErr.message}`)
+        setSessions(sessionsData ?? [])
+
+        const { data: global, error: globalErr } = await supabase
+          .from('global_stats')
+          .select('total_chapters_read, active_readers, total_plans_completed')
+          .maybeSingle()
+        if (globalErr) errors.push(`global_stats: ${globalErr.message}`)
+        if (global) setGlobalStats(global as GlobalStats)
+
+        if (errors.length > 0) {
+          console.error('[dashboard fetch errors]', errors)
+          setFetchErrors(errors)
+        }
+      } catch (err) {
+        console.error('[dashboard fatal]', err)
+        setFetchErrors([String(err)])
+      } finally {
+        setLoading(false)
+      }
     }
     fetchData()
   }, [router])
@@ -148,6 +169,21 @@ export default function DashboardPage() {
       </header>
 
       <main className="max-w-sm mx-auto px-4 py-6 space-y-4">
+        {/* Debug: fetch errors visible to user */}
+        {fetchErrors.length > 0 && (
+          <div className="bg-[var(--color-danger)]/10 border border-[var(--color-danger)]/30 rounded-2xl p-4">
+            <p className="text-sm font-bold text-[var(--color-danger)] mb-2">
+              ⚠️ 載入錯誤 ({fetchErrors.length})
+            </p>
+            <ul className="text-xs text-[var(--color-danger)]/90 space-y-1 font-mono">
+              {fetchErrors.map((e, i) => <li key={i}>• {e}</li>)}
+            </ul>
+            <p className="text-xs text-[var(--color-muted)] mt-2">
+              請重新登入或聯絡管理員
+            </p>
+          </div>
+        )}
+
         {/* Streak Hero */}
         <div className="card-streak">
           <div className="flex items-center justify-between">
