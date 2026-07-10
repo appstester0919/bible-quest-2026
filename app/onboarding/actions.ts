@@ -20,6 +20,20 @@ export async function completeOnboarding(formData: FormData): Promise<{ error?: 
 
     console.log('[onboarding] insert', { user_id: user.id, scope, totalDays, chaptersPerDay, readingOrder })
 
+    // Mark any existing active enrollments as 'abandoned' before creating
+    // a new one. Otherwise the user can end up with multiple 'active' rows,
+    // which breaks downstream .single() queries in dashboard / calendar.
+    const { error: archiveError } = await supabase
+      .from('user_plan_enrollments')
+      .update({ status: 'abandoned' })
+      .eq('user_id', user.id)
+      .eq('status', 'active')
+
+    if (archiveError) {
+      console.error('[onboarding] archive previous active failed:', archiveError)
+      // Continue — even if archive fails we still try to insert new row
+    }
+
     const { data: enrollment, error: enrollError } = await supabase
       .from('user_plan_enrollments')
       .insert({
