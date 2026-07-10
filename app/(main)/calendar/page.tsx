@@ -6,7 +6,7 @@ import 'react-calendar/dist/Calendar.css'
 import { createClient } from '@/lib/supabase/client'
 import { getBooksMeta, type BookMeta } from '@/lib/bible/lookup'
 import { celebrate } from '@/lib/confetti'
-import { unmarkDayComplete } from '@/lib/actions'
+import { unmarkDayComplete, markLessonComplete } from '@/lib/actions'
 
 interface Enrollment {
   id: string
@@ -197,31 +197,29 @@ export default function CalendarPage() {
 
     setIsCompleting(true)
     try {
-      const supabase = createClient()
-      const { data: { user: authUser } } = await supabase.auth.getUser()
-      if (!authUser) return
-
-      const dateLocal = key
-
-      await Promise.all(refs.map((ref, i) =>
-        supabase.from('reading_sessions').insert({
-          user_id: authUser.id,
-          enrollment_id: enrollment.id,
-          chapter_ref: ref,
-          date_local: dateLocal,
-        })
-      ))
-
-      setShowSuccess(true)
-      setTimeout(() => setShowSuccess(false), 3000)
+      let insertedCount = 0
+      for (let i = 0; i < refs.length; i++) {
+        const xp = i === 0 ? 10 : 0  // Only first chapter gets XP
+        const result = await markLessonComplete(enrollment.id, refs[i], xp, key)
+        if (result.success) insertedCount++
+      }
+      if (insertedCount === 0) {
+        alert('寫入失敗')
+        setIsCompleting(false)
+        return
+      }
+      await celebrate({ type: 'burst', particleCount: Math.min(insertedCount * 30, 180) })
       setSessions(prev => [...prev, ...refs.map((ref, i) => ({
         id: `new-${i}`,
         enrollment_id: enrollment.id,
         chapter_ref: ref,
-        date_local: dateLocal,
+        date_local: key,
       }))])
+      setShowSuccess(true)
+      setTimeout(() => setShowSuccess(false), 3000)
     } catch (error) {
       console.error('Complete error:', error)
+      alert(`失敗: ${error instanceof Error ? error.message : String(error)}`)
     } finally {
       setIsCompleting(false)
     }

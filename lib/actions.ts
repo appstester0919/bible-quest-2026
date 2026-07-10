@@ -5,7 +5,8 @@ import { createClient } from '@/lib/supabase/server'
 export async function markLessonComplete(
   enrollmentId: string,
   chapterRef: string,
-  xpEarned: number
+  xpEarned: number,
+  dateLocalOverride?: string
 ): Promise<{ success: boolean; sessionId?: string; error?: string; errorDetails?: unknown }> {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -16,7 +17,7 @@ export async function markLessonComplete(
 
   const now = new Date()
   const hktDate = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Hong_Kong' }))
-  const dateLocal = hktDate.toISOString().split('T')[0]
+  const dateLocal = dateLocalOverride || hktDate.toISOString().split('T')[0]
 
   console.log('[markLessonComplete]', { user_id: user.id, enrollment_id: enrollmentId, chapter_ref: chapterRef, xp_earned: xpEarned, date_local: dateLocal })
 
@@ -47,6 +48,73 @@ export async function markLessonComplete(
   }
 
   console.log('[markLessonComplete] INSERT ok, sessionId:', insertResult?.id)
+
+  // Directly update user_stats to ensure XP/streak are correct
+  // (backup in case trigger doesn't fire)
+  const today = new Date()
+  const todayHK = new Date(today.toLocaleString('en-US', { timeZone: 'Asia/Hong_Kong' }))
+  const todayStr = todayHK.toISOString().split('T')[0]
+  const yesterdayStr = new Date(todayHK.getTime() - 86400000).toISOString().split('T')[0]
+
+  // Get all unique dates for this user
+  const { data: allSessions } = await supabase
+    .from('reading_sessions')
+    .select('date_local')
+    .eq('user_id', user.id)
+    .order('date_local', { ascending: true })
+
+  const uniqueDates = [...new Set((allSessions ?? []).map(r => r.date_local))].sort()
+
+  // Calculate streak
+  let streak = 0
+  if (uniqueDates.length > 0) {
+    const lastDate = uniqueDates[uniqueDates.length - 1]
+    if (lastDate === todayStr || lastDate === yesterdayStr) {
+      streak = 1
+      for (let i = uniqueDates.length - 2; i >= 0; i--) {
+        const prev = new Date(uniqueDates[i + 1])
+        const curr = new Date(uniqueDates[i])
+        const diffDays = (prev.getTime() - curr.getTime()) / 86400000
+        if (diffDays === 1) streak++
+        else break
+      }
+    }
+  }
+
+  const totalXp = uniqueDates.length * 10
+  const level = Math.floor(Math.sqrt(totalXp / 100)) + 1
+
+  // Find longest streak
+  let longestStreak = streak
+  let currentRun = 1
+  for (let i = 1; i < uniqueDates.length; i++) {
+    const prev = new Date(uniqueDates[i - 1])
+    const curr = new Date(uniqueDates[i])
+    const diffDays = (curr.getTime() - prev.getTime()) / 86400000
+    if (diffDays === 1) {
+      currentRun++
+      longestStreak = Math.max(longestStreak, currentRun)
+    } else {
+      currentRun = 1
+    }
+  }
+
+  const { error: statsError } = await supabase
+    .from('user_stats')
+    .update({
+      total_xp: totalXp,
+      level,
+      current_streak: streak,
+      longest_streak: Math.max(longestStreak, streak),
+      last_completed_date: uniqueDates.length > 0 ? uniqueDates[uniqueDates.length - 1] : null,
+    })
+    .eq('user_id', user.id)
+
+  if (statsError) {
+    console.error('[markLessonComplete] stats update failed:', JSON.stringify(statsError))
+  } else {
+    console.log('[markLessonComplete] stats updated: xp=%d level=%d streak=%d', totalXp, level, streak)
+  }
 
   return { success: true, sessionId: insertResult?.id }
 }
