@@ -49,14 +49,7 @@ export async function markLessonComplete(
 
   console.log('[markLessonComplete] INSERT ok, sessionId:', insertResult?.id)
 
-  // Directly update user_stats to ensure XP/streak are correct
-  // (backup in case trigger doesn't fire)
-  const today = new Date()
-  const todayHK = new Date(today.toLocaleString('en-US', { timeZone: 'Asia/Hong_Kong' }))
-  const todayStr = todayHK.toISOString().split('T')[0]
-  const yesterdayStr = new Date(todayHK.getTime() - 86400000).toISOString().split('T')[0]
-
-  // Get all unique dates for this user
+  // Get all unique dates for this user (sorted ascending)
   const { data: allSessions } = await supabase
     .from('reading_sessions')
     .select('date_local')
@@ -65,32 +58,40 @@ export async function markLessonComplete(
 
   const uniqueDates = [...new Set((allSessions ?? []).map(r => r.date_local))].sort()
 
-  // Calculate streak
+  // Calculate current streak: count consecutive days ending at today or yesterday
+  const todayHK = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Hong_Kong' }))
+  const todayStr = todayHK.toISOString().split('T')[0]
+  const yesterdayDate = new Date(todayHK.getTime() - 86400000)
+  const yesterdayStr = yesterdayDate.toISOString().split('T')[0]
+
   let streak = 0
   if (uniqueDates.length > 0) {
     const lastDate = uniqueDates[uniqueDates.length - 1]
+    // Streak is active only if last completion was today or yesterday
     if (lastDate === todayStr || lastDate === yesterdayStr) {
       streak = 1
+      // Count backwards from the last date
       for (let i = uniqueDates.length - 2; i >= 0; i--) {
-        const prev = new Date(uniqueDates[i + 1])
-        const curr = new Date(uniqueDates[i])
-        const diffDays = (prev.getTime() - curr.getTime()) / 86400000
+        const currDate = new Date(uniqueDates[i + 1])
+        const prevDate = new Date(uniqueDates[i])
+        const diffDays = Math.round((currDate.getTime() - prevDate.getTime()) / 86400000)
         if (diffDays === 1) streak++
         else break
       }
     }
+    // If lastDate is older than yesterday, streak = 0 (broken chain)
   }
 
   const totalXp = uniqueDates.length * 10
   const level = Math.floor(Math.sqrt(totalXp / 100)) + 1
 
-  // Find longest streak
+  // Find longest streak across all time
   let longestStreak = streak
   let currentRun = 1
   for (let i = 1; i < uniqueDates.length; i++) {
-    const prev = new Date(uniqueDates[i - 1])
-    const curr = new Date(uniqueDates[i])
-    const diffDays = (curr.getTime() - prev.getTime()) / 86400000
+    const currDate = new Date(uniqueDates[i])
+    const prevDate = new Date(uniqueDates[i - 1])
+    const diffDays = Math.round((currDate.getTime() - prevDate.getTime()) / 86400000)
     if (diffDays === 1) {
       currentRun++
       longestStreak = Math.max(longestStreak, currentRun)
@@ -113,12 +114,11 @@ export async function markLessonComplete(
   if (statsError) {
     console.error('[markLessonComplete] stats update failed:', JSON.stringify(statsError))
   } else {
-    console.log('[markLessonComplete] stats updated: xp=%d level=%d streak=%d', totalXp, level, streak)
-    console.log('[markLessonComplete] user_stats update payload:', JSON.stringify({
-      total_xp: totalXp, level, current_streak: streak,
-      longest_streak: Math.max(longestStreak, streak),
-      last_completed_date: uniqueDates.length > 0 ? uniqueDates[uniqueDates.length - 1] : null,
-    }))
+    console.log('[markLessonComplete] user_stats updated:', {
+      total_xp: totalXp, level, streak, longestStreak,
+      uniqueDates, lastDate: uniqueDates[uniqueDates.length - 1],
+      todayStr, yesterdayStr
+    })
   }
 
   return { success: true, sessionId: insertResult?.id }
