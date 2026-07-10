@@ -268,11 +268,20 @@ export default function ReadPage() {
 
   // ─── Complete today reading ──────────────────────────────────────────────
   const handleComplete = async () => {
-    if (!enrollment || !profile || audioQueue.length === 0) return
+    if (!enrollment || !profile || audioQueue.length === 0) {
+      alert(`Debug: enrollment=${enrollment?.id} profile=${!!profile} audioQueue=${audioQueue.length}`)
+      return
+    }
+    if (!enrollment.id) {
+      alert('錯誤：enrollment.id 為空，請重新整理頁面')
+      return
+    }
     setIsCompleting(true)
     try {
       const current = audioQueue[currentChapterIdx]
-      await markLessonComplete(enrollment.id, `${current.book.name} ${current.chapter}`, 10)
+      const chapterRef = `${current.book.name} ${current.chapter}`
+      console.log('[handleComplete] inserting', { enrollment_id: enrollment.id, chapter_ref: chapterRef, xp: 10 })
+      await markLessonComplete(enrollment.id, chapterRef, 10)
       celebrate({ type: 'burst', particleCount: 120 })
       const now = new Date()
       const hkt = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Hong_Kong' }))
@@ -281,8 +290,9 @@ export default function ReadPage() {
       const newLevel = Math.floor(Math.sqrt(newXp / 100)) + 1
       setProfile({ ...profile, total_xp: newXp, level: newLevel })
     } catch (e) {
-      console.error(e)
-      alert(`失敗: ${e instanceof Error ? e.message : String(e)}`)
+      const msg = e instanceof Error ? e.message : String(e)
+      console.error('[handleComplete]', msg, e)
+      alert(`失敗: ${msg}`)
     } finally {
       setIsCompleting(false)
     }
