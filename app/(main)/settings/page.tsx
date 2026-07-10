@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { subscribeToPush, unsubscribeFromPush, getPushPermissionStatus } from '@/lib/push'
+import { updateDisplayName } from '@/lib/groupActions'
 
 const REMINDER_TIMES = [
   { value: '07:00', label: '早上 7:00' },
@@ -26,6 +27,9 @@ export default function SettingsPage() {
   const [updatingPlan, setUpdatingPlan] = useState(false)
   const [confirmShow, setConfirmShow] = useState(false)
   const [pendingPlan, setPendingPlan] = useState<{ scope: string; chaptersPerDay: number; totalDays: number } | null>(null)
+  const [displayName, setDisplayName] = useState('')
+  const [savingName, setSavingName] = useState(false)
+  const [nameSaved, setNameSaved] = useState(false)
 
   useEffect(() => {
     setPushPermission(getPushPermissionStatus())
@@ -36,7 +40,16 @@ export default function SettingsPage() {
       )
     }
     fetchEnrollment()
+    fetchDisplayName()
   }, [])
+
+  async function fetchDisplayName() {
+    const supabase = createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+    const { data } = await supabase.from('profiles').select('display_name').eq('id', user.id).maybeSingle()
+    if (data?.display_name) setDisplayName(data.display_name)
+  }
 
   async function fetchEnrollment() {
     const supabase = createClient()
@@ -132,6 +145,25 @@ export default function SettingsPage() {
     }
   }
 
+  async function handleSaveDisplayName() {
+    if (displayName.trim().length === 0 || displayName.trim().length > 3) {
+      alert('顯示名稱必須為 1-3 字')
+      return
+    }
+    setSavingName(true)
+    try {
+      const result = await updateDisplayName(displayName.trim())
+      if (result.success) {
+        setNameSaved(true)
+        setTimeout(() => setNameSaved(false), 2000)
+      } else {
+        alert('保存失敗：' + (result.error || '未知錯誤'))
+      }
+    } finally {
+      setSavingName(false)
+    }
+  }
+
   return (
     <div className="min-h-screen bg-[var(--color-background)]">
       <header className="bg-white px-4 py-3 flex items-center gap-3 shadow-sm">
@@ -140,6 +172,31 @@ export default function SettingsPage() {
       </header>
 
       <main className="max-w-sm mx-auto px-4 py-6 space-y-4">
+        {/* Display Name */}
+        <div className="bg-white rounded-2xl p-5 shadow-sm">
+          <h2 className="text-lg font-bold text-[var(--color-primary)] mb-1">👤 顯示名稱</h2>
+          <p className="text-sm text-[var(--color-muted)] mb-4">
+            用在群組裡顯示，最多 3 個中文字
+          </p>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+              maxLength={3}
+              placeholder="如：小明"
+              className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-base"
+            />
+            <button
+              onClick={handleSaveDisplayName}
+              disabled={savingName}
+              className="px-4 py-2 bg-[var(--color-primary)] text-white rounded-lg font-medium disabled:opacity-50"
+            >
+              {savingName ? '...' : nameSaved ? '✓' : '保存'}
+            </button>
+          </div>
+        </div>
+
         {/* Push Notifications */}
         <div className="bg-white rounded-2xl p-5 shadow-sm">
           <h2 className="text-lg font-bold text-[var(--color-primary)] mb-1">🔔 讀經提醒</h2>

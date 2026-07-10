@@ -4,6 +4,18 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { getBooksMeta, type BookMeta } from '@/lib/bible/lookup'
+import {
+  getMyGroups,
+  getPendingRequestsForMyAdminGroups,
+  getMyPendingRequests,
+  approveJoinRequest,
+  rejectJoinRequest,
+  cancelJoinRequest,
+  createGroup,
+  leaveGroup,
+  type GroupWithProgress,
+  type PendingRequestInfo,
+} from '@/lib/groupActions'
 
 interface Profile {
   id: string
@@ -47,11 +59,19 @@ function getScopeLabel(scope: string) {
   return '新舊約聖經'
 }
 
+function getRateColor(rate: number): string {
+  if (rate === 0) return '#9CA3AF'      // 灰色
+  if (rate <= 0.25) return '#F59E0B'    // 橙黃
+  if (rate <= 0.5) return '#84CC16'     // 淺綠
+  if (rate <= 0.75) return '#22C55E'    // 深綠
+  return '#10B981'                       // 亮綠
+}
+
 function getGreeting(): string {
-  const hour = new Date().getHours()
-  if (hour < 6) return '夜深了'
-  if (hour < 12) return '早安'
-  if (hour < 18) return '午安'
+  const h = new Date().getHours()
+  if (h < 6) return '夜深了'
+  if (h < 12) return '早安'
+  if (h < 18) return '午安'
   return '晚安'
 }
 
@@ -112,6 +132,15 @@ export default function DashboardPage() {
   const [todayRefsCount, setTodayRefsCount] = useState(0)
   const [loading, setLoading] = useState(true)
   const [fetchErrors, setFetchErrors] = useState<string[]>([])
+  // Group feature state
+  const [myGroups, setMyGroups] = useState<GroupWithProgress[]>([])
+  const [pendingAdminRequests, setPendingAdminRequests] = useState<PendingRequestInfo[]>([])
+  const [myPendingRequests, setMyPendingRequests] = useState<Array<{ id: string; group_id: string; group_name: string; created_at: string }>>([])
+  const [showCreateGroup, setShowCreateGroup] = useState(false)
+  const [newGroupName, setNewGroupName] = useState('')
+  const [creatingGroup, setCreatingGroup] = useState(false)
+  const [showInviteFor, setShowInviteFor] = useState<{ id: string; code: string; name: string } | null>(null)
+  const [pendingAction, setPendingAction] = useState<string | null>(null)
 
   useEffect(() => {
     const fetchData = async () => {
@@ -228,7 +257,82 @@ export default function DashboardPage() {
       }
     }
     fetchData()
+    refreshGroups()
   }, [router])
+
+  async function refreshGroups() {
+    const [gRes, aRes, pRes] = await Promise.all([
+      getMyGroups(),
+      getPendingRequestsForMyAdminGroups(),
+      getMyPendingRequests(),
+    ])
+    if (!gRes.error) setMyGroups(gRes.groups)
+    setPendingAdminRequests(aRes)
+    setMyPendingRequests(pRes)
+  }
+
+  async function handleCreateGroup() {
+    const name = newGroupName.trim()
+    if (!name) return
+    setCreatingGroup(true)
+    try {
+      const res = await createGroup(name)
+      if (res.success && res.groupId && res.inviteCode) {
+        setShowInviteFor({ id: res.groupId, code: res.inviteCode, name })
+        setShowCreateGroup(false)
+        setNewGroupName('')
+        await refreshGroups()
+      } else {
+        alert('建立失敗：' + (res.error || '未知錯誤'))
+      }
+    } finally {
+      setCreatingGroup(false)
+    }
+  }
+
+  async function handleApprove(reqId: string) {
+    setPendingAction(reqId)
+    try {
+      const res = await approveJoinRequest(reqId)
+      if (!res.success) alert('審批失敗：' + (res.error || ''))
+      await refreshGroups()
+    } finally {
+      setPendingAction(null)
+    }
+  }
+
+  async function handleReject(reqId: string) {
+    setPendingAction(reqId)
+    try {
+      const res = await rejectJoinRequest(reqId)
+      if (!res.success) alert('拒絕失敗：' + (res.error || ''))
+      await refreshGroups()
+    } finally {
+      setPendingAction(null)
+    }
+  }
+
+  async function handleCancelRequest(reqId: string) {
+    if (!confirm('確定取消申請？')) return
+    setPendingAction(reqId)
+    try {
+      const res = await cancelJoinRequest(reqId)
+      if (!res.success) alert('取消失敗：' + (res.error || ''))
+      await refreshGroups()
+    } finally {
+      setPendingAction(null)
+    }
+  }
+
+  async function handleLeaveGroup(groupId: string, groupName: string) {
+    if (!confirm(`確定離開「${groupName}」？`)) return
+    const res = await leaveGroup(groupId)
+    if (!res.success) {
+      alert('退出失敗：' + (res.error || ''))
+    } else {
+      await refreshGroups()
+    }
+  }
 
   if (loading) {
     return (
@@ -403,18 +507,238 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Partner card */}
-        <a href="/partner" className="card flex items-center gap-3 hover:scale-[1.01] active:scale-[0.99] transition-transform">
-          <div className="w-12 h-12 rounded-full bg-[var(--color-gem)] text-white flex items-center justify-center text-2xl flex-shrink-0">
-            👥
+        {/* Groups */}
+        <div className="card">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <span className="text-2xl">👥</span>
+              <p className="h-section">讀經群組</p>
+            </div>
+            <button
+              onClick={() => setShowCreateGroup(true)}
+              className="text-xs px-3 py-1.5 bg-[var(--color-primary)] text-white rounded-full font-bold"
+            >
+              + 建立
+            </button>
           </div>
-          <div className="flex-1">
-            <p className="font-extrabold text-[var(--color-primary)]">讀經夥伴</p>
-            <p className="text-xs text-muted mt-0.5">查看夥伴進度或邀請朋友</p>
+
+          {/* Admin pending requests */}
+          {pendingAdminRequests.length > 0 && (
+            <div className="mb-3 p-3 bg-amber-50 rounded-xl border border-amber-200">
+              <p className="text-xs font-bold text-amber-800 mb-2">
+                📥 等待審批 ({pendingAdminRequests.length})
+              </p>
+              <div className="space-y-2">
+                {pendingAdminRequests.map((req) => (
+                  <div key={req.request_id} className="flex items-center justify-between text-sm bg-white p-2 rounded-lg">
+                    <div className="flex-1 min-w-0">
+                      <span className="font-bold">{req.display_name}</span>
+                      <span className="text-xs text-muted"> 想加入 {req.group_name}</span>
+                    </div>
+                    <div className="flex gap-1">
+                      <button
+                        onClick={() => handleApprove(req.request_id)}
+                        disabled={pendingAction === req.request_id}
+                        className="px-2 py-1 bg-green-500 text-white text-xs rounded font-bold disabled:opacity-50"
+                      >
+                        ✓
+                      </button>
+                      <button
+                        onClick={() => handleReject(req.request_id)}
+                        disabled={pendingAction === req.request_id}
+                        className="px-2 py-1 bg-red-500 text-white text-xs rounded font-bold disabled:opacity-50"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* My pending requests */}
+          {myPendingRequests.length > 0 && (
+            <div className="mb-3 p-3 bg-blue-50 rounded-xl border border-blue-200">
+              <p className="text-xs font-bold text-blue-800 mb-2">
+                ⏳ 等待審批中
+              </p>
+              <div className="space-y-2">
+                {myPendingRequests.map((req) => (
+                  <div key={req.id} className="flex items-center justify-between text-sm bg-white p-2 rounded-lg">
+                    <span>
+                      <span className="font-bold">{req.group_name}</span>
+                      <span className="text-xs text-muted ml-2">等待組長批准</span>
+                    </span>
+                    <button
+                      onClick={() => handleCancelRequest(req.id)}
+                      disabled={pendingAction === req.id}
+                      className="px-2 py-1 bg-gray-200 text-gray-700 text-xs rounded font-bold disabled:opacity-50"
+                    >
+                      取消
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* My groups list */}
+          {myGroups.length === 0 ? (
+            <p className="text-sm text-muted text-center py-4">
+              尚未加入任何群組<br/>
+              <span className="text-xs">點擊「+ 建立」或從邀請連結加入</span>
+            </p>
+          ) : (
+            <div className="space-y-3">
+              {myGroups.map((g) => (
+                <div key={g.id} className="border border-gray-100 rounded-xl p-3">
+                  <div className="flex items-start justify-between mb-2">
+                    <div className="flex-1 min-w-0">
+                      <p className="font-bold text-[var(--color-primary)] truncate">
+                        {g.name} {g.my_role === 'admin' && <span className="text-xs ml-1">⭐</span>}
+                      </p>
+                      <p className="text-xs text-muted mt-0.5">
+                        今日 <span className="font-bold text-[var(--color-primary)]">{g.today_count}</span>/{g.today_total}
+                        {g.member_count < g.today_total && (
+                          <span className="ml-1">· {g.member_count} 組員</span>
+                        )}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => setShowInviteFor({ id: g.id, code: g.invite_code, name: g.name })}
+                      className="text-xs px-2 py-1 bg-gray-100 text-gray-700 rounded-lg"
+                      title="邀請連結"
+                    >
+                      🔗
+                    </button>
+                  </div>
+                  {/* Last 5 days progress lights */}
+                  <div className="flex gap-1.5 mb-2">
+                    {g.last_5_days.map((d, i) => (
+                      <div
+                        key={i}
+                        className="h-6 flex-1 rounded flex items-center justify-center text-[10px] font-bold text-white"
+                        style={{ backgroundColor: getRateColor(d.rate) }}
+                        title={`${d.date}: ${Math.round(d.rate * 100)}%`}
+                      >
+                        {Math.round(d.rate * 100)}%
+                      </div>
+                    ))}
+                  </div>
+                  {/* Today's completed names */}
+                  {g.today_completed_names.length > 0 && (
+                    <p className="text-xs text-muted">
+                      <span className="font-bold text-[var(--color-success)]">✓</span> {g.today_completed_names.join('、')}
+                    </p>
+                  )}
+                  {/* Leave group button (if member) */}
+                  <div className="mt-2 text-right">
+                    <button
+                      onClick={() => handleLeaveGroup(g.id, g.name)}
+                      className="text-[10px] text-red-500 underline"
+                    >
+                      退出群組
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Join group via link */}
+          <div className="mt-4 pt-3 border-t border-gray-100">
+            <p className="text-xs text-muted mb-2 text-center">或從邀請連結加入：</p>
+            <input
+              type="text"
+              placeholder="輸入邀請碼"
+              id="group-code-input"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-center"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  const v = e.currentTarget.value.trim()
+                  if (v) router.push(`/join/${v}`)
+                }
+              }}
+            />
           </div>
-          <span className="text-muted text-xl">›</span>
-        </a>
+        </div>
       </main>
+
+      {/* Create Group Modal */}
+      {showCreateGroup && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center">
+          <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full max-w-sm p-6">
+            <h3 className="text-lg font-bold mb-3">建立新群組</h3>
+            <p className="text-xs text-muted mb-3">為你和你的好友建立讀經群組</p>
+            <input
+              type="text"
+              value={newGroupName}
+              onChange={(e) => setNewGroupName(e.target.value)}
+              placeholder="例如：主內小組"
+              maxLength={30}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-base mb-4"
+              autoFocus
+            />
+            <div className="flex gap-2">
+              <button
+                onClick={() => { setShowCreateGroup(false); setNewGroupName('') }}
+                className="flex-1 px-4 py-2 bg-gray-100 rounded-lg font-medium"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleCreateGroup}
+                disabled={creatingGroup || !newGroupName.trim()}
+                className="flex-1 px-4 py-2 bg-[var(--color-primary)] text-white rounded-lg font-bold disabled:opacity-50"
+              >
+                {creatingGroup ? '建立中...' : '建立'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Invite Link Modal */}
+      {showInviteFor && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center">
+          <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full max-w-sm p-6">
+            <h3 className="text-lg font-bold mb-3">邀請連結</h3>
+            <p className="text-xs text-muted mb-3">
+              分享以下連結給朋友，他們加入後你可以批准：
+            </p>
+            <div className="bg-gray-50 rounded-lg p-3 mb-3 break-all font-mono text-sm">
+              {typeof window !== 'undefined' ? `${window.location.origin}/join/${showInviteFor.code}` : `/join/${showInviteFor.code}`}
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  const url = `${window.location.origin}/join/${showInviteFor.code}`
+                  navigator.clipboard.writeText(url)
+                  alert('已複製邀請連結')
+                }}
+                className="flex-1 px-4 py-2 bg-gray-100 rounded-lg font-medium"
+              >
+                複製
+              </button>
+              <a
+                href={`https://wa.me/?text=${encodeURIComponent(`一起加入「${showInviteFor.name}」讀經群組：${typeof window !== 'undefined' ? window.location.origin : ''}/join/${showInviteFor.code}`)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex-1 px-4 py-2 bg-green-500 text-white rounded-lg font-bold text-center"
+              >
+                WhatsApp
+              </a>
+            </div>
+            <button
+              onClick={() => setShowInviteFor(null)}
+              className="w-full mt-2 px-4 py-2 text-muted"
+            >
+              關閉
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

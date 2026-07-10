@@ -135,6 +135,29 @@ export async function markLessonComplete(
     })
   }
 
+  // Sync group check-ins (so all groups user is in show today's progress)
+  try {
+    const { data: memberships } = await supabase
+      .from('group_members')
+      .select('group_id')
+      .eq('user_id', user.id)
+    if (memberships && memberships.length > 0) {
+      const rows = memberships.map(m => ({
+        group_id: m.group_id,
+        user_id: user.id,
+        date_local: dateLocal,
+      }))
+      // Upsert with conflict on (group_id, user_id, date_local) PRIMARY KEY
+      await supabase
+        .from('group_checkins')
+        .upsert(rows, { onConflict: 'group_id,user_id,date_local' })
+      console.log('[markLessonComplete] group_checkins upserted for', rows.length, 'groups')
+    }
+  } catch (grpErr) {
+    console.error('[markLessonComplete] group_checkins sync failed:', JSON.stringify(grpErr))
+    // non-fatal — user_stats and reading_sessions are primary; group check-in is secondary
+  }
+
   return { success: true, sessionId: insertResult?.id }
 }
 
@@ -247,5 +270,22 @@ export async function unmarkDayComplete(
   }
 
   console.log('[unmarkDayComplete] stats updated ok')
+
+  // Also remove today's group check-ins (since user un-completed today's reading, all group check-ins for today are undone)
+  try {
+    const { error: grpErr } = await supabase
+      .from('group_checkins')
+      .delete()
+      .eq('user_id', user.id)
+      .eq('date_local', dateLocal)
+    if (grpErr) {
+      console.error('[unmarkDayComplete] group_checkins delete failed:', JSON.stringify(grpErr))
+    } else {
+      console.log('[unmarkDayComplete] group_checkins removed for date', dateLocal)
+    }
+  } catch (e) {
+    console.error('[unmarkDayComplete] group cleanup error:', e)
+  }
+
   return { success: true }
 }
