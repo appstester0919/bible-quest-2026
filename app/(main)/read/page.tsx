@@ -90,6 +90,8 @@ export default function ReadPage() {
   const [currentChapterIdx, setCurrentChapterIdx] = useState(0)
   const [isPlaying, setIsPlaying] = useState(false)
   const [playbackRate, setPlaybackRate] = useState(1)
+  // Ref mirrors playbackRate so we can read current value inside useEffect without adding it to the dep array
+  const playbackRateRef = useRef(1)
 
   // Today reading
   const [todaySession, setTodaySession] = useState<ReadingSession | null>(null)
@@ -202,6 +204,7 @@ export default function ReadPage() {
     const audio = audioRef.current
     if (!audio) return
     audio.src = `/audio/${item.book.abbr}/${item.book.abbr}${item.chapter}.mp3`
+    audio.playbackRate = playbackRateRef.current
     if (isPlaying) {
       audio.play().catch(() => setIsPlaying(false))
     }
@@ -510,6 +513,7 @@ export default function ReadPage() {
           onChange={e => {
             const rate = parseFloat(e.target.value)
             setPlaybackRate(rate)
+            playbackRateRef.current = rate
             if (audioRef.current) audioRef.current.playbackRate = rate
           }}
           className="ab-speed"
