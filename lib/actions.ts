@@ -114,6 +114,11 @@ export async function markLessonComplete(
     console.error('[markLessonComplete] stats update failed:', JSON.stringify(statsError))
   } else {
     console.log('[markLessonComplete] stats updated: xp=%d level=%d streak=%d', totalXp, level, streak)
+    console.log('[markLessonComplete] user_stats update payload:', JSON.stringify({
+      total_xp: totalXp, level, current_streak: streak,
+      longest_streak: Math.max(longestStreak, streak),
+      last_completed_date: uniqueDates.length > 0 ? uniqueDates[uniqueDates.length - 1] : null,
+    }))
   }
 
   return { success: true, sessionId: insertResult?.id }

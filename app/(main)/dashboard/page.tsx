@@ -83,11 +83,19 @@ export default function DashboardPage() {
           .select('current_streak, total_xp, level, completed_plans')
           .eq('user_id', authUser.id)
           .maybeSingle()
+        console.log('[dashboard] user_stats query result:', JSON.stringify({ statsData, statsErr }))
         if (statsErr) errors.push(`user_stats: ${statsErr.message}`)
 
         if (profileData || statsData) {
           setProfile({ id: authUser.id, email: profileData?.email || authUser.email || '', ...profileData, ...statsData } as Profile)
         }
+        console.log('[dashboard] merged profile:', JSON.stringify({
+          id: authUser.id,
+          current_streak: statsData?.current_streak,
+          total_xp: statsData?.total_xp,
+          level: statsData?.level,
+          completed_plans: statsData?.completed_plans
+        }))
 
         const { data: enrollmentsData, error } = await supabase
           .from('user_plan_enrollments')
