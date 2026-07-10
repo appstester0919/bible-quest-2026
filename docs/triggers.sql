@@ -17,7 +17,7 @@ DECLARE
   last_date date;
   today_date date;
   yesterday_date date;
-  current_streak int;
+  v_current_streak int;  -- renamed to avoid ambiguous column reference
   xp_gained int;
   new_level int;
 BEGIN
@@ -26,7 +26,7 @@ BEGIN
   
   -- Get current stats
   SELECT current_streak, total_xp, level
-  INTO current_streak, xp_gained, new_level
+  INTO v_current_streak, xp_gained, new_level
   FROM public.user_stats
   WHERE user_id = NEW.user_id;
   
@@ -44,22 +44,22 @@ BEGIN
   -- Determine streak logic
   IF last_date IS NULL THEN
     -- First session ever
-    current_streak := 1;
+    v_current_streak := 1;
   ELSIF last_date = today_date THEN
     -- Already completed today, preserve streak
-    current_streak := COALESCE(current_streak, 0);
+    v_current_streak := COALESCE(v_current_streak, 0);
   ELSIF last_date = yesterday_date THEN
     -- Consecutive day, increment streak
-    current_streak := COALESCE(current_streak, 0) + 1;
+    v_current_streak := COALESCE(v_current_streak, 0) + 1;
   ELSE
     -- Streak broken, reset to 1
-    current_streak := 1;
+    v_current_streak := 1;
   END IF;
   
   -- Update user_stats
   UPDATE public.user_stats SET
-    current_streak = current_streak,
-    longest_streak = GREATEST(COALESCE(longest_streak, 0), current_streak),
+    current_streak = v_current_streak,
+    longest_streak = GREATEST(COALESCE(longest_streak, 0), v_current_streak),
     last_completed_date = today_date,
     total_xp = xp_gained,
     level = new_level
