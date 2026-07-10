@@ -71,9 +71,6 @@ function computeTodayHref(enrollment: Enrollment | null, books: BookMeta[]): str
   if (enrollment.started_at) {
     const [y, m, d] = enrollment.started_at.split('T')[0].split('-').map(Number)
     start = new Date(y, m - 1, d)
-  } else if (enrollment.created_at) {
-    const [y, m, d] = enrollment.created_at.split('T')[0].split('-').map(Number)
-    start = new Date(y, m - 1, d)
   } else {
     const [y, mo, da] = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Hong_Kong' }).split('-').map(Number)
     start = new Date(y, mo - 1, da)
@@ -151,7 +148,7 @@ export default function DashboardPage() {
 
         const { data: enrollmentsData, error } = await supabase
           .from('user_plan_enrollments')
-          .select('id, scope, chapters_per_day, total_days, status, started_at, created_at')
+          .select('id, scope, chapters_per_day, total_days, status, started_at')
           .eq('user_id', authUser.id)
           .eq('status', 'active')
           .order('started_at', { ascending: false })
@@ -197,9 +194,6 @@ export default function DashboardPage() {
           let start: Date
           if (enrollmentsData.started_at) {
             const [y, m, d] = enrollmentsData.started_at.split('T')[0].split('-').map(Number)
-            start = new Date(y, m - 1, d)
-          } else if (enrollmentsData.created_at) {
-            const [y, m, d] = enrollmentsData.created_at.split('T')[0].split('-').map(Number)
             start = new Date(y, m - 1, d)
           } else {
             const [y, mo, da] = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Hong_Kong' }).split('-').map(Number)
