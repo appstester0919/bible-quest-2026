@@ -282,10 +282,14 @@ export default function ReadPage() {
     let firstError = ''
     try {
       // Insert ALL queued chapters as individual reading records
-      for (const item of audioQueue) {
+      // First chapter gets xp_earned=10 (triggers daily XP award)
+      // Subsequent chapters get xp_earned=0 (record only, no extra XP)
+      for (let i = 0; i < audioQueue.length; i++) {
+        const item = audioQueue[i]
         const chapterRef = `${item.book.name} ${item.chapter}`
-        console.log('[handleComplete] inserting', { enrollment_id: enrollment.id, chapter_ref: chapterRef, xp: 10 })
-        const result = await markLessonComplete(enrollment.id, chapterRef, 10)
+        const xp = i === 0 ? 10 : 0  // Only first chapter awards daily XP
+        console.log('[handleComplete] inserting', { enrollment_id: enrollment.id, chapter_ref: chapterRef, xp })
+        const result = await markLessonComplete(enrollment.id, chapterRef, xp)
         console.log('[handleComplete] markLessonComplete result:', result)
         if (result.success) {
           insertedCount++
