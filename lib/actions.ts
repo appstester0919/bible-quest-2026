@@ -2,6 +2,12 @@
 
 import { createClient } from '@/lib/supabase/server'
 
+// ─── Date helpers (HKT-only, avoids .toISOString() UTC offset bug) ─────────────
+function getHKTDateStr(date: Date = new Date()): string {
+  // en-CA with HKT gives YYYY-MM-DD directly in Hong Kong time
+  return date.toLocaleDateString('en-CA', { timeZone: 'Asia/Hong_Kong' })
+}
+
 export async function markLessonComplete(
   enrollmentId: string,
   chapterRef: string,
@@ -16,8 +22,8 @@ export async function markLessonComplete(
   }
 
   const now = new Date()
-  const hktDate = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Hong_Kong' }))
-  const dateLocal = dateLocalOverride || hktDate.toISOString().split('T')[0]
+  // FIX: use en-CA+HKT to get YYYY-MM-DD directly — no UTC offset issue
+  const dateLocal = dateLocalOverride || getHKTDateStr(now)
 
   console.log('[markLessonComplete]', { user_id: user.id, enrollment_id: enrollmentId, chapter_ref: chapterRef, xp_earned: xpEarned, date_local: dateLocal })
 
@@ -59,10 +65,10 @@ export async function markLessonComplete(
   const uniqueDates = [...new Set((allSessions ?? []).map(r => r.date_local))].sort()
 
   // Calculate current streak: count consecutive days ending at today or yesterday
-  const todayHK = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Hong_Kong' }))
-  const todayStr = todayHK.toISOString().split('T')[0]
-  const yesterdayDate = new Date(todayHK.getTime() - 86400000)
-  const yesterdayStr = yesterdayDate.toISOString().split('T')[0]
+  // FIX: use en-CA+HKT throughout — no UTC offset bug
+  const todayStr = getHKTDateStr()
+  const todayDate = new Date(now.toLocaleString('en-CA', { timeZone: 'Asia/Hong_Kong' }))
+  const yesterdayStr = getHKTDateStr(new Date(todayDate.getTime() - 86400000))
 
   let streak = 0
   if (uniqueDates.length > 0) {
@@ -157,7 +163,6 @@ export async function unmarkDayComplete(
   console.log('[unmarkDayComplete] DELETE ok')
 
   // 2. Recalculate user_stats from remaining sessions
-  // Get all remaining sessions for this user (ordered by date)
   const { data: remaining, error: fetchError } = await supabase
     .from('reading_sessions')
     .select('date_local, xp_earned')
@@ -172,17 +177,15 @@ export async function unmarkDayComplete(
   // Collect unique completion dates in order
   const uniqueDates = [...new Set((remaining ?? []).map(r => r.date_local))].sort()
 
-  // Calculate streak
-  const today = new Date()
-  const todayHK = new Date(today.toLocaleString('en-US', { timeZone: 'Asia/Hong_Kong' }))
-  const todayStr = todayHK.toISOString().split('T')[0]
-  const yesterdayStr = new Date(todayHK.getTime() - 86400000).toISOString().split('T')[0]
+  // Calculate streak — FIX: use en-CA+HKT throughout
+  const todayStr = getHKTDateStr()
+  const todayHKT = new Date(new Date().toLocaleString('en-CA', { timeZone: 'Asia/Hong_Kong' }))
+  const yesterdayStr = getHKTDateStr(new Date(todayHKT.getTime() - 86400000))
 
   let streak = 0
   if (uniqueDates.length > 0) {
     const lastDate = uniqueDates[uniqueDates.length - 1]
     if (lastDate === todayStr || lastDate === yesterdayStr) {
-      // Streak is active
       streak = 1
       for (let i = uniqueDates.length - 2; i >= 0; i--) {
         const prev = new Date(uniqueDates[i + 1])
@@ -201,7 +204,7 @@ export async function unmarkDayComplete(
   const totalXp = uniqueDates.length * 10
   const level = Math.floor(Math.sqrt(totalXp / 100)) + 1
 
-  console.log('[unmarkDayComplete] recalculated:', { uniqueDates, streak, totalXp, level })
+  console.log('[unmarkDayComplete] recalculated:', { uniqueDates, streak, totalXp, level, todayStr, yesterdayStr })
 
   // Find longest streak
   let longestStreak = streak
