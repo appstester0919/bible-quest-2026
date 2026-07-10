@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { getBooksMeta, type BookMeta } from '@/lib/bible/lookup'
@@ -55,6 +55,51 @@ function getGreeting(): string {
   return '晚安'
 }
 
+// ─── Compute today's reading href from enrollment + books (client-only) ─────
+function computeTodayHref(enrollment: Enrollment | null, books: BookMeta[]): string {
+  if (!enrollment || books.length === 0) return '#'
+  const scopeBooks = enrollment.scope === 'nt'
+    ? books.filter((_, i) => i >= 39)
+    : enrollment.scope === 'ot'
+    ? books.filter((_, i) => i < 39)
+    : books
+
+  const planMap = new Map<string, string[]>()
+  let bookIdx = 0
+  let chapterInBook = 1
+  let start: Date
+  if (enrollment.started_at) {
+    const [y, m, d] = enrollment.started_at.split('T')[0].split('-').map(Number)
+    start = new Date(y, m - 1, d)
+  } else if (enrollment.created_at) {
+    const [y, m, d] = enrollment.created_at.split('T')[0].split('-').map(Number)
+    start = new Date(y, m - 1, d)
+  } else {
+    const [y, mo, da] = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Hong_Kong' }).split('-').map(Number)
+    start = new Date(y, mo - 1, da)
+  }
+
+  const current = new Date(start)
+  for (let day = 0; day < 730 && bookIdx < scopeBooks.length; day++) {
+    const refs: string[] = []
+    for (let i = 0; i < enrollment.chapters_per_day && bookIdx < scopeBooks.length; i++) {
+      const book = scopeBooks[bookIdx]
+      refs.push(`${book.name} ${chapterInBook}`)
+      chapterInBook++
+      if (chapterInBook > book.chapters) { bookIdx++; chapterInBook = 1 }
+    }
+    const key = current.toLocaleDateString('en-CA', { timeZone: 'Asia/Hong_Kong' })
+    planMap.set(key, refs)
+    current.setDate(current.getDate() + 1)
+  }
+
+  const hkt = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Hong_Kong' })
+  const todayRefs = planMap.get(hkt) ?? []
+  if (todayRefs.length === 0) return '#'
+  const refsParam = encodeURIComponent(todayRefs.join(','))
+  return `/read?today=1&refs=${refsParam}`
+}
+
 export default function DashboardPage() {
   const router = useRouter()
   const [user, setUser] = useState<{ id?: string; email?: string } | null>(null)
@@ -65,6 +110,9 @@ export default function DashboardPage() {
     total_chapters_read: 0, active_readers: 0, total_plans_completed: 0,
   })
   const [books, setBooks] = useState<BookMeta[]>([])
+  // Computed client-side only — avoids SSR hydration mismatch
+  const [todayHref, setTodayHref] = useState('#')
+  const [todayRefsCount, setTodayRefsCount] = useState(0)
   const [loading, setLoading] = useState(true)
   const [fetchErrors, setFetchErrors] = useState<string[]>([])
 
@@ -103,7 +151,7 @@ export default function DashboardPage() {
 
         const { data: enrollmentsData, error } = await supabase
           .from('user_plan_enrollments')
-          .select('id, scope, chapters_per_day, total_days, status')
+          .select('id, scope, chapters_per_day, total_days, status, started_at, created_at')
           .eq('user_id', authUser.id)
           .eq('status', 'active')
           .order('started_at', { ascending: false })
@@ -128,7 +176,51 @@ export default function DashboardPage() {
         // Load bible data for plan computation
         const res = await fetch('/bible-data.json')
         const bibleJson = await res.json()
-        setBooks(getBooksMeta(bibleJson))
+        const booksMeta = getBooksMeta(bibleJson)
+        setBooks(booksMeta)
+
+        // Compute today's reading href from enrollment + books (all client-side, no SSR mismatch)
+        const href = computeTodayHref(error ? null : enrollmentsData, booksMeta)
+        setTodayHref(href)
+
+        // Count today's refs for display
+        if (!error && enrollmentsData && booksMeta.length > 0) {
+          const scopeBooks = enrollmentsData.scope === 'nt'
+            ? booksMeta.filter((_, i) => i >= 39)
+            : enrollmentsData.scope === 'ot'
+            ? booksMeta.filter((_, i) => i < 39)
+            : booksMeta
+
+          const planMap = new Map<string, string[]>()
+          let bookIdx = 0
+          let chapterInBook = 1
+          let start: Date
+          if (enrollmentsData.started_at) {
+            const [y, m, d] = enrollmentsData.started_at.split('T')[0].split('-').map(Number)
+            start = new Date(y, m - 1, d)
+          } else if (enrollmentsData.created_at) {
+            const [y, m, d] = enrollmentsData.created_at.split('T')[0].split('-').map(Number)
+            start = new Date(y, m - 1, d)
+          } else {
+            const [y, mo, da] = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Hong_Kong' }).split('-').map(Number)
+            start = new Date(y, mo - 1, da)
+          }
+          const current = new Date(start)
+          for (let day = 0; day < 730 && bookIdx < scopeBooks.length; day++) {
+            const refs: string[] = []
+            for (let i = 0; i < enrollmentsData.chapters_per_day && bookIdx < scopeBooks.length; i++) {
+              const book = scopeBooks[bookIdx]
+              refs.push(`${book.name} ${chapterInBook}`)
+              chapterInBook++
+              if (chapterInBook > book.chapters) { bookIdx++; chapterInBook = 1 }
+            }
+            const key = current.toLocaleDateString('en-CA', { timeZone: 'Asia/Hong_Kong' })
+            planMap.set(key, refs)
+            current.setDate(current.getDate() + 1)
+          }
+          const hkt = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Hong_Kong' })
+          setTodayRefsCount((planMap.get(hkt) ?? []).length)
+        }
 
         if (errors.length > 0) {
           console.error('[dashboard fetch errors]', errors)
@@ -160,50 +252,6 @@ export default function DashboardPage() {
   const completedDays = new Set(sessions.map(s => s.date_local)).size
   const planProgress = totalDays > 0 ? Math.round((completedDays / totalDays) * 100) : 0
   const userInitial = (profile?.email || user?.email || '?').charAt(0).toUpperCase()
-
-  // Build plan Map from enrollment (same logic as calendar page)
-  const plan = useMemo(() => {
-    if (!enrollment || books.length === 0) return new Map<string, string[]>()
-    const scopeBooks = enrollment.scope === 'nt'
-      ? books.filter((_, i) => i >= 39)
-      : enrollment.scope === 'ot'
-      ? books.filter((_, i) => i < 39)
-      : books
-
-    const planMap = new Map<string, string[]>()
-    let bookIdx = 0
-    let chapterInBook = 1
-    let start: Date
-    if (enrollment.started_at) {
-      const [y, m, d] = enrollment.started_at.split('T')[0].split('-').map(Number)
-      start = new Date(y, m - 1, d)
-    } else if (enrollment.created_at) {
-      const [y, m, d] = enrollment.created_at.split('T')[0].split('-').map(Number)
-      start = new Date(y, m - 1, d)
-    } else {
-      const [y, mo, da] = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Hong_Kong' }).split('-').map(Number)
-      start = new Date(y, mo - 1, da)
-    }
-    let currentStr = start.toLocaleDateString('en-CA', { timeZone: 'Asia/Hong_Kong' })
-
-    for (let day = 0; day < 400 && bookIdx < scopeBooks.length; day++) {
-      const dayRefs: string[] = []
-      for (let i = 0; i < enrollment.chapters_per_day && bookIdx < scopeBooks.length; i++) {
-        const book = scopeBooks[bookIdx]
-        dayRefs.push(`${book.name} ${chapterInBook}`)
-        chapterInBook++
-        if (chapterInBook > book.chapters) {
-          bookIdx++
-          chapterInBook = 1
-        }
-      }
-      planMap.set(currentStr, dayRefs)
-      const [cy, cm, cd] = currentStr.split('-').map(Number)
-      const next = new Date(cy, cm - 1, cd + 1)
-      currentStr = next.toLocaleDateString('en-CA', { timeZone: 'Asia/Hong_Kong' })
-    }
-    return planMap
-  }, [enrollment, books])
 
   return (
     <div className="min-h-screen bg-[var(--color-background)] pb-24">
@@ -268,43 +316,35 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Today's Lesson Card — pass today's reading refs as URL params */}
-        {(() => {
-          const todayRefs = enrollment && plan.size > 0 ? (() => {
-            const hkt = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Hong_Kong' })
-            return plan.get(hkt) ?? []
-          })() : []
-          const refsParam = todayRefs.length > 0 ? encodeURIComponent(todayRefs.join(',')) : ''
-          const todayHref = '/read' + (refsParam ? `?today=1&refs=${refsParam}` : '')
-          return (
-            <a
-              href={todayHref}
-              className="card block hover:scale-[1.01] active:scale-[0.99] transition-transform"
-              style={{ background: todayCompleted
-                ? 'linear-gradient(135deg, #D7FFB8 0%, #A8E66B 100%)'
-                : 'linear-gradient(135deg, #58CC02 0%, #46A302 100%)',
-                color: todayCompleted ? '#2D7A01' : '#FFFFFF',
-              }}
-            >
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs font-extrabold uppercase tracking-wider opacity-90">
-                    今日功課
-                  </p>
-                  <p className="text-xl font-extrabold mt-1">
-                    {todayCompleted ? '已完成今日讀經！' : '點擊開始今日讀經'}
-                  </p>
-                  {!todayCompleted && enrollment && todayRefs.length > 0 && (
-                    <p className="text-xs opacity-90 mt-1">
-                      {getScopeLabel(enrollment.scope)} · {todayRefs.length}章{enrollment.chapters_per_day > todayRefs.length ? ` · 目標${enrollment.chapters_per_day}章` : ''}
-                    </p>
-                  )}
-                </div>
-                <div className="text-5xl">{todayCompleted ? '✓' : '▶'}</div>
-              </div>
-            </a>
-          )
-        })()}
+        {/* Today's Lesson Card — href computed entirely in useEffect, no SSR mismatch */}
+        <a
+          href={todayHref}
+          className="card block hover:scale-[1.01] active:scale-[0.99] transition-transform"
+          style={{
+            background: todayCompleted
+              ? 'linear-gradient(135deg, #D7FFB8 0%, #A8E66B 100%)'
+              : 'linear-gradient(135deg, #58CC02 0%, #46A302 100%)',
+            color: todayCompleted ? '#2D7A01' : '#FFFFFF',
+          }}
+        >
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs font-extrabold uppercase tracking-wider opacity-90">
+                今日功課
+              </p>
+              <p className="text-xl font-extrabold mt-1">
+                {todayCompleted ? '已完成今日讀經！' : '點擊開始今日讀經'}
+              </p>
+              {!todayCompleted && enrollment && todayRefsCount > 0 && (
+                <p className="text-xs opacity-90 mt-1">
+                  {getScopeLabel(enrollment.scope)} · {todayRefsCount}章
+                  {enrollment.chapters_per_day > todayRefsCount ? ` · 目標${enrollment.chapters_per_day}章` : ''}
+                </p>
+              )}
+            </div>
+            <div className="text-5xl">{todayCompleted ? '✓' : '▶'}</div>
+          </div>
+        </a>
 
         {/* Plan Progress */}
         {enrollment && (
