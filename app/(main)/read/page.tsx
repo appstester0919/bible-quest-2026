@@ -171,7 +171,11 @@ export default function ReadPage() {
     setStartChapter(startCh)
     setEndBook(endBook)
     setEndChapter(endCh)
-    setTimeout(() => handleDisplay(), 50)
+    console.log('[read] auto-load calling handleDisplay in 50ms')
+    setTimeout(() => {
+      console.log('[read] handleDisplay called, queue will be set')
+      handleDisplay()
+    }, 50)
   }, [autoLoadedRefs, books])
 
   // Audio setup
