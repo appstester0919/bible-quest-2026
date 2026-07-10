@@ -28,6 +28,7 @@ export async function markLessonComplete(
       chapter_ref: chapterRef,
       xp_earned: xpEarned,
       date_local: dateLocal,
+      day_number: 1, // TODO: compute from enrollment started_at
     })
     .select()
     .single()
