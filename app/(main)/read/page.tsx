@@ -281,7 +281,13 @@ export default function ReadPage() {
       const current = audioQueue[currentChapterIdx]
       const chapterRef = `${current.book.name} ${current.chapter}`
       console.log('[handleComplete] inserting', { enrollment_id: enrollment.id, chapter_ref: chapterRef, xp: 10 })
-      await markLessonComplete(enrollment.id, chapterRef, 10)
+      const result = await markLessonComplete(enrollment.id, chapterRef, 10)
+      console.log('[handleComplete] markLessonComplete result:', result)
+      if (!result.success) {
+        alert(`寫入失敗：${result.error}\n詳情：${JSON.stringify(result.errorDetails)}`)
+        setIsCompleting(false)
+        return
+      }
       celebrate({ type: 'burst', particleCount: 120 })
       const now = new Date()
       const hkt = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Hong_Kong' }))
