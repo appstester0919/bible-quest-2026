@@ -46,4 +46,3 @@ coverage/
 *.tgz
 .cache/
 .vercel
-/public/audio/
