@@ -1,8 +1,9 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
+import { getBooksMeta, type BookMeta } from '@/lib/bible/lookup'
 
 interface Profile {
   id: string
@@ -61,6 +62,7 @@ export default function DashboardPage() {
   const [globalStats, setGlobalStats] = useState<GlobalStats>({
     total_chapters_read: 0, active_readers: 0, total_plans_completed: 0,
   })
+  const [books, setBooks] = useState<BookMeta[]>([])
   const [loading, setLoading] = useState(true)
   const [fetchErrors, setFetchErrors] = useState<string[]>([])
 
@@ -121,6 +123,11 @@ export default function DashboardPage() {
         if (globalErr) errors.push(`global_stats: ${globalErr.message}`)
         if (global) setGlobalStats(global as GlobalStats)
 
+        // Load bible data for plan computation
+        const res = await fetch('/bible-data.json')
+        const bibleJson = await res.json()
+        setBooks(getBooksMeta(bibleJson))
+
         if (errors.length > 0) {
           console.error('[dashboard fetch errors]', errors)
           setFetchErrors(errors)
@@ -151,6 +158,50 @@ export default function DashboardPage() {
   const completedDays = new Set(sessions.map(s => s.date_local)).size
   const planProgress = totalDays > 0 ? Math.round((completedDays / totalDays) * 100) : 0
   const userInitial = (profile?.email || user?.email || '?').charAt(0).toUpperCase()
+
+  // Build plan Map from enrollment (same logic as calendar page)
+  const plan = useMemo(() => {
+    if (!enrollment || books.length === 0) return new Map<string, string[]>()
+    const scopeBooks = enrollment.scope === 'nt'
+      ? books.filter((_, i) => i >= 39)
+      : enrollment.scope === 'ot'
+      ? books.filter((_, i) => i < 39)
+      : books
+
+    const planMap = new Map<string, string[]>()
+    let bookIdx = 0
+    let chapterInBook = 1
+    let start: Date
+    if (enrollment.started_at) {
+      const [y, m, d] = enrollment.started_at.split('T')[0].split('-').map(Number)
+      start = new Date(y, m - 1, d)
+    } else if (enrollment.created_at) {
+      const [y, m, d] = enrollment.created_at.split('T')[0].split('-').map(Number)
+      start = new Date(y, m - 1, d)
+    } else {
+      const [y, mo, da] = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Hong_Kong' }).split('-').map(Number)
+      start = new Date(y, mo - 1, da)
+    }
+    let currentStr = start.toLocaleDateString('en-CA', { timeZone: 'Asia/Hong_Kong' })
+
+    for (let day = 0; day < 400 && bookIdx < scopeBooks.length; day++) {
+      const dayRefs: string[] = []
+      for (let i = 0; i < enrollment.chapters_per_day && bookIdx < scopeBooks.length; i++) {
+        const book = scopeBooks[bookIdx]
+        dayRefs.push(`${book.name} ${chapterInBook}`)
+        chapterInBook++
+        if (chapterInBook > book.chapters) {
+          bookIdx++
+          chapterInBook = 1
+        }
+      }
+      planMap.set(currentStr, dayRefs)
+      const [cy, cm, cd] = currentStr.split('-').map(Number)
+      const next = new Date(cy, cm - 1, cd + 1)
+      currentStr = next.toLocaleDateString('en-CA', { timeZone: 'Asia/Hong_Kong' })
+    }
+    return planMap
+  }, [enrollment, books])
 
   return (
     <div className="min-h-screen bg-[var(--color-background)] pb-24">
@@ -215,33 +266,43 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Today's Lesson Card */}
-        <a
-          href="/read"
-          className="card block hover:scale-[1.01] active:scale-[0.99] transition-transform"
-          style={{ background: todayCompleted
-            ? 'linear-gradient(135deg, #D7FFB8 0%, #A8E66B 100%)'
-            : 'linear-gradient(135deg, #58CC02 0%, #46A302 100%)',
-            color: todayCompleted ? '#2D7A01' : '#FFFFFF',
-          }}
-        >
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs font-extrabold uppercase tracking-wider opacity-90">
-                今日功課
-              </p>
-              <p className="text-xl font-extrabold mt-1">
-                {todayCompleted ? '已完成今日讀經！' : '點擊開始今日讀經'}
-              </p>
-              {!todayCompleted && enrollment && (
-                <p className="text-xs opacity-90 mt-1">
-                  {getScopeLabel(enrollment.scope)} · {enrollment.chapters_per_day}章/日
-                </p>
-              )}
-            </div>
-            <div className="text-5xl">{todayCompleted ? '✓' : '▶'}</div>
-          </div>
-        </a>
+        {/* Today's Lesson Card — pass today's reading refs as URL params */}
+        {(() => {
+          const todayRefs = enrollment && plan.size > 0 ? (() => {
+            const hkt = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Hong_Kong' })
+            return plan.get(hkt) ?? []
+          })() : []
+          const refsParam = todayRefs.length > 0 ? encodeURIComponent(todayRefs.join(',')) : ''
+          const todayHref = '/read' + (refsParam ? `?today=1&refs=${refsParam}` : '')
+          return (
+            <a
+              href={todayHref}
+              className="card block hover:scale-[1.01] active:scale-[0.99] transition-transform"
+              style={{ background: todayCompleted
+                ? 'linear-gradient(135deg, #D7FFB8 0%, #A8E66B 100%)'
+                : 'linear-gradient(135deg, #58CC02 0%, #46A302 100%)',
+                color: todayCompleted ? '#2D7A01' : '#FFFFFF',
+              }}
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-extrabold uppercase tracking-wider opacity-90">
+                    今日功課
+                  </p>
+                  <p className="text-xl font-extrabold mt-1">
+                    {todayCompleted ? '已完成今日讀經！' : '點擊開始今日讀經'}
+                  </p>
+                  {!todayCompleted && enrollment && todayRefs.length > 0 && (
+                    <p className="text-xs opacity-90 mt-1">
+                      {getScopeLabel(enrollment.scope)} · {todayRefs.length}章{enrollment.chapters_per_day > todayRefs.length ? ` · 目標${enrollment.chapters_per_day}章` : ''}
+                    </p>
+                  )}
+                </div>
+                <div className="text-5xl">{todayCompleted ? '✓' : '▶'}</div>
+              </div>
+            </a>
+          )
+        })()}
 
         {/* Plan Progress */}
         {enrollment && (
@@ -304,20 +365,6 @@ export default function DashboardPage() {
               <p className="text-xs opacity-80 mt-1">完成計劃</p>
             </div>
           </div>
-        </div>
-
-        {/* Quick actions */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
-          <a href="/calendar" className="card hover:scale-[1.02] active:scale-[0.98] transition-transform text-center">
-            <span className="text-3xl">📅</span>
-            <p className="font-extrabold text-[var(--color-primary)] mt-2">讀經日曆</p>
-            <p className="text-xs text-muted mt-1">查看每日進度</p>
-          </a>
-          <a href="/read" className="card hover:scale-[1.02] active:scale-[0.98] transition-transform text-center">
-            <span className="text-3xl">📖</span>
-            <p className="font-extrabold text-[var(--color-primary)] mt-2">開始讀經</p>
-            <p className="text-xs text-muted mt-1">聆聽今日經文</p>
-          </a>
         </div>
 
         {/* Partner card */}

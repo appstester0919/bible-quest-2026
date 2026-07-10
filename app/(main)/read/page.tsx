@@ -94,6 +94,8 @@ export default function ReadPage() {
   // Today reading
   const [todaySession, setTodaySession] = useState<ReadingSession | null>(null)
   const [isCompleting, setIsCompleting] = useState(false)
+  // Auto-load refs from URL (?today=1&refs=創 1,創 2)
+  const [autoLoadedRefs, setAutoLoadedRefs] = useState<string[] | null>(null)
 
   // Load data
   useEffect(() => {
@@ -118,6 +120,17 @@ export default function ReadPage() {
       const bibleJson = await res.json()
       setBooks(getBooksMeta(bibleJson))
 
+      // Parse URL params for auto-loading (?today=1&refs=創 1,創 2)
+      if (typeof window !== 'undefined') {
+        const params = new URLSearchParams(window.location.search)
+        const refsParam = params.get('refs')
+        const isToday = params.get('today') === '1'
+        if (refsParam && isToday) {
+          const refList = refsParam.split(',').map(r => r.trim()).filter(Boolean)
+          if (refList.length > 0) setAutoLoadedRefs(refList)
+        }
+      }
+
       // Today session
       if (enrollmentData && sessionsData) {
         const now = new Date()
@@ -130,6 +143,34 @@ export default function ReadPage() {
     }
     fetchData()
   }, [router])
+
+  // Auto-load today's reading from URL params once books are available
+  useEffect(() => {
+    if (!autoLoadedRefs || books.length === 0 || chapters.length > 0) return
+    const refs = autoLoadedRefs
+    console.log('[read] auto-loading:', refs)
+
+    const first = refs[0].trim()
+    const last = refs[refs.length - 1].trim()
+
+    const parseRef = (ref: string) => {
+      const parts = ref.split(/\s+/)
+      return { bookName: parts[0] || '', chapter: parseInt(parts[1] || '1', 10) || 1 }
+    }
+
+    const { bookName: startName, chapter: startCh } = parseRef(first)
+    const { bookName: endName, chapter: endCh } = parseRef(last)
+
+    const startBook = books.find(b => b.name === startName)
+    const endBook = books.find(b => b.name === endName)
+    if (!startBook || !endBook) { console.warn('[read] book not found', { startName, endName }); return }
+
+    setStartBook(startBook)
+    setStartChapter(startCh)
+    setEndBook(endBook)
+    setEndChapter(endCh)
+    setTimeout(() => handleDisplay(), 50)
+  }, [autoLoadedRefs, books])
 
   // Audio setup
   useEffect(() => {
@@ -170,6 +211,57 @@ export default function ReadPage() {
   const getAudioLabel = (book: BookMeta, chapter: number) => `${book.name} ${chapter} 章`
 
   const currentAudioItem = audioQueue[currentChapterIdx]
+
+  // Build today's required reading list (same plan logic as calendar)
+  const todayRequiredRefs = (() => {
+    if (!enrollment || books.length === 0) return []
+    const scopeBooks = enrollment.scope === 'nt'
+      ? books.filter((_, i) => i >= 39)
+      : enrollment.scope === 'ot'
+      ? books.filter((_, i) => i < 39)
+      : books
+    const hktToday = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Hong_Kong' })
+    let start: Date
+    if (enrollment.started_at) {
+      const [y, m, d] = enrollment.started_at.split('T')[0].split('-').map(Number)
+      start = new Date(y, m - 1, d)
+    } else if (enrollment.created_at) {
+      const [y, m, d] = enrollment.created_at.split('T')[0].split('-').map(Number)
+      start = new Date(y, m - 1, d)
+    } else {
+      const [y, mo, da] = hktToday.split('-').map(Number)
+      start = new Date(y, mo - 1, da)
+    }
+    // Count days from start to today
+    const today = new Date(hktToday)
+    const dayOffset = Math.floor((today.getTime() - start.getTime()) / 86400000)
+    if (dayOffset < 0) return []
+    // Replay plan to find today's refs
+    let bookIdx = 0, chapterInBook = 1
+    let current = new Date(start)
+    for (let d = 0; d < dayOffset && bookIdx < scopeBooks.length; d++) {
+      for (let i = 0; i < enrollment.chapters_per_day && bookIdx < scopeBooks.length; i++) {
+        chapterInBook++
+        if (chapterInBook > scopeBooks[bookIdx].chapters) { bookIdx++; chapterInBook = 1 }
+      }
+      current = new Date(current.getTime() + 86400000)
+    }
+    // Now collect today's chapters
+    const refs: string[] = []
+    for (let i = 0; i < enrollment.chapters_per_day && bookIdx < scopeBooks.length; i++) {
+      const book = scopeBooks[bookIdx]
+      refs.push(`${book.name} ${chapterInBook}`)
+      chapterInBook++
+      if (chapterInBook > book.chapters) { bookIdx++; chapterInBook = 1 }
+    }
+    return refs
+  })()
+
+  // Whether loaded audio chapters cover all today's required reading
+  const loadedRefsSet = new Set(audioQueue.map(item => `${item.book.name} ${item.chapter}`))
+  const allRequiredLoaded = todayRequiredRefs.length > 0 && todayRequiredRefs.every(ref => loadedRefsSet.has(ref))
+  // Show complete button only if: today NOT completed AND (auto-loaded all required OR user manually selected exactly today's refs)
+  const showComplete = audioQueue.length > 0 && !todaySession && allRequiredLoaded
 
   // ─── Book/Chapter selection ───────────────────────────────────────────────
   const handleStartBookClick = (book: BookMeta) => {
@@ -501,7 +593,7 @@ export default function ReadPage() {
               color: C.chapterTitle, fontSize: '0.9rem', fontWeight: 500,
               marginBottom: '16px', textAlign: 'center',
             }}>
-              📖 今日功課：{todayBook?.name} {todayChapter} 章
+              📖 今日功課：{todayRequiredRefs.length > 0 ? `${todayRequiredRefs.length}章` : `${todayBook?.name} ${todayChapter} 章`}{todayRequiredRefs.length > 0 && ` · ${todayRequiredRefs.join('、')}`}
             </div>
           )}
 
@@ -755,23 +847,30 @@ export default function ReadPage() {
               </div>
             ))}
 
-            {/* Complete button */}
+            {/* Complete button — only show when all today's required chapters are loaded */}
             {audioQueue.length > 0 && (
               <button
                 onClick={handleComplete}
-                disabled={!!todaySession || isCompleting}
+                disabled={!!todaySession || isCompleting || !allRequiredLoaded}
                 style={{
                   width: '100%', padding: '16px',
-                  background: todaySession ? C.success : C.accentGold,
+                  background: todaySession ? C.success : allRequiredLoaded ? C.accentGold : C.borderColor,
                   border: 'none', borderRadius: '10px',
-                  color: 'white', fontSize: '1.1rem',
-                  fontWeight: 700, cursor: todaySession || isCompleting ? 'default' : 'pointer',
+                  color: todaySession ? 'white' : allRequiredLoaded ? 'white' : C.textMuted,
+                  fontSize: '1.1rem', fontWeight: 700,
+                  cursor: todaySession || isCompleting || !allRequiredLoaded ? 'default' : 'pointer',
                   transition: 'all 0.2s', marginBottom: '20px',
-                  boxShadow: todaySession ? 'none' : '0 4px 12px rgba(201,168,76,0.3)',
+                  boxShadow: allRequiredLoaded && !todaySession ? '0 4px 12px rgba(201,168,76,0.3)' : 'none',
                   opacity: isCompleting ? 0.7 : 1,
                 }}
               >
-                {todaySession ? '✅ 今日讀經已完成' : isCompleting ? '處理中...' : `完成讀經 ✓（+10 XP）`}
+                {todaySession
+                  ? '✅ 今日讀經已完成'
+                  : isCompleting
+                  ? '處理中...'
+                  : allRequiredLoaded
+                  ? `完成讀經 ✓（+10 XP）`
+                  : `需完成 ${todayRequiredRefs.length} 章才能標記完成`}
               </button>
             )}
           </div>
