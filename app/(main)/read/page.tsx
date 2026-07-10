@@ -171,12 +171,16 @@ export default function ReadPage() {
     setStartChapter(startCh)
     setEndBook(endBook)
     setEndChapter(endCh)
-    console.log('[read] auto-load calling handleDisplay in 50ms')
-    setTimeout(() => {
-      console.log('[read] handleDisplay called, queue will be set')
-      handleDisplay()
-    }, 50)
   }, [autoLoadedRefs, books])
+
+  // Trigger auto-load once all 4 selection states are set
+  useEffect(() => {
+    if (!autoLoadedRefs || chapters.length > 0) return
+    if (startBook && startChapter && endBook && endChapter) {
+      handleDisplay()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoLoadedRefs, startBook, startChapter, endBook, endChapter, chapters.length])
 
   // Audio setup
   useEffect(() => {
@@ -305,37 +309,24 @@ export default function ReadPage() {
   }
 
   const handleDisplay = async () => {
-    console.log('[handleDisplay] called', {startBook: startBook?.name, startChapter, endBook: endBook?.name, endChapter, booksLen: books.length})
-    if (!startBook || !startChapter || !endBook || !endChapter) {
-      console.log('[handleDisplay] early return - missing state')
-      return
-    }
+    if (!startBook || !startChapter || !endBook || !endChapter) return
     setScriptureLoading(true)
 
     const startIdx = books.findIndex(b => b.abbr === startBook.abbr)
     const endIdx = books.findIndex(b => b.abbr === endBook.abbr)
-    console.log('[handleDisplay] indices', {startIdx, endIdx})
 
     const loaded: ChapterData[] = []
     const queue: { book: BookMeta; chapter: number }[] = []
 
-    try {
-      for (let bi = startIdx; bi <= endIdx; bi++) {
-        const book = books[bi]
-        const cStart = bi === startIdx ? startChapter : 1
-        const cEnd = bi === endIdx ? endChapter : book.chapters
-        for (let ch = cStart; ch <= cEnd; ch++) {
-          console.log(`[handleDisplay] loading ${book.abbr} ${ch}`)
-          const verses = await getChapter(book.abbr, ch)
-          loaded.push({ bookAbbr: book.abbr, bookName: book.name, chapter: ch, verses })
-          queue.push({ book, chapter: ch })
-        }
+    for (let bi = startIdx; bi <= endIdx; bi++) {
+      const book = books[bi]
+      const cStart = bi === startIdx ? startChapter : 1
+      const cEnd = bi === endIdx ? endChapter : book.chapters
+      for (let ch = cStart; ch <= cEnd; ch++) {
+        const verses = await getChapter(book.abbr, ch)
+        loaded.push({ bookAbbr: book.abbr, bookName: book.name, chapter: ch, verses })
+        queue.push({ book, chapter: ch })
       }
-      console.log('[handleDisplay] all chapters loaded, queue length:', queue.length)
-    } catch (e) {
-      console.error('[handleDisplay] error loading chapters:', e)
-      setScriptureLoading(false)
-      return
     }
 
     setChapters(loaded)
@@ -343,7 +334,6 @@ export default function ReadPage() {
     setCurrentChapterIdx(0)
     setIsPlaying(false)
     setScriptureLoading(false)
-    console.log('[handleDisplay] done, queue set')
   }
 
   // ─── Audio controls ───────────────────────────────────────────────────────
