@@ -64,28 +64,36 @@ export async function markLessonComplete(
 
   const uniqueDates = [...new Set((allSessions ?? []).map(r => r.date_local))].sort()
 
-  // Calculate current streak: count consecutive days ending at today or yesterday
-  // FIX: use en-CA+HKT throughout — no UTC offset bug
+  // Determine today / yesterday in HKT for streak calculation
   const todayStr = getHKTDateStr()
-  const todayDate = new Date(now.toLocaleString('en-CA', { timeZone: 'Asia/Hong_Kong' }))
-  const yesterdayStr = getHKTDateStr(new Date(todayDate.getTime() - 86400000))
+  const todayHKT = new Date(new Date().toLocaleString('en-CA', { timeZone: 'Asia/Hong_Kong' }))
+  const yesterdayStr = getHKTDateStr(new Date(todayHKT.getTime() - 86400000))
 
+  // Calculate current streak:
+  // 1. Find the LAST date in uniqueDates that is ≤ today (skip future outliers like "tomorrow")
+  // 2. If that date is today or yesterday, count backwards through consecutive dates
+  // 3. If the last date is older than yesterday, streak = 0 (broken chain)
   let streak = 0
   if (uniqueDates.length > 0) {
-    const lastDate = uniqueDates[uniqueDates.length - 1]
-    // Streak is active only if last completion was today or yesterday
+    // Find the last date that is not in the future
+    let lastValidIdx = uniqueDates.length - 1
+    for (let i = uniqueDates.length - 1; i >= 0; i--) {
+      if (uniqueDates[i] <= todayStr) {
+        lastValidIdx = i
+        break
+      }
+    }
+    const lastDate = uniqueDates[lastValidIdx]
     if (lastDate === todayStr || lastDate === yesterdayStr) {
       streak = 1
-      // Count backwards from the last date
-      for (let i = uniqueDates.length - 2; i >= 0; i--) {
-        const currDate = new Date(uniqueDates[i + 1])
-        const prevDate = new Date(uniqueDates[i])
-        const diffDays = Math.round((currDate.getTime() - prevDate.getTime()) / 86400000)
+      for (let i = lastValidIdx - 1; i >= 0; i--) {
+        const curr = new Date(uniqueDates[i + 1])
+        const prev = new Date(uniqueDates[i])
+        const diffDays = Math.round((curr.getTime() - prev.getTime()) / 86400000)
         if (diffDays === 1) streak++
         else break
       }
     }
-    // If lastDate is older than yesterday, streak = 0 (broken chain)
   }
 
   const totalXp = uniqueDates.length * 10
