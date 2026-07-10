@@ -94,7 +94,7 @@ export default function DashboardPage() {
           .select('id, scope, chapters_per_day, total_days, status')
           .eq('user_id', authUser.id)
           .eq('status', 'active')
-          .order('created_at', { ascending: false })
+          .order('started_at', { ascending: false })
           .limit(1)
           .maybeSingle()
         if (error) errors.push(`enrollment: ${error.message}`)

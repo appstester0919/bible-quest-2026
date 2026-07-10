@@ -11,14 +11,18 @@
 -- For each user with multiple 'active' enrollments:
 --   Keep the most recent active row, mark all older 'active' rows as
 --   'abandoned'.
+--
+-- NOTE: user_plan_enrollments has 'started_at' (not 'created_at')
+-- because the schema docs drifted from actual. Use started_at for
+-- ordering; coalesce for safety.
 WITH ranked AS (
   SELECT
     id,
     user_id,
-    created_at,
+    started_at,
     ROW_NUMBER() OVER (
       PARTITION BY user_id
-      ORDER BY created_at DESC
+      ORDER BY COALESCE(started_at, '1970-01-01'::timestamptz) DESC
     ) AS rn
   FROM public.user_plan_enrollments
   WHERE status = 'active'
@@ -42,7 +46,7 @@ BEGIN
       FROM public.user_plan_enrollments
      WHERE user_id NOT IN (SELECT user_id FROM public.user_plan_enrollments WHERE status = 'active')
        AND status IN ('abandoned', 'completed')
-     ORDER BY user_id, created_at DESC
+     ORDER BY user_id, COALESCE(started_at, '1970-01-01'::timestamptz) DESC
   )
   UPDATE public.user_plan_enrollments e
      SET status = 'active'
