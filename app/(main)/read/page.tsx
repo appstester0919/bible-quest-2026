@@ -281,7 +281,7 @@ export default function ReadPage() {
     let failedCount = 0
     let firstError = ''
     try {
-      // Insert ALL queued chapters (not just current)
+      // Insert ALL queued chapters as individual reading records
       for (const item of audioQueue) {
         const chapterRef = `${item.book.name} ${item.chapter}`
         console.log('[handleComplete] inserting', { enrollment_id: enrollment.id, chapter_ref: chapterRef, xp: 10 })
@@ -307,12 +307,13 @@ export default function ReadPage() {
         const now = new Date()
         const hkt = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Hong_Kong' }))
         setTodaySession({ id: 'new', enrollment_id: enrollment.id, chapter_ref: `${audioQueue[0].book.name} ${audioQueue[0].chapter}`, date_local: hkt.toISOString().split('T')[0] })
-        const xpEarned = insertedCount * 10
-        const newXp = profile.total_xp + xpEarned
+        // XP is awarded ONCE per day for completing the daily goal (not per chapter)
+        const dailyXp = 10
+        const newXp = profile.total_xp + dailyXp
         const newLevel = Math.floor(Math.sqrt(newXp / 100)) + 1
         setProfile({ ...profile, total_xp: newXp, level: newLevel })
         if (failedCount > 0) {
-          alert(`已寫入 ${insertedCount} 章，但有 ${failedCount} 章失敗：${firstError}`)
+          alert(`已記錄 ${insertedCount} 章，但有 ${failedCount} 章失敗：${firstError}`)
         }
       }
     } catch (e) {
