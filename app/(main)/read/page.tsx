@@ -277,24 +277,44 @@ export default function ReadPage() {
       return
     }
     setIsCompleting(true)
+    let insertedCount = 0
+    let failedCount = 0
+    let firstError = ''
     try {
-      const current = audioQueue[currentChapterIdx]
-      const chapterRef = `${current.book.name} ${current.chapter}`
-      console.log('[handleComplete] inserting', { enrollment_id: enrollment.id, chapter_ref: chapterRef, xp: 10 })
-      const result = await markLessonComplete(enrollment.id, chapterRef, 10)
-      console.log('[handleComplete] markLessonComplete result:', result)
-      if (!result.success) {
-        alert(`寫入失敗：${result.error}\n詳情：${JSON.stringify(result.errorDetails)}`)
+      // Insert ALL queued chapters (not just current)
+      for (const item of audioQueue) {
+        const chapterRef = `${item.book.name} ${item.chapter}`
+        console.log('[handleComplete] inserting', { enrollment_id: enrollment.id, chapter_ref: chapterRef, xp: 10 })
+        const result = await markLessonComplete(enrollment.id, chapterRef, 10)
+        console.log('[handleComplete] markLessonComplete result:', result)
+        if (result.success) {
+          insertedCount++
+        } else {
+          failedCount++
+          if (!firstError) firstError = result.error || 'unknown'
+          console.error('[handleComplete] failed for', chapterRef, result.error)
+        }
+      }
+
+      if (failedCount > 0 && insertedCount === 0) {
+        alert(`全部寫入失敗：${firstError}`)
         setIsCompleting(false)
         return
       }
-      celebrate({ type: 'burst', particleCount: 120 })
-      const now = new Date()
-      const hkt = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Hong_Kong' }))
-      setTodaySession({ id: 'new', enrollment_id: enrollment.id, chapter_ref: `${current.book.name} ${current.chapter}`, date_local: hkt.toISOString().split('T')[0] })
-      const newXp = profile.total_xp + 10
-      const newLevel = Math.floor(Math.sqrt(newXp / 100)) + 1
-      setProfile({ ...profile, total_xp: newXp, level: newLevel })
+
+      if (insertedCount > 0) {
+        celebrate({ type: 'burst', particleCount: Math.min(insertedCount * 30, 180) })
+        const now = new Date()
+        const hkt = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Hong_Kong' }))
+        setTodaySession({ id: 'new', enrollment_id: enrollment.id, chapter_ref: `${audioQueue[0].book.name} ${audioQueue[0].chapter}`, date_local: hkt.toISOString().split('T')[0] })
+        const xpEarned = insertedCount * 10
+        const newXp = profile.total_xp + xpEarned
+        const newLevel = Math.floor(Math.sqrt(newXp / 100)) + 1
+        setProfile({ ...profile, total_xp: newXp, level: newLevel })
+        if (failedCount > 0) {
+          alert(`已寫入 ${insertedCount} 章，但有 ${failedCount} 章失敗：${firstError}`)
+        }
+      }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
       console.error('[handleComplete]', msg, e)
