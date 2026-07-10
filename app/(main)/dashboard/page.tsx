@@ -20,6 +20,8 @@ interface Enrollment {
   chapters_per_day: number
   total_days: number
   status: string
+  started_at?: string
+  created_at?: string
 }
 
 interface ReadingSession {

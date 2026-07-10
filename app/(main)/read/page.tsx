@@ -45,7 +45,7 @@ for (const [cat, data] of Object.entries(BOOK_CATEGORIES)) {
 }
 
 // ─── Types ───────────────────────────────────────────────────────────────────
-interface Enrollment { id: string; user_id: string; scope: 'nt' | 'ot' | 'nt_ot'; total_days: number; chapters_per_day: number; status: string }
+interface Enrollment { id: string; user_id: string; scope: 'nt' | 'ot' | 'nt_ot'; total_days: number; chapters_per_day: number; status: string; started_at?: string; created_at?: string }
 interface ReadingSession { id: string; enrollment_id: string; chapter_ref: string; date_local: string }
 interface ChapterData { bookAbbr: string; bookName: string; chapter: number; verses: [number, string][] }
 interface Profile { current_streak: number; total_xp: number; level: number }
