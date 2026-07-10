@@ -350,7 +350,7 @@ export default function ReadPage() {
     const audio = audioRef.current
     if (audio) audio.pause()
     setCurrentChapterIdx(i => Math.max(0, i - 1))
-    setIsPlaying(false)
+    // Keep current play state so auto-play effect resumes playback
   }
 
   const goNext = () => {
@@ -358,7 +358,7 @@ export default function ReadPage() {
     const audio = audioRef.current
     if (audio) audio.pause()
     setCurrentChapterIdx(i => Math.min(audioQueue.length - 1, i + 1))
-    setIsPlaying(false)
+    // Keep current play state so auto-play effect resumes playback
   }
 
   // ─── Complete today reading ──────────────────────────────────────────────
