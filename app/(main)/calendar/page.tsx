@@ -6,6 +6,7 @@ import 'react-calendar/dist/Calendar.css'
 import { createClient } from '@/lib/supabase/client'
 import { getBooksMeta, type BookMeta } from '@/lib/bible/lookup'
 import { celebrate } from '@/lib/confetti'
+import { unmarkDayComplete } from '@/lib/actions'
 
 interface Enrollment {
   id: string
@@ -200,10 +201,9 @@ export default function CalendarPage() {
       const { data: { user: authUser } } = await supabase.auth.getUser()
       if (!authUser) return
 
-      const hktDate = new Date()
-      const dateLocal = dateToHKDateString(hktDate)
+      const dateLocal = key
 
-      await Promise.all(refs.map(ref =>
+      await Promise.all(refs.map((ref, i) =>
         supabase.from('reading_sessions').insert({
           user_id: authUser.id,
           enrollment_id: enrollment.id,
@@ -226,6 +226,30 @@ export default function CalendarPage() {
       setIsCompleting(false)
     }
   }, [plan, completedDays, enrollment])
+
+  const handleUncompleteDay = useCallback(async (date: Date) => {
+    const key = dateToHKDateString(date)
+    if (!enrollment) return
+
+    setIsCompleting(true)
+    try {
+      const result = await unmarkDayComplete(enrollment.id, key)
+      if (!result.success) {
+        alert(`取消失敗：${result.error}`)
+        setIsCompleting(false)
+        return
+      }
+      // Remove sessions for this date from local state
+      setSessions(prev => prev.filter(s => s.date_local !== key))
+      setShowSuccess(true)
+      setTimeout(() => setShowSuccess(false), 3000)
+    } catch (error) {
+      console.error('Uncomplete error:', error)
+      alert(`取消失敗：${error instanceof Error ? error.message : String(error)}`)
+    } finally {
+      setIsCompleting(false)
+    }
+  }, [enrollment])
 
   const todayRefs = plan.get(hktToday) ?? []
   const selectedKey = selectedDate ? dateToHKDateString(selectedDate) : ''
@@ -280,7 +304,7 @@ export default function CalendarPage() {
 
         {/* Custom Mon-first Calendar */}
         <div className="card overflow-hidden">
-          <CustomCalendar plan={plan} completedDays={completedDays} selectedDate={selectedDate} onSelect={handleDateClick} onComplete={handleCompleteDay} />
+          <CustomCalendar plan={plan} completedDays={completedDays} selectedDate={selectedDate} onSelect={handleDateClick} onComplete={handleCompleteDay} onUncomplete={handleUncompleteDay} />
         </div>
 
         {/* Selected Day Detail */}

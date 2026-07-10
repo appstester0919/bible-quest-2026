@@ -10,6 +10,7 @@ interface CustomCalendarProps {
   selectedDate: Date | null
   onSelect: (date: Date) => void
   onComplete: (date: Date) => Promise<void>
+  onUncomplete: (date: Date) => Promise<void>
 }
 
 const WEEKDAY_LABELS = ['一', '二', '三', '四', '五', '六', '日']
@@ -23,7 +24,7 @@ function getHKToday(): string {
   return toHKDateString(new Date())
 }
 
-export default function CustomCalendar({ plan, completedDays, selectedDate, onSelect, onComplete }: CustomCalendarProps) {
+export default function CustomCalendar({ plan, completedDays, selectedDate, onSelect, onComplete, onUncomplete }: CustomCalendarProps) {
   const [viewDate, setViewDate] = useState(() => {
     const today = new Date()
     return new Date(today.getFullYear(), today.getMonth(), 1)
@@ -79,11 +80,19 @@ export default function CustomCalendar({ plan, completedDays, selectedDate, onSe
   const handleTileClick = async (day: typeof calendarDays[0]) => {
     if (!day.date || !day.key) return
     onSelect(day.date)
+    // If already completed, uncomplete it
+    if (completedDays.has(day.key)) {
+      try {
+        await onUncomplete(day.date)
+      } catch (e) {
+        // silently ignore
+      }
+      return
+    }
     // If not yet completed and has reading plan, mark complete + celebrate
-    if (!completedDays.has(day.key) && plan.has(day.key)) {
+    if (plan.has(day.key)) {
       try {
         await onComplete(day.date)
-        // Confetti burst
         await celebrate({ type: 'basic', particleCount: 100 })
       } catch (e) {
         // silently ignore
