@@ -119,6 +119,19 @@ export default function SettingsPage() {
     setTimeout(() => setSaved(false), 2000)
   }
 
+  async function handleSignOut() {
+    if (!confirm('確定要登出嗎？')) return
+    setLoading(true)
+    try {
+      const supabase = createClient()
+      await supabase.auth.signOut()
+      router.push('/login')
+      router.refresh()
+    } finally {
+      setLoading(false)
+    }
+  }
+
   return (
     <div className="min-h-screen bg-[var(--color-background)]">
       <header className="bg-white px-4 py-3 flex items-center gap-3 shadow-sm">
@@ -263,6 +276,23 @@ export default function SettingsPage() {
             </div>
           </div>
         )}
+
+        {/* Sign Out */}
+        <button
+          onClick={handleSignOut}
+          disabled={loading}
+          className="w-full bg-white rounded-2xl p-5 shadow-sm text-left hover:shadow-md transition-shadow disabled:opacity-50"
+        >
+          <div className="flex items-center gap-3">
+            <span className="text-2xl">🚪</span>
+            <div>
+              <p className="text-lg font-bold text-[var(--color-danger)]">登出</p>
+              <p className="text-xs text-[var(--color-muted)] mt-0.5">
+                清除登入狀態，重新登入可修復異常問題
+              </p>
+            </div>
+          </div>
+        </button>
 
         {/* App Info */}
         <div className="bg-white rounded-2xl p-5 shadow-sm">
