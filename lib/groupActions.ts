@@ -503,7 +503,8 @@ export async function updateDisplayName(name: string): Promise<{ success: boolea
   if (error) return { success: false, error: error.message }
 
   // Sync to existing group memberships (so display name updates in groups too)
-  await supabase.from('group_members').update({ display_name: trimmed }).eq('user_id', user.id)
+  const { error: gmErr } = await supabase.from('group_members').update({ display_name: trimmed }).eq('user_id', user.id)
+  console.log('[updateDisplayName] group_members sync:', gmErr ?? 'ok')
 
   revalidatePath('/settings')
   revalidatePath('/dashboard')
