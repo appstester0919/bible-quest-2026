@@ -3,6 +3,7 @@
 import { useEffect, useState, useMemo, useCallback } from 'react'
 import CustomCalendar from '@/components/CustomCalendar'
 import 'react-calendar/dist/Calendar.css'
+import { formatReadingPlanFull } from '@/lib/chineseBibleAbbreviations'
 import { createClient } from '@/lib/supabase/client'
 import { getBooksMeta, type BookMeta } from '@/lib/bible/lookup'
 import { celebrate } from '@/lib/confetti'
@@ -325,19 +326,10 @@ export default function CalendarPage() {
             </h3>
             {selectedRefs.length > 0 ? (
               <>
-                <div className="space-y-2 mb-4">
-                  {selectedRefs.map((ref, i) => (
-                    <div key={i} className={`flex items-center gap-3 p-3 rounded-xl ${
-                      completedDays.has(selectedKey!) ? 'bg-[#D7FFB8]' : 'bg-[var(--color-background)]'
-                    }`}>
-                      <span className={`w-7 h-7 rounded-full flex items-center justify-center text-sm font-extrabold ${
-                        completedDays.has(selectedKey!) ? 'bg-[var(--color-success)] text-white' : 'bg-[var(--color-line)] text-[var(--color-ink-soft)]'
-                      }`}>
-                        {completedDays.has(selectedKey!) ? '✓' : i + 1}
-                      </span>
-                      <span className={`font-bold ${completedDays.has(selectedKey!) ? 'line-through text-muted' : ''}`}>{ref}</span>
-                    </div>
-                  ))}
+                <div className={`p-3 rounded-xl text-center font-bold ${
+                  completedDays.has(selectedKey!) ? 'bg-[#D7FFB8] text-[#2D7A01] line-through' : 'bg-[var(--color-background)] text-[var(--color-ink)]'
+                }`}>
+                  {formatReadingPlanFull(selectedRefs)}
                 </div>
                 {completedDays.has(selectedKey!) ? (
                   <div className="text-center py-3 bg-[#D7FFB8] rounded-xl text-[#2D7A01] font-extrabold">
@@ -367,19 +359,10 @@ export default function CalendarPage() {
               <h3 className="h-section">今日功課</h3>
               <span className="badge badge-gem ml-auto">{hktToday}</span>
             </div>
-            <div className="space-y-2">
-              {todayRefs.map((ref, i) => (
-                <div key={i} className={`flex items-center gap-3 p-3 rounded-xl ${
-                  completedDays.has(hktToday) ? 'bg-[#D7FFB8]' : 'bg-[#FFF1A8]'
-                }`}>
-                  <span className={`w-7 h-7 rounded-full flex items-center justify-center text-sm font-extrabold ${
-                    completedDays.has(hktToday) ? 'bg-[var(--color-success)] text-white' : 'bg-[var(--color-xp)] text-[var(--color-primary)]'
-                  }`}>
-                    {completedDays.has(hktToday) ? '✓' : i + 1}
-                  </span>
-                  <span className={`font-bold ${completedDays.has(hktToday) ? 'line-through text-muted' : ''}`}>{ref}</span>
-                </div>
-              ))}
+            <div className={`p-3 rounded-xl text-center font-bold ${
+              completedDays.has(hktToday) ? 'bg-[#D7FFB8] text-[#2D7A01] line-through' : 'bg-[#FFF1A8] text-[var(--color-ink)]'
+            }`}>
+              {formatReadingPlanFull(todayRefs)}
             </div>
           </div>
         )}

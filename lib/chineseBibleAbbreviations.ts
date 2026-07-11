@@ -2,7 +2,7 @@
 export const CHINESE_BIBLE_ABBREVIATIONS: { [key: string]: string } = {
   // 舊約
   "創世記": "創",
-  "出埃及記": "出", 
+  "出埃及記": "出",
   "利未記": "利",
   "民數記": "民",
   "申命記": "申",
@@ -10,7 +10,7 @@ export const CHINESE_BIBLE_ABBREVIATIONS: { [key: string]: string } = {
   "士師記": "士",
   "路得記": "得",
   "撒母耳記上": "撒上",
-  "撒母耳記下": "撒下", 
+  "撒母耳記下": "撒下",
   "列王紀上": "王上",
   "列王紀下": "王下",
   "歷代志上": "代上",
@@ -40,7 +40,7 @@ export const CHINESE_BIBLE_ABBREVIATIONS: { [key: string]: string } = {
   "哈該書": "該",
   "撒迦利亞書": "亞",
   "瑪拉基書": "瑪",
-  
+
   // 新約
   "馬太福音": "太",
   "馬可福音": "可",
@@ -57,7 +57,7 @@ export const CHINESE_BIBLE_ABBREVIATIONS: { [key: string]: string } = {
   "帖撒羅尼迦前書": "帖前",
   "帖撒羅尼迦後書": "帖後",
   "提摩太前書": "提前",
-  "提摩太後書": "提後",
+  "提摩太后書": "提後",
   "提多書": "多",
   "腓利門書": "門",
   "希伯來書": "來",
@@ -65,44 +65,98 @@ export const CHINESE_BIBLE_ABBREVIATIONS: { [key: string]: string } = {
   "彼得前書": "彼前",
   "彼得後書": "彼後",
   "約翰一書": "約一",
-  "約翰二書": "約二", 
+  "約翰二書": "約二",
   "約翰三書": "約三",
   "猶大書": "猶",
   "啟示錄": "啟"
 }
 
+// 縮寫 → 全名（用於完整顯示）
+export const BOOK_FULL_NAMES: { [key: string]: string } = Object.fromEntries(
+  Object.entries(CHINESE_BIBLE_ABBREVIATIONS).map(([full, abbr]) => [abbr, full])
+)
+
 // 輔助函數：解析讀經計劃並提取範圍
+// 1. 按卷分組，連續章合併為 "太 1-7" 格式
+// 2. 不同卷之間用 " / " 分隔
 export function parseReadingPlan(readings: string[]): string {
   if (!readings || readings.length === 0) return ''
-  
-  const ranges: string[] = []
-  
-  for (const reading of readings) {
-    // 解析格式如 "創世記 1-23" 或 "創世記 1:1-23:25"
-    const match = reading.match(/^(.+?)\s+(\d+)(?::\d+)?(?:\s*[-~]\s*(\d+)(?::\d+)?)?/)
+
+  // Parse each reading into {book, chapter, raw}
+  const parsed = readings.map(r => {
+    const match = r.match(/^(.+?)\s+(\d+)(?::\d+)?(?:\s*[-~]\s*(\d+)(?::\d+)?)?$/)
     if (match) {
       const bookName = match[1].trim()
-      const startChapter = match[2]
-      const endChapter = match[3] || startChapter
-      
+      const startChap = parseInt(match[2], 10)
+      const endChap = match[3] ? parseInt(match[3], 10) : startChap
       const abbr = CHINESE_BIBLE_ABBREVIATIONS[bookName] || bookName.charAt(0)
-      
-      if (startChapter === endChapter) {
-        ranges.push(`${abbr} ${startChapter}`)
-      } else {
-        ranges.push(`${abbr} ${startChapter}-${endChapter}`)
+      return { book: bookName, abbr, startChap, endChap, raw: r }
+    }
+    // Fallback
+    const parts = r.split(' ')
+    const abbr = CHINESE_BIBLE_ABBREVIATIONS[parts[0]] || parts[0].charAt(0)
+    return { book: parts[0], abbr, startChap: 1, endChap: 1, raw: r }
+  })
+
+  // Group by book, merge consecutive chapters
+  const groups: { book: string, abbr: string, chapters: number[] }[] = []
+  for (const item of parsed) {
+    const last = groups[groups.length - 1]
+    if (last && last.book === item.book) {
+      // Same book — extend
+      for (let c = last.chapters[last.chapters.length - 1] + 1; c <= item.endChap; c++) {
+        last.chapters.push(c)
       }
     } else {
-      // 如果無法解析，使用原始格式但縮寫書名
-      const parts = reading.split(' ')
-      if (parts.length >= 2) {
-        const bookName = parts[0]
-        const abbr = CHINESE_BIBLE_ABBREVIATIONS[bookName] || bookName.charAt(0)
-        ranges.push(`${abbr} ${parts.slice(1).join(' ')}`)
-      }
+      // New book group
+      const chapters: number[] = []
+      for (let c = item.startChap; c <= item.endChap; c++) chapters.push(c)
+      groups.push({ book: item.book, abbr: item.abbr, chapters })
     }
   }
-  
+
+  // Format each group as "太 1-7"
+  const ranges = groups.map(g => {
+    if (g.chapters.length === 1) return `${g.abbr} ${g.chapters[0]}`
+    return `${g.abbr} ${g.chapters[0]}-${g.chapters[g.chapters.length - 1]}`
+  })
+
+  return ranges.join(' / ')
+}
+
+// 完整名稱格式（用於"今日功課"等需要全名的地方）
+export function formatReadingPlanFull(readings: string[]): string {
+  if (!readings || readings.length === 0) return ''
+
+  const parsed = readings.map(r => {
+    const match = r.match(/^(.+?)\s+(\d+)(?::\d+)?(?:\s*[-~]\s*(\d+)(?::\d+)?)?$/)
+    if (match) {
+      const bookName = match[1].trim()
+      const startChap = parseInt(match[2], 10)
+      const endChap = match[3] ? parseInt(match[3], 10) : startChap
+      return { bookName, startChap, endChap }
+    }
+    return { bookName: r, startChap: 1, endChap: 1 }
+  })
+
+  // Group by book
+  const groups: { book: string, chapters: number[] }[] = []
+  for (const item of parsed) {
+    const last = groups[groups.length - 1]
+    if (last && last.book === item.bookName) {
+      for (let c = last.chapters[last.chapters.length - 1] + 1; c <= item.endChap; c++) last.chapters.push(c)
+    } else {
+      const chapters: number[] = []
+      for (let c = item.startChap; c <= item.endChap; c++) chapters.push(c)
+      groups.push({ book: item.bookName, chapters })
+    }
+  }
+
+  const ranges = groups.map(g => {
+    if (g.chapters.length === 1) return `${g.book} ${g.chapters[0]}`
+    return `${g.book} ${g.chapters[0]}-${g.chapters[g.chapters.length - 1]}`
+  })
+
   return ranges.join(' / ')
 }
 
