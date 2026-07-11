@@ -396,7 +396,7 @@ export async function getMyGroups(): Promise<{ groups: GroupWithProgress[]; erro
 // ─── Get pending requests for groups I admin ─────────────────────────────────
 export async function getPendingRequestsForMyAdminGroups(): Promise<PendingRequestInfo[]> {
   const { supabase, user } = await getAuthUser()
-  if (!user) return []
+  if (!user) return [] 
 
   // Find groups where I'm creator (admin)
   const { data: adminGroups } = await supabase.from('groups').select('id, name').eq('created_by', user.id)
