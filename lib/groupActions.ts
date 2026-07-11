@@ -290,13 +290,18 @@ export async function checkInAllMyGroups(dateLocal: string): Promise<{ success: 
 
   let count = 0
   for (const m of memberships) {
-    const { error, data } = await supabase.from('group_checkins').upsert({
-      group_id: m.group_id,
-      user_id: user.id,
-      date_local: dateLocal,
-    }, { onConflict: 'group_id,user_id,date_local' })
-    if (!error) count++
-    else console.error('[checkInAllMyGroups] upsert err:', error.message, 'm=', m)
+    try {
+      const result = await supabase.from('group_checkins').upsert({
+        group_id: m.group_id,
+        user_id: user.id,
+        date_local: dateLocal,
+      }, { onConflict: 'group_id,user_id,date_local' })
+      console.log('[checkInAllMyGroups] upsert result for m=', m.group_id, JSON.stringify(result))
+      if (!result.error) count++
+      else console.error('[checkInAllMyGroups] upsert err:', result.error.message, 'm=', m)
+    } catch (e) {
+      console.error('[checkInAllMyGroups] upsert threw:', e instanceof Error ? e.message : String(e), 'm=', m)
+    }
   }
 
   console.log('[checkInAllMyGroups] done', { dateLocal, groups: count })
