@@ -130,10 +130,12 @@ export default function DashboardPage() {
   // Computed client-side only — avoids SSR hydration mismatch
   const [todayHref, setTodayHref] = useState('#')
   const [todayRefsCount, setTodayRefsCount] = useState(0)
+  const [totalPlanDays, setTotalPlanDays] = useState(0)
   const [loading, setLoading] = useState(true)
   const [fetchErrors, setFetchErrors] = useState<string[]>([])
   // Group feature state
   const [myGroups, setMyGroups] = useState<GroupWithProgress[]>([])
+  const [groupFontSize, setGroupFontSize] = useState<number>(14)
   const [pendingAdminRequests, setPendingAdminRequests] = useState<PendingRequestInfo[]>([])
   const [myPendingRequests, setMyPendingRequests] = useState<Array<{ id: string; group_id: string; group_name: string; created_at: string }>>([])
   const [showCreateGroup, setShowCreateGroup] = useState(false)
@@ -192,12 +194,25 @@ export default function DashboardPage() {
         if (sessionsErr) errors.push(`sessions: ${sessionsErr.message}`)
         setSessions(sessionsData ?? [])
 
-        const { data: global, error: globalErr } = await supabase
-          .from('global_stats')
-          .select('total_chapters_read, active_readers, total_plans_completed')
-          .maybeSingle()
-        if (globalErr) errors.push(`global_stats: ${globalErr.message}`)
-        if (global) setGlobalStats(global as GlobalStats)
+        // Compute live global stats directly from reading_sessions + user_stats
+        const { data: allSessions } = await supabase
+          .from('reading_sessions').select('id, user_id, date_local')
+        const totalChapters = allSessions?.length ?? 0
+
+        // Active readers: distinct users with sessions in last 30 days
+        const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString().split('T')[0]
+        const recentSessions = allSessions?.filter(s => s.date_local >= thirtyDaysAgo) ?? []
+        const activeReaders = new Set(recentSessions.map(s => s.user_id)).size
+
+        const { data: plansData } = await supabase
+          .from('user_stats').select('completed_plans')
+        const totalPlansCompleted = (plansData ?? []).reduce((s, r) => s + (r.completed_plans ?? 0), 0)
+
+        setGlobalStats({
+          total_chapters_read: totalChapters,
+          active_readers: activeReaders,
+          total_plans_completed: totalPlansCompleted,
+        })
 
         // Load bible data for plan computation
         const res = await fetch('/bible-data.json')
@@ -243,6 +258,7 @@ export default function DashboardPage() {
           }
           const hkt = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Hong_Kong' })
           setTodayRefsCount((planMap.get(hkt) ?? []).length)
+          setTotalPlanDays(planMap.size)
         }
 
         if (errors.length > 0) {
@@ -346,7 +362,7 @@ export default function DashboardPage() {
   const xpNeeded = 100
   const hktToday = getHKTDate()
   const todayCompleted = sessions.some(s => s.date_local === hktToday)
-  const totalDays = enrollment?.total_days ?? 0
+  const totalDays = totalPlanDays > 0 ? totalPlanDays : (enrollment?.total_days ?? 0)
   const completedDays = new Set(sessions.map(s => s.date_local)).size
   const planProgress = totalDays > 0 ? Math.round((completedDays / totalDays) * 100) : 0
   const userInitial = (profile?.email || user?.email || '?').charAt(0).toUpperCase()
@@ -514,12 +530,24 @@ export default function DashboardPage() {
               <span className="text-2xl">👥</span>
               <p className="h-section">讀經群組</p>
             </div>
-            <button
-              onClick={() => setShowCreateGroup(true)}
-              className="text-xs px-3 py-1.5 bg-[var(--color-primary)] text-white rounded-full font-bold"
-            >
-              + 建立
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setGroupFontSize(s => Math.max(12, s - 2))}
+                title="縮小字體"
+                className="w-7 h-7 rounded-full bg-gray-100 text-gray-700 font-bold text-xs flex items-center justify-center"
+              >A−</button>
+              <button
+                onClick={() => setGroupFontSize(s => Math.min(24, s + 2))}
+                title="放大字體"
+                className="w-7 h-7 rounded-full bg-gray-100 text-gray-700 font-bold text-xs flex items-center justify-center"
+              >A+</button>
+              <button
+                onClick={() => setShowCreateGroup(true)}
+                className="text-xs px-3 py-1.5 bg-[var(--color-primary)] text-white rounded-full font-bold"
+              >
+                + 建立
+              </button>
+            </div>
           </div>
 
           {/* Admin pending requests */}
@@ -592,7 +620,7 @@ export default function DashboardPage() {
           ) : (
             <div className="space-y-3">
               {myGroups.map((g) => (
-                <div key={g.id} className="border border-gray-100 rounded-xl p-3">
+                <div key={g.id} className="border border-gray-100 rounded-xl p-3" style={{ fontSize: groupFontSize }}>
                   <div className="flex items-start justify-between mb-2">
                     <div className="flex-1 min-w-0">
                       <p className="font-bold text-[var(--color-primary)] truncate">

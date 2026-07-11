@@ -7,7 +7,7 @@ import { formatReadingPlanFull } from '@/lib/chineseBibleAbbreviations'
 import { createClient } from '@/lib/supabase/client'
 import { getBooksMeta, type BookMeta } from '@/lib/bible/lookup'
 import { celebrate } from '@/lib/confetti'
-import { markLessonComplete, unmarkDayComplete, recalcUserStatsAfterCompletion } from '@/lib/actions'
+import { markLessonComplete, unmarkDayComplete, recalcUserStatsAfterCompletion, markPlanComplete } from '@/lib/actions'
 import { checkInAllMyGroups } from '@/lib/groupActions'
 
 interface Enrollment {
@@ -218,6 +218,13 @@ export default function CalendarPage() {
       }
       // Sync group check-ins AFTER inserts + stats
       checkInAllMyGroups(key).catch(e => console.error('[handleCompleteDay] group sync err:', e))
+
+      // Check if plan is now fully completed
+      const newCompletedCount = completedDays.size + 1
+      if (newCompletedCount >= plan.size) {
+        await markPlanComplete(enrollment.id)
+      }
+
       // Stats already recalculated via recalcUserStatsAfterCompletion above
       await celebrate({ type: 'burst', particleCount: Math.min(insertedCount * 30, 180) })
       setSessions(prev => [...prev, ...refs.map((ref, i) => ({

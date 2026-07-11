@@ -368,12 +368,12 @@ export async function getMyGroups(): Promise<{ groups: GroupWithProgress[]; erro
       .filter(m => todaySet.has(m.user_id))
       .map(m => m.display_name)
 
-    // Last 5 days progress
-    const last5 = dates.map(date => {
+    // Last 5 days progress — left=oldest day, right=newest (today)
+    const last5 = [...dates].reverse().map(date => {
       const set = dm.get(date) || new Set()
       const rate = members.length > 0 ? set.size / members.length : 0
       return { date, rate }
-    }).reverse()  // oldest to newest
+    })
 
     return {
       id: g.id,

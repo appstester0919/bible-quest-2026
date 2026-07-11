@@ -260,3 +260,42 @@ export async function unmarkDayComplete(
 
   return { success: true }
 }
+
+/**
+ * Mark a plan enrollment as completed.
+ * Called when user finishes all days in a plan.
+ */
+export async function markPlanComplete(enrollmentId: string): Promise<{ success: boolean; error?: string }> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { success: false, error: 'Not authenticated' }
+
+  // Update enrollment status
+  const { error: enrollError } = await supabase
+    .from('user_plan_enrollments')
+    .update({ status: 'completed', completed_at: new Date().toISOString() })
+    .eq('id', enrollmentId)
+    .eq('user_id', user.id)
+    .eq('status', 'active')
+
+  if (enrollError) {
+    console.error('[markPlanComplete] enrollment update failed:', enrollError)
+    return { success: false, error: enrollError.message }
+  }
+
+  // Increment completed_plans in user_stats
+  const { data: stats } = await supabase
+    .from('user_stats').select('completed_plans').eq('user_id', user.id).single()
+
+  const newCount = (stats?.completed_plans ?? 0) + 1
+  const { error: statsError } = await supabase
+    .from('user_stats')
+    .update({ completed_plans: newCount })
+    .eq('user_id', user.id)
+
+  if (statsError) {
+    console.error('[markPlanComplete] stats update failed:', statsError)
+  }
+
+  return { success: true }
+}
