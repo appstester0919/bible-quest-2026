@@ -53,9 +53,25 @@ export async function markLessonComplete(
     return { success: false, error: error.message, errorDetails: error }
   }
 
-  console.log('[markLessonComplete] INSERT ok, sessionId:', insertResult?.id)
+  return { success: true, sessionId: insertResult?.id }
+}
 
-  // Get all unique dates for this user (sorted ascending)
+/**
+ * Recalculate user_stats after one or more chapters are inserted in a batch.
+ * Call this ONCE after all markLessonComplete calls are done — NOT inside each one.
+ */
+export async function recalcUserStatsAfterCompletion(dateLocal: string): Promise<{
+  success: boolean
+  totalXp: number
+  level: number
+  currentStreak: number
+  longestStreak: number
+  error?: string
+}> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { success: false, totalXp: 0, level: 0, currentStreak: 0, longestStreak: 0, error: 'Not authenticated' }
+
   const { data: allSessions } = await supabase
     .from('reading_sessions')
     .select('date_local')
@@ -64,32 +80,21 @@ export async function markLessonComplete(
 
   const uniqueDates = [...new Set((allSessions ?? []).map(r => r.date_local))].sort()
 
-  // Determine today / yesterday in HKT for streak calculation
   const todayStr = getHKTDateStr()
   const todayHKT = new Date(new Date().toLocaleString('en-CA', { timeZone: 'Asia/Hong_Kong' }))
   const yesterdayStr = getHKTDateStr(new Date(todayHKT.getTime() - 86400000))
 
-  // Calculate current streak:
-  // 1. Find the LAST date in uniqueDates that is ≤ today (skip future outliers like "tomorrow")
-  // 2. If that date is today or yesterday, count backwards through consecutive dates
-  // 3. If the last date is older than yesterday, streak = 0 (broken chain)
   let streak = 0
   if (uniqueDates.length > 0) {
-    // Find the last date that is not in the future
     let lastValidIdx = uniqueDates.length - 1
     for (let i = uniqueDates.length - 1; i >= 0; i--) {
-      if (uniqueDates[i] <= todayStr) {
-        lastValidIdx = i
-        break
-      }
+      if (uniqueDates[i] <= todayStr) { lastValidIdx = i; break }
     }
     const lastDate = uniqueDates[lastValidIdx]
     if (lastDate === todayStr || lastDate === yesterdayStr) {
       streak = 1
       for (let i = lastValidIdx - 1; i >= 0; i--) {
-        const curr = new Date(uniqueDates[i + 1])
-        const prev = new Date(uniqueDates[i])
-        const diffDays = Math.round((curr.getTime() - prev.getTime()) / 86400000)
+        const diffDays = Math.round((new Date(uniqueDates[i + 1]).getTime() - new Date(uniqueDates[i]).getTime()) / 86400000)
         if (diffDays === 1) streak++
         else break
       }
@@ -99,19 +104,12 @@ export async function markLessonComplete(
   const totalXp = uniqueDates.length * 10
   const level = Math.floor(Math.sqrt(totalXp / 100)) + 1
 
-  // Find longest streak across all time
   let longestStreak = streak
   let currentRun = 1
   for (let i = 1; i < uniqueDates.length; i++) {
-    const currDate = new Date(uniqueDates[i])
-    const prevDate = new Date(uniqueDates[i - 1])
-    const diffDays = Math.round((currDate.getTime() - prevDate.getTime()) / 86400000)
-    if (diffDays === 1) {
-      currentRun++
-      longestStreak = Math.max(longestStreak, currentRun)
-    } else {
-      currentRun = 1
-    }
+    const diffDays = Math.round((new Date(uniqueDates[i]).getTime() - new Date(uniqueDates[i - 1]).getTime()) / 86400000)
+    if (diffDays === 1) { currentRun++; longestStreak = Math.max(longestStreak, currentRun) }
+    else currentRun = 1
   }
 
   const { error: statsError } = await supabase
@@ -126,39 +124,12 @@ export async function markLessonComplete(
     .eq('user_id', user.id)
 
   if (statsError) {
-    console.error('[markLessonComplete] stats update failed:', JSON.stringify(statsError))
-  } else {
-    console.log('[markLessonComplete] user_stats updated:', {
-      total_xp: totalXp, level, streak, longestStreak,
-      uniqueDates, lastDate: uniqueDates[uniqueDates.length - 1],
-      todayStr, yesterdayStr
-    })
+    console.error('[recalcUserStatsAfterCompletion] stats update failed:', statsError)
+    return { success: false, totalXp, level, currentStreak: streak, longestStreak, error: statsError.message }
   }
 
-  // Sync group check-ins (so all groups user is in show today's progress)
-  try {
-    const { data: memberships } = await supabase
-      .from('group_members')
-      .select('group_id')
-      .eq('user_id', user.id)
-    if (memberships && memberships.length > 0) {
-      const rows = memberships.map(m => ({
-        group_id: m.group_id,
-        user_id: user.id,
-        date_local: dateLocal,
-      }))
-      // Upsert with conflict on (group_id, user_id, date_local) PRIMARY KEY
-      await supabase
-        .from('group_checkins')
-        .upsert(rows, { onConflict: 'group_id,user_id,date_local' })
-      console.log('[markLessonComplete] group_checkins upserted for', rows.length, 'groups')
-    }
-  } catch (grpErr) {
-    console.error('[markLessonComplete] group_checkins sync failed:', JSON.stringify(grpErr))
-    // non-fatal — user_stats and reading_sessions are primary; group check-in is secondary
-  }
-
-  return { success: true, sessionId: insertResult?.id }
+  console.log('[recalcUserStatsAfterCompletion] ok:', { totalXp, level, streak, longestStreak })
+  return { success: true, totalXp, level, currentStreak: streak, longestStreak }
 }
 
 /**

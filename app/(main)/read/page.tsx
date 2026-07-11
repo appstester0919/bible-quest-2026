@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { markLessonComplete } from '@/lib/actions'
+import { markLessonComplete, recalcUserStatsAfterCompletion } from '@/lib/actions'
 import { checkInAllMyGroups } from '@/lib/groupActions'
 import { useRouter } from 'next/navigation'
 import { getChapter, getBooksMeta, type BookMeta } from '@/lib/bible/lookup'
@@ -381,9 +381,6 @@ export default function ReadPage() {
       return
     }
     setIsCompleting(true)
-    let insertedCount = 0
-    let failedCount = 0
-    let firstError = ''
     try {
       // Insert ALL queued chapters in PARALLEL for speed
       // First chapter gets xp_earned=10 (triggers daily XP award)
@@ -407,18 +404,27 @@ export default function ReadPage() {
       }
 
       if (insertedCount > 0) {
-        // Sync group check-ins (so dashboard group progress updates)
+        // Recalculate stats ONCE after all inserts (not per-chapter)
         const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Hong_Kong' })
+        const stats = await recalcUserStatsAfterCompletion(today)
+        if (!stats.success) {
+          console.error('[handleComplete] stats recalc failed:', stats.error)
+        }
+        // Sync group check-ins AFTER inserts + stats
         await checkInAllMyGroups(today)
         celebrate({ type: 'burst', particleCount: Math.min(insertedCount * 30, 180) })
         const now = new Date()
         const hkt = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Hong_Kong' }))
         setTodaySession({ id: 'new', enrollment_id: enrollment.id, chapter_ref: `${audioQueue[0].book.name} ${audioQueue[0].chapter}`, date_local: hkt.toISOString().split('T')[0] })
-        // XP is awarded ONCE per day for completing the daily goal (not per chapter)
-        const dailyXp = 10
-        const newXp = profile.total_xp + dailyXp
-        const newLevel = Math.floor(Math.sqrt(newXp / 100)) + 1
-        setProfile({ ...profile, total_xp: newXp, level: newLevel })
+        // Update local profile state so XP/level/streak reflect server-calculated values immediately
+        if (stats.success) {
+          setProfile((prev: any) => prev ? {
+            ...prev,
+            total_xp: stats.totalXp,
+            level: stats.level,
+            current_streak: stats.currentStreak,
+          } : prev)
+        }
         if (failedCount > 0) {
           alert(`已記錄 ${insertedCount} 章，但有 ${failedCount} 章失敗：${firstError}`)
         }

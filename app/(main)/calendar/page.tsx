@@ -6,7 +6,7 @@ import 'react-calendar/dist/Calendar.css'
 import { createClient } from '@/lib/supabase/client'
 import { getBooksMeta, type BookMeta } from '@/lib/bible/lookup'
 import { celebrate } from '@/lib/confetti'
-import { markLessonComplete, unmarkDayComplete } from '@/lib/actions'
+import { markLessonComplete, unmarkDayComplete, recalcUserStatsAfterCompletion } from '@/lib/actions'
 import { checkInAllMyGroups } from '@/lib/groupActions'
 
 interface Enrollment {
@@ -198,20 +198,33 @@ export default function CalendarPage() {
 
     setIsCompleting(true)
     try {
-      // Insert all chapters in PARALLEL for speed
+      // Insert all chapters in PARALLEL for speed (INSERT only, no结算)
       const insertPromises = refs.map((ref, i) =>
         markLessonComplete(enrollment.id, ref, i === 0 ? 10 : 0, key)
       )
       const results = await Promise.all(insertPromises)
       const insertedCount = results.filter(r => r.success).length
-      // Sync group check-ins AFTER all chapters are marked
-      if (insertedCount > 0) {
-        checkInAllMyGroups(key).catch(e => console.error('[handleCompleteDay] group sync err:', e))
-      }
       if (insertedCount === 0) {
         alert('寫入失敗')
         setIsCompleting(false)
         return
+      }
+      // Recalculate stats ONCE after all inserts (not per-chapter)
+      const stats = await recalcUserStatsAfterCompletion(key)
+      console.log('[handleCompleteDay] stats recalculated:', stats)
+      if (!stats.success) {
+        console.error('[handleCompleteDay] stats recalc failed:', stats.error)
+      }
+      // Sync group check-ins AFTER inserts + stats
+      checkInAllMyGroups(key).catch(e => console.error('[handleCompleteDay] group sync err:', e))
+      // Update local profile state so dashboard reflects new XP/level immediately
+      if (stats.success) {
+        setProfile?.((prev: any) => prev ? {
+          ...prev,
+          total_xp: stats.totalXp,
+          level: stats.level,
+          current_streak: stats.currentStreak,
+        } : prev)
       }
       await celebrate({ type: 'burst', particleCount: Math.min(insertedCount * 30, 180) })
       setSessions(prev => [...prev, ...refs.map((ref, i) => ({
