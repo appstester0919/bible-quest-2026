@@ -217,15 +217,7 @@ export default function CalendarPage() {
       }
       // Sync group check-ins AFTER inserts + stats
       checkInAllMyGroups(key).catch(e => console.error('[handleCompleteDay] group sync err:', e))
-      // Update local profile state so dashboard reflects new XP/level immediately
-      if (stats.success) {
-        setProfile?.((prev: any) => prev ? {
-          ...prev,
-          total_xp: stats.totalXp,
-          level: stats.level,
-          current_streak: stats.currentStreak,
-        } : prev)
-      }
+      // Stats already recalculated via recalcUserStatsAfterCompletion above
       await celebrate({ type: 'burst', particleCount: Math.min(insertedCount * 30, 180) })
       setSessions(prev => [...prev, ...refs.map((ref, i) => ({
         id: `new-${i}`,
