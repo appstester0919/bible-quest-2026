@@ -6,7 +6,8 @@ import 'react-calendar/dist/Calendar.css'
 import { createClient } from '@/lib/supabase/client'
 import { getBooksMeta, type BookMeta } from '@/lib/bible/lookup'
 import { celebrate } from '@/lib/confetti'
-import { unmarkDayComplete, markLessonComplete } from '@/lib/actions'
+import { markLessonComplete, unmarkDayComplete } from '@/lib/actions'
+import { checkInAllMyGroups } from '@/lib/groupActions'
 
 interface Enrollment {
   id: string
@@ -202,6 +203,11 @@ export default function CalendarPage() {
         const xp = i === 0 ? 10 : 0  // Only first chapter gets XP
         const result = await markLessonComplete(enrollment.id, refs[i], xp, key)
         if (result.success) insertedCount++
+      }
+      // Sync group check-ins AFTER all chapters are marked (fire-and-forget on success)
+      if (insertedCount > 0) {
+        const groupRes = await checkInAllMyGroups(key)
+        console.log('[handleCompleteDay] group check-in synced:', groupRes)
       }
       if (insertedCount === 0) {
         alert('寫入失敗')

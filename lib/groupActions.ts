@@ -282,8 +282,10 @@ export async function checkInAllMyGroups(dateLocal: string): Promise<{ success: 
       date_local: dateLocal,
     }, { onConflict: 'group_id,user_id,date_local' })
     if (!error) count++
+    else console.error('[checkInAllMyGroups] upsert err:', error.message)
   }
 
+  console.log('[checkInAllMyGroups] date=', dateLocal, 'groups=', count)
   return { success: true, count }
 }
 

@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { markLessonComplete } from '@/lib/actions'
+import { checkInAllMyGroups } from '@/lib/groupActions'
 import { useRouter } from 'next/navigation'
 import { getChapter, getBooksMeta, type BookMeta } from '@/lib/bible/lookup'
 import { celebrate } from '@/lib/confetti'
@@ -410,6 +411,9 @@ export default function ReadPage() {
       }
 
       if (insertedCount > 0) {
+        // Sync group check-ins (so dashboard group progress updates)
+        const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Hong_Kong' })
+        await checkInAllMyGroups(today)
         celebrate({ type: 'burst', particleCount: Math.min(insertedCount * 30, 180) })
         const now = new Date()
         const hkt = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Hong_Kong' }))
