@@ -129,7 +129,7 @@ export default function CustomCalendar({ plan, completedDays, selectedDate, onSe
               textAlign: 'center',
               fontSize: '12px',
               fontWeight: 700,
-              color: i === 6 ? '#ef4444' : i === 5 ? '#ef4444' : '#6b7280',
+              color: i === 6 ? '#ef4444' : '#6b7280',
               background: '#f9fafb',
               textTransform: 'uppercase',
             }}
