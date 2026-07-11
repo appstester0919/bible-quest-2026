@@ -266,27 +266,41 @@ export async function deleteGroup(groupId: string): Promise<{ success: boolean; 
 }
 
 // ─── Group daily check-in (called when user completes reading) ────────────────
-export async function checkInAllMyGroups(dateLocal: string): Promise<{ success: boolean; count?: number; error?: string }> {
+export async function checkInAllMyGroups(dateLocal: string): Promise<{ success: boolean; count?: number; error?: string; debug?: unknown }> {
   const { supabase, user } = await getAuthUser()
   if (!user) return { success: false, error: 'Not authenticated' }
 
+  console.log('[checkInAllMyGroups] start', { user_id: user.id, dateLocal })
+
   // Get all groups user is in
-  const { data: memberships } = await supabase.from('group_members').select('group_id').eq('user_id', user.id)
-  if (!memberships || memberships.length === 0) return { success: true, count: 0 }
+  const { data: memberships, error: memErr } = await supabase
+    .from('group_members')
+    .select('group_id')
+    .eq('user_id', user.id)
+
+  console.log('[checkInAllMyGroups] memberships result', {
+    count: memberships?.length ?? 0,
+    memErr: memErr?.message,
+    memberships
+  })
+
+  if (!memberships || memberships.length === 0) {
+    return { success: true, count: 0, debug: 'no memberships found' }
+  }
 
   let count = 0
   for (const m of memberships) {
-    const { error } = await supabase.from('group_checkins').upsert({
+    const { error, data } = await supabase.from('group_checkins').upsert({
       group_id: m.group_id,
       user_id: user.id,
       date_local: dateLocal,
     }, { onConflict: 'group_id,user_id,date_local' })
     if (!error) count++
-    else console.error('[checkInAllMyGroups] upsert err:', error.message)
+    else console.error('[checkInAllMyGroups] upsert err:', error.message, 'm=', m)
   }
 
-  console.log('[checkInAllMyGroups] date=', dateLocal, 'groups=', count)
-  return { success: true, count }
+  console.log('[checkInAllMyGroups] done', { dateLocal, groups: count })
+  return { success: true, count, debug: { memberships } }
 }
 
 // ─── Get my groups with progress ──────────────────────────────────────────────

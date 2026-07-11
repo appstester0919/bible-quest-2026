@@ -207,7 +207,7 @@ export default function CalendarPage() {
       // Sync group check-ins AFTER all chapters are marked (fire-and-forget on success)
       if (insertedCount > 0) {
         const groupRes = await checkInAllMyGroups(key)
-        console.log('[handleCompleteDay] group check-in synced:', groupRes)
+        console.log('[handleCompleteDay] group check-in synced:', JSON.stringify(groupRes))
       }
       if (insertedCount === 0) {
         alert('寫入失敗')
