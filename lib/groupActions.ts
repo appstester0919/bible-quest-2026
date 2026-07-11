@@ -288,24 +288,25 @@ export async function checkInAllMyGroups(dateLocal: string): Promise<{ success: 
     return { success: true, count: 0, debug: 'no memberships found' }
   }
 
-  let count = 0
-  for (const m of memberships) {
+  // Run upserts in parallel for speed
+  const upsertPromises = memberships.map(async (m) => {
     try {
       const result = await supabase.from('group_checkins').upsert({
         group_id: m.group_id,
         user_id: user.id,
         date_local: dateLocal,
       }, { onConflict: 'group_id,user_id,date_local' })
-      console.log('[checkInAllMyGroups] upsert result for m=', m.group_id, JSON.stringify(result))
-      if (!result.error) count++
-      else console.error('[checkInAllMyGroups] upsert err:', result.error.message, 'm=', m)
+      console.log('[checkInAllMyGroups] upsert m=', m.group_id, 'result=', JSON.stringify(result))
+      return { ok: !result.error, error: result.error?.message }
     } catch (e) {
-      console.error('[checkInAllMyGroups] upsert threw:', e instanceof Error ? e.message : String(e), 'm=', m)
+      console.error('[checkInAllMyGroups] upsert threw for m=', m.group_id, e instanceof Error ? e.message : String(e))
+      return { ok: false, error: e instanceof Error ? e.message : String(e) }
     }
-  }
-
-  console.log('[checkInAllMyGroups] done', { dateLocal, groups: count })
-  return { success: true, count, debug: { memberships } }
+  })
+  const upsertResults = await Promise.all(upsertPromises)
+  const count = upsertResults.filter(r => r.ok).length
+  console.log('[checkInAllMyGroups] done', { dateLocal, count, total: memberships.length, results: JSON.stringify(upsertResults) })
+  return { success: true, count, debug: { memberships, upsertResults } }
 }
 
 // ─── Get my groups with progress ──────────────────────────────────────────────
