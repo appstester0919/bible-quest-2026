@@ -506,5 +506,6 @@ export async function updateDisplayName(name: string): Promise<{ success: boolea
   await supabase.from('group_members').update({ display_name: trimmed }).eq('user_id', user.id)
 
   revalidatePath('/settings')
+  revalidatePath('/dashboard')
   return { success: true }
 }
