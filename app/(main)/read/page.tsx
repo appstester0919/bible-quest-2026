@@ -385,24 +385,20 @@ export default function ReadPage() {
     let failedCount = 0
     let firstError = ''
     try {
-      // Insert ALL queued chapters as individual reading records
+      // Insert ALL queued chapters in PARALLEL for speed
       // First chapter gets xp_earned=10 (triggers daily XP award)
       // Subsequent chapters get xp_earned=0 (record only, no extra XP)
-      for (let i = 0; i < audioQueue.length; i++) {
-        const item = audioQueue[i]
+      const insertPromises = audioQueue.map((item, i) => {
         const chapterRef = `${item.book.name} ${item.chapter}`
-        const xp = i === 0 ? 10 : 0  // Only first chapter awards daily XP
-        console.log('[handleComplete] inserting', { enrollment_id: enrollment.id, chapter_ref: chapterRef, xp })
-        const result = await markLessonComplete(enrollment.id, chapterRef, xp)
-        console.log('[handleComplete] markLessonComplete result:', result)
-        if (result.success) {
-          insertedCount++
-        } else {
-          failedCount++
-          if (!firstError) firstError = result.error || 'unknown'
-          console.error('[handleComplete] failed for', chapterRef, result.error)
-        }
-      }
+        const xp = i === 0 ? 10 : 0
+        return markLessonComplete(enrollment.id, chapterRef, xp).then(result => ({
+          success: result.success, chapterRef, error: result.error
+        }))
+      })
+      const insertResults = await Promise.all(insertPromises)
+      const insertedCount = insertResults.filter(r => r.success).length
+      const failedCount = insertResults.filter(r => !r.success).length
+      const firstError = insertResults.find(r => !r.success)?.error || ''
 
       if (failedCount > 0 && insertedCount === 0) {
         alert(`全部寫入失敗：${firstError}`)

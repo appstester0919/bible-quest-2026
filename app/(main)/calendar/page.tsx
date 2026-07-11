@@ -198,16 +198,15 @@ export default function CalendarPage() {
 
     setIsCompleting(true)
     try {
-      let insertedCount = 0
-      for (let i = 0; i < refs.length; i++) {
-        const xp = i === 0 ? 10 : 0  // Only first chapter gets XP
-        const result = await markLessonComplete(enrollment.id, refs[i], xp, key)
-        if (result.success) insertedCount++
-      }
-      // Sync group check-ins AFTER all chapters are marked (fire-and-forget on success)
+      // Insert all chapters in PARALLEL for speed
+      const insertPromises = refs.map((ref, i) =>
+        markLessonComplete(enrollment.id, ref, i === 0 ? 10 : 0, key)
+      )
+      const results = await Promise.all(insertPromises)
+      const insertedCount = results.filter(r => r.success).length
+      // Sync group check-ins AFTER all chapters are marked
       if (insertedCount > 0) {
-        const groupRes = await checkInAllMyGroups(key)
-        console.log('[handleCompleteDay] group check-in synced:', JSON.stringify(groupRes))
+        checkInAllMyGroups(key).catch(e => console.error('[handleCompleteDay] group sync err:', e))
       }
       if (insertedCount === 0) {
         alert('寫入失敗')
