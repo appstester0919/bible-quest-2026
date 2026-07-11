@@ -294,6 +294,31 @@ export default function SettingsPage() {
                 會保留你嘅完成次數，重新計算讀經進度
               </p>
             </>
+          ) : completedPlans > 0 ? (
+            <>
+              <div className="bg-[var(--color-background)] rounded-xl p-4 mb-4 space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-[var(--color-muted)]">當前狀態</span>
+                  <span className="font-bold text-[var(--color-success)]">✅ 計劃已完成</span>
+                </div>
+                <div className="flex justify-between text-sm pt-2 border-t border-[var(--color-muted)]/10">
+                  <span className="text-[var(--color-muted)]">已完成週目</span>
+                  <span className="font-bold text-[var(--color-success)]">
+                    🏆 {completedPlans} 次
+                  </span>
+                </div>
+              </div>
+
+              <a
+                href="/onboarding"
+                className="block w-full py-2.5 px-4 bg-[var(--color-primary)] text-white rounded-xl font-bold text-sm text-center hover:bg-[#374151] transition-all"
+              >
+                🔄 開始新一週目
+              </a>
+              <p className="text-xs text-[var(--color-muted)] mt-2 text-center">
+                按上方按鈕開始新一週目
+              </p>
+            </>
           ) : (
             <a
               href="/onboarding"
