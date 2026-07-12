@@ -48,6 +48,26 @@ export const PARALLEL_TABLE: Record<number, { totalDays: number; nt: number; ot:
   22: { totalDays: 55,  nt: 5,  ot: 17 },
 }
 
+// ─── Sequential nt_ot reading orders ──────────────────────────────────────────
+// User reads ONE testament at a time, then the other.
+// Total days = ceil(nt_chapters / cpd) + ceil(ot_chapters / cpd)
+export type NtOtOrder = 'parallel' | 'nt_then_ot' | 'ot_then_nt'
+
+export const NT_OT_ORDERS: { id: NtOtOrder; label: string; desc: string }[] = [
+  { id: 'parallel',   label: '新舊並行',   desc: '每日新舊兩邊都讀，同時完成' },
+  { id: 'nt_then_ot', label: '先新後舊',   desc: '先讀完新約，再讀舊約' },
+  { id: 'ot_then_nt', label: '先舊後新',   desc: '先讀完舊約，再讀新約' },
+]
+
+/**
+ * Compute total days for sequential nt_ot (one testament at a time).
+ */
+export function getSequentialDays(chaptersPerDay: number, order: 'nt_then_ot' | 'ot_then_nt'): number {
+  const ntDays = Math.ceil(260 / chaptersPerDay)
+  const otDays = Math.ceil(929 / chaptersPerDay)
+  return order === 'nt_then_ot' ? ntDays + otDays : otDays + ntDays
+}
+
 export const DAYS_TABLE: Record<Scope, Record<number, number>> = {
   nt: {
     1: 260,  2: 130, 3: 87,  4: 65,  5: 52,  6: 44,

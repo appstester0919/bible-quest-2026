@@ -9,6 +9,7 @@ export type RedesignPlanInput = {
   startDate: string | null
   ntChapters: number
   otChapters: number
+  ntOtOrder: 'parallel' | 'nt_then_ot' | 'ot_then_nt'
   keepProgress: boolean
 }
 
@@ -18,7 +19,7 @@ export async function redesignPlan(input: RedesignPlanInput): Promise<{ error?: 
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return { error: '請先登入' }
 
-    const { scope, totalDays, startDate, ntChapters, otChapters, keepProgress, oldEnrollmentId } = input
+    const { scope, totalDays, startDate, ntChapters, otChapters, ntOtOrder, keepProgress, oldEnrollmentId } = input
 
     // 1. Read old enrollment to determine effective start_date
     const { data: oldEnrollment, error: oldErr } = await supabase
@@ -58,7 +59,8 @@ export async function redesignPlan(input: RedesignPlanInput): Promise<{ error?: 
     // 4. Build new enrollment
     let readingOrder: string | null = null
     if (scope === 'nt_ot') {
-      readingOrder = `${ntChapters}-${otChapters}`
+      // Parallel: "N-OT" format. Sequential: 'nt_then_ot' / 'ot_then_nt'
+      readingOrder = ntOtOrder === 'parallel' ? `${ntChapters}-${otChapters}` : ntOtOrder
     }
 
     const { data: newEnrollment, error: insertErr } = await supabase

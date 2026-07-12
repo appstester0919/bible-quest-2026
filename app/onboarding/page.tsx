@@ -9,8 +9,11 @@ import {
   DAILY_CHAPTER_OPTIONS,
   DAYS_TABLE,
   PARALLEL_TABLE,
+  NT_OT_ORDERS,
+  NtOtOrder,
   getRequiredDays,
   getEstimatedCompletionDate,
+  getSequentialDays,
 } from '@/lib/bible/scope'
 import { createClient } from '@/lib/supabase/client'
 
@@ -25,7 +28,9 @@ function getMinDate(): string {
   return `${y}-01-01`
 }
 function getToday(): string {
-  return new Date().toISOString().split('T')[0]
+  // Use HK timezone — at midnight HKT, UTC is already previous day,
+  // so toISOString() would block "today" selection.
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Hong_Kong' })
 }
 
 function formatDate(date: Date): string {
@@ -60,6 +65,7 @@ function OnboardingInner() {
 
   const [scope, setScope]         = useState<Scope>('nt')
   const [chaptersPerDay, setChapters] = useState(7)
+  const [ntOtOrder, setNtOtOrder] = useState<NtOtOrder>('parallel')
   const [startDate, setStartDate]  = useState(getToday())
   const [loading, setLoading]     = useState(false)
   const [error, setError]         = useState('')
@@ -104,10 +110,23 @@ function OnboardingInner() {
   const daysTable    = DAYS_TABLE[scope]
   const requiredDays = getRequiredDays(scope, chaptersPerDay)
 
-  const parallelInfo = scope === 'nt_ot' ? PARALLEL_TABLE[chaptersPerDay] : null
-  const ntChapters   = parallelInfo?.nt  ?? 0
-  const otChapters   = parallelInfo?.ot  ?? 0
-  const planDays      = parallelInfo?.totalDays ?? requiredDays
+  // nt_ot: 3 reading orders
+  const parallelInfo = scope === 'nt_ot' && ntOtOrder === 'parallel' ? PARALLEL_TABLE[chaptersPerDay] : null
+
+  // Plan days depends on nt_ot order
+  let planDays: number
+  if (scope === 'nt_ot' && ntOtOrder !== 'parallel') {
+    planDays = getSequentialDays(chaptersPerDay, ntOtOrder as 'nt_then_ot' | 'ot_then_nt')
+  } else if (parallelInfo) {
+    planDays = parallelInfo.totalDays
+  } else {
+    planDays = requiredDays
+  }
+
+  // For parallel: nt/ot per day comes from PARALLEL_TABLE
+  // For sequential: chaptersPerDay goes entirely to whichever testament is active
+  const ntChapters   = scope === 'nt_ot' && ntOtOrder === 'parallel' ? (parallelInfo?.nt ?? 0) : (scope === 'nt_ot' ? chaptersPerDay : Math.ceil(260 / (planDays || 1)))
+  const otChapters   = scope === 'nt_ot' && ntOtOrder === 'parallel' ? (parallelInfo?.ot ?? 0) : 0
 
   const completionDate = getEstimatedCompletionDate(scope, planDays, new Date(startDate + 'T00:00:00'))
 
@@ -130,6 +149,7 @@ function OnboardingInner() {
         startDate,
         ntChapters,
         otChapters,
+        ntOtOrder,
         keepProgress,
       })
       if (result.error) {
@@ -143,8 +163,10 @@ function OnboardingInner() {
       fd.append('scope', scope)
       fd.append('total_days', String(planDays))
       fd.append('start_date', startDate)
-      if (scope === 'nt_ot' && parallelInfo) {
-        fd.append('reading_order', `${ntChapters}-${otChapters}`)
+      if (scope === 'nt_ot') {
+        // Parallel: "N-OT" format. Sequential: 'nt_then_ot' / 'ot_then_nt'
+        const ro = ntOtOrder === 'parallel' ? `${ntChapters}-${otChapters}` : ntOtOrder
+        fd.append('reading_order', ro)
       }
       const result = await completeOnboarding(fd)
       if (result.error) {
@@ -232,6 +254,34 @@ function OnboardingInner() {
             </p>
           </div>
 
+          {/* Reading-order picker — only for nt_ot scope */}
+          {scope === 'nt_ot' && (
+            <div className="bg-white rounded-2xl p-4 shadow-sm">
+              <div className="text-sm font-bold text-[var(--color-primary)] mb-3">
+                🔀 讀經順序
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                {NT_OT_ORDERS.map((o) => (
+                  <button
+                    key={o.id}
+                    onClick={() => setNtOtOrder(o.id)}
+                    className={`py-2 px-2 rounded-xl font-bold text-xs transition-all border-2 ${
+                      ntOtOrder === o.id
+                        ? 'bg-[var(--color-success)]/10 border-[var(--color-success)] text-[var(--color-success)]'
+                        : 'bg-[var(--color-background)] border-[var(--color-muted)]/20 text-[var(--color-primary)] hover:border-[var(--color-muted)]/40'
+                    }`}
+                    title={o.desc}
+                  >
+                    {o.label}
+                  </button>
+                ))}
+              </div>
+              <p className="text-xs text-[var(--color-muted)] mt-2">
+                {NT_OT_ORDERS.find((o) => o.id === ntOtOrder)?.desc}
+              </p>
+            </div>
+          )}
+
           <div className="bg-white rounded-2xl p-4 shadow-sm">
             <div className="text-sm font-bold text-[var(--color-primary)] mb-3">
               📖 每日章數
@@ -281,28 +331,35 @@ function OnboardingInner() {
             ) : (
               <div>
                 <div className="text-xs text-[var(--color-muted)] mb-2">
-                  新舊並行計劃
+                  {ntOtOrder === 'parallel' ? '並行計劃天數' : '順序計劃天數'}
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  {Object.entries(daysTable).map(([n, days]) => (
-                    <div
-                      key={n}
-                      onClick={() => setChapters(Number(n))}
-                      className={`py-2 px-3 rounded-xl text-sm font-bold transition-all cursor-pointer ${
-                        chaptersPerDay === Number(n)
-                          ? 'bg-[var(--color-success)] text-white shadow-[var(--shadow-button)]'
-                          : 'bg-[var(--color-background)] text-[var(--color-muted)] hover:bg-[var(--color-success)]/10'
-                      }`}
-                    >
-                      {n}章（新{parallelInfo?.nt ?? 0}+舊{parallelInfo?.ot ?? 0}）
-                    </div>
-                  ))}
+                  {Object.entries(daysTable).map(([n, days]) => {
+                    // Sequential: show actual total days for THIS order
+                    const actualDays = ntOtOrder === 'parallel'
+                      ? Number(days)
+                      : getSequentialDays(Number(n), ntOtOrder as 'nt_then_ot' | 'ot_then_nt')
+                    const isActive = chaptersPerDay === Number(n)
+                    return (
+                      <div
+                        key={n}
+                        onClick={() => setChapters(Number(n))}
+                        className={`py-2 px-3 rounded-xl text-sm font-bold transition-all cursor-pointer ${
+                          isActive
+                            ? 'bg-[var(--color-success)] text-white shadow-[var(--shadow-button)]'
+                            : 'bg-[var(--color-background)] text-[var(--color-muted)] hover:bg-[var(--color-success)]/10'
+                        }`}
+                      >
+                        {n}章 · {actualDays}天
+                      </div>
+                    )
+                  })}
                 </div>
               </div>
             )}
 
             <div className="pt-3 border-t border-[var(--color-muted)]/10 space-y-1.5">
-              {scope === 'nt_ot' && parallelInfo ? (
+              {scope === 'nt_ot' && ntOtOrder === 'parallel' && parallelInfo ? (
                 <>
                   <div className="flex justify-between text-sm">
                     <span className="text-[var(--color-muted)]">新約章數</span>
@@ -311,6 +368,23 @@ function OnboardingInner() {
                   <div className="flex justify-between text-sm">
                     <span className="text-[var(--color-muted)]">舊約章數</span>
                     <span className="font-bold text-[var(--color-primary)]">{otChapters} 章/天</span>
+                  </div>
+                </>
+              ) : scope === 'nt_ot' ? (
+                <>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-[var(--color-muted)]">讀經順序</span>
+                    <span className="font-bold text-[var(--color-primary)]">
+                      {ntOtOrder === 'nt_then_ot' ? '先新後舊' : ntOtOrder === 'ot_then_nt' ? '先舊後新' : '並行'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-[var(--color-muted)]">新約用時</span>
+                    <span className="font-bold text-[var(--color-primary)]">{Math.ceil(260 / chaptersPerDay)} 天</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-[var(--color-muted)]">舊約用時</span>
+                    <span className="font-bold text-[var(--color-primary)]">{Math.ceil(929 / chaptersPerDay)} 天</span>
                   </div>
                 </>
               ) : (
