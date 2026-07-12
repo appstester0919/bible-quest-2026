@@ -50,21 +50,21 @@ create table public.user_plan_enrollments (
   user_id              uuid not null references public.profiles(id) on delete cascade,
   scope                text not null
                           check (scope in ('nt', 'ot', 'nt_ot')),
-  reading_order        text
-                          check (reading_order in ('nt_ot', 'ot_nt', 'parallel')),
-  -- reading_order nullable: NULL when scope IN ('nt', 'ot')
+  reading_order        text,
+                          -- reading_order: nullable for nt/ot; format "N-OT" for nt_ot (e.g. "7-5" = nt 7ch/day, ot 5ch/day)
   total_days           int  not null
                           check (total_days between 40 and 365),
-  chapters_per_day     int  not null,           -- ceil(scope_chapters / total_days)
+  chapters_per_day     int  not null,
+                          -- ceil(scope_chapters / total_days). scope nt=260, ot=929, nt_ot=1189.
   started_at           timestamptz not null default now(),
   completed_at         timestamptz,
   paused_at            timestamptz,
   status               text not null default 'active'
                           check (status in ('active', 'paused', 'completed', 'abandoned')),
-  -- Defensive: if scope is nt or ot, reading_order must be null
+  -- Defensive: if scope is nt or ot, reading_order must be null; nt_ot requires N-OT format
   check (
     (scope in ('nt', 'ot') and reading_order is null)
-    or (scope = 'nt_ot' and reading_order is not null)
+    or (scope = 'nt_ot' and reading_order is not null and reading_order ~ '^[0-9]+-[0-9]+$')
   )
 );
 

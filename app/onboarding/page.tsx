@@ -7,6 +7,7 @@ import {
   Scope,
   DAILY_CHAPTER_OPTIONS,
   DAYS_TABLE,
+  PARALLEL_TABLE,
   getRequiredDays,
   getEstimatedCompletionDate,
 } from '@/lib/bible/scope'
@@ -52,7 +53,15 @@ export default function OnboardingPage() {
   const dailyOptions = DAILY_CHAPTER_OPTIONS[scope]
   const daysTable    = DAYS_TABLE[scope]
   const requiredDays = getRequiredDays(scope, chaptersPerDay)
-  const completionDate = getEstimatedCompletionDate(scope, requiredDays, new Date(startDate + 'T00:00:00'))
+
+  // For nt_ot: derive nt/ot split from PARALLEL_TABLE using chaptersPerDay (total/day) as key
+  const parallelInfo = scope === 'nt_ot' ? PARALLEL_TABLE[chaptersPerDay] : null
+  const ntChapters   = parallelInfo?.nt  ?? 0
+  const otChapters   = parallelInfo?.ot  ?? 0
+  // For nt_ot display, requiredDays comes from the parallel table
+  const planDays      = parallelInfo?.totalDays ?? requiredDays
+
+  const completionDate = getEstimatedCompletionDate(scope, planDays, new Date(startDate + 'T00:00:00'))
 
   // Reset chapters if current choice isn't in new scope's options
   function handleScopeChange(s: Scope) {
@@ -68,8 +77,11 @@ export default function OnboardingPage() {
     setError('')
     const fd = new FormData()
     fd.append('scope', scope)
-    fd.append('total_days', String(requiredDays))
+    fd.append('total_days', String(planDays))
     fd.append('start_date', startDate)
+    if (scope === 'nt_ot' && parallelInfo) {
+      fd.append('reading_order', `${ntChapters}-${otChapters}`)
+    }
     const result = await completeOnboarding(fd)
     if (result.error) {
       setError(result.error)
@@ -154,35 +166,73 @@ export default function OnboardingPage() {
             </div>
 
             {/* Highlighted days selector */}
-            <div>
-              <div className="text-xs text-[var(--color-muted)] mb-2">
-                計劃天數（揀每日章數後自動計算）
+            {scope !== 'nt_ot' ? (
+              /* NT / OT: show days grid */
+              <div>
+                <div className="text-xs text-[var(--color-muted)] mb-2">
+                  計劃天數（揀每日章數後自動計算）
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {Object.entries(daysTable).map(([chapters, days]) => (
+                    <div
+                      key={chapters}
+                      className={`py-2 px-3 rounded-xl text-sm font-bold transition-all ${
+                        Number(chapters) === chaptersPerDay
+                          ? 'bg-[var(--color-success)] text-white shadow-[var(--shadow-button)]'
+                          : 'bg-[var(--color-background)] text-[var(--color-muted)]'
+                      }`}
+                    >
+                      {days}天
+                    </div>
+                  ))}
+                </div>
               </div>
-              <div className="flex flex-wrap gap-2">
-                {Object.entries(daysTable).map(([chapters, days]) => (
-                  <div
-                    key={chapters}
-                    className={`py-2 px-3 rounded-xl text-sm font-bold transition-all ${
-                      Number(chapters) === chaptersPerDay
-                        ? 'bg-[var(--color-success)] text-white shadow-[var(--shadow-button)]'
-                        : 'bg-[var(--color-background)] text-[var(--color-muted)]'
-                    }`}
-                  >
-                    {days}天
-                  </div>
-                ))}
+            ) : (
+              /* NT_OT: show parallel plan summary */
+              <div>
+                <div className="text-xs text-[var(--color-muted)] mb-2">
+                  新舊並行計劃
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {Object.entries(daysTable).map(([n, days]) => (
+                    <div
+                      key={n}
+                      onClick={() => setChapters(Number(n))}
+                      className={`py-2 px-3 rounded-xl text-sm font-bold transition-all cursor-pointer ${
+                        chaptersPerDay === Number(n)
+                          ? 'bg-[var(--color-success)] text-white shadow-[var(--shadow-button)]'
+                          : 'bg-[var(--color-background)] text-[var(--color-muted)] hover:bg-[var(--color-success)]/10'
+                      }`}
+                    >
+                      {n}章（新{parallelInfo?.nt ?? 0}+舊{parallelInfo?.ot ?? 0}）
+                    </div>
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Stats */}
             <div className="pt-3 border-t border-[var(--color-muted)]/10 space-y-1.5">
-              <div className="flex justify-between text-sm">
-                <span className="text-[var(--color-muted)]">每日章數</span>
-                <span className="font-bold text-[var(--color-primary)]">{chaptersPerDay} 章</span>
-              </div>
+              {scope === 'nt_ot' && parallelInfo ? (
+                <>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-[var(--color-muted)]">新約章數</span>
+                    <span className="font-bold text-[var(--color-primary)]">{ntChapters} 章/天</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-[var(--color-muted)]">舊約章數</span>
+                    <span className="font-bold text-[var(--color-primary)]">{otChapters} 章/天</span>
+                  </div>
+                </>
+              ) : (
+                <div className="flex justify-between text-sm">
+                  <span className="text-[var(--color-muted)]">每日章數</span>
+                  <span className="font-bold text-[var(--color-primary)]">{chaptersPerDay} 章</span>
+                </div>
+              )}
               <div className="flex justify-between text-sm">
                 <span className="text-[var(--color-muted)]">總天數</span>
-                <span className="font-bold text-[var(--color-primary)]">{requiredDays} 天</span>
+                <span className="font-bold text-[var(--color-primary)]">{planDays} 天</span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-[var(--color-muted)]">開始日期</span>

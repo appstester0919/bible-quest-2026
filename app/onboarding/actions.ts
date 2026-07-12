@@ -12,12 +12,28 @@ export async function completeOnboarding(formData: FormData): Promise<{ error?: 
     }
 
     const scope = formData.get('scope') as 'nt' | 'ot' | 'nt_ot'
-    const readingOrder = formData.get('reading_order') as string | null
     const totalDays = parseInt(formData.get('total_days') as string, 10)
     const startDate = formData.get('start_date') as string | null
 
-    const scopeChapters = { nt: 260, ot: 929, nt_ot: 1189 }
-    const chaptersPerDay = Math.ceil(scopeChapters[scope] / totalDays)
+    // For nt_ot: reading_order stores "N-OT" (e.g. "7-5") meaning nt=7 ch/day, ot=5 ch/day
+    // For nt/ot: reading_order is null
+    let readingOrder: string | null = null
+    let ntChapters: number
+    let otChapters: number
+
+    if (scope === 'nt_ot') {
+      readingOrder = formData.get('reading_order') as string
+      // readingOrder format: "N-OT" e.g. "7-5" → nt=7, ot=5
+      const [n, o] = (readingOrder ?? '').split('-').map(Number)
+      ntChapters = n ?? 0
+      otChapters = o ?? 0
+    } else {
+      ntChapters = Math.ceil(260 / totalDays)
+      otChapters = 0
+    }
+
+    // chapters_per_day = nt + ot (total chapters read per day)
+    const chaptersPerDay = ntChapters + otChapters
 
     console.log('[onboarding] insert', { user_id: user.id, scope, totalDays, chaptersPerDay, readingOrder })
 
@@ -40,7 +56,7 @@ export async function completeOnboarding(formData: FormData): Promise<{ error?: 
       .insert({
         user_id: user.id,
         scope,
-        reading_order: readingOrder || null,
+        reading_order: readingOrder, // null for nt/ot; "N-OT" string for nt_ot (e.g. "7-5")
         total_days: totalDays,
         chapters_per_day: chaptersPerDay,
         status: 'active',

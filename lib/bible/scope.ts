@@ -25,10 +25,28 @@ export const SCOPE_LABELS: Record<Scope, string> = {
 export const DAILY_CHAPTER_OPTIONS: Record<Scope, number[]> = {
   nt:     [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 15, 20],
   ot:     [3, 4, 5, 6, 7, 8, 9, 10, 15, 17, 20],
-  nt_ot:  [4, 8, 12, 16, 20],
+  nt_ot:  [4, 5, 6, 7, 8, 9, 10, 12, 14, 16, 18, 20, 22],
 }
 
 // ─── Pre-computed required days per scope & daily chapters ─────────────────
+
+// ─── Parallel-plan lookup for nt_ot scope ──────────────────────────────────────
+// Key: total chapters/day (N = nt_ch + ot_ch). Value: { totalDays, nt_ch, ot_ch }
+export const PARALLEL_TABLE: Record<number, { totalDays: number; nt: number; ot: number }> = {
+  4:  { totalDays: 310, nt: 1,  ot: 3  },
+  5:  { totalDays: 260, nt: 1,  ot: 4  },
+  6:  { totalDays: 233, nt: 2,  ot: 4  },
+  7:  { totalDays: 186, nt: 2,  ot: 5  },
+  8:  { totalDays: 155, nt: 2,  ot: 6  },
+  9:  { totalDays: 133, nt: 2,  ot: 7  },
+  10: { totalDays: 130, nt: 2,  ot: 8  },
+  12: { totalDays: 104, nt: 3,  ot: 9  },
+  14: { totalDays: 87,  nt: 3,  ot: 11 },
+  16: { totalDays: 78,  nt: 4,  ot: 12 },
+  18: { totalDays: 67,  nt: 4,  ot: 14 },
+  20: { totalDays: 62,  nt: 5,  ot: 15 },
+  22: { totalDays: 55,  nt: 5,  ot: 17 },
+}
 
 export const DAYS_TABLE: Record<Scope, Record<number, number>> = {
   nt: {
@@ -39,9 +57,9 @@ export const DAYS_TABLE: Record<Scope, Record<number, number>> = {
     3: 310, 4: 233, 5: 186, 6: 155, 7: 133, 8: 117,
     9: 104, 10: 93, 15: 62, 17: 55, 20: 47,
   },
-  nt_ot: {
-    4: 298, 8: 149, 12: 99, 16: 75, 20: 60,
-  },
+  nt_ot: Object.fromEntries(
+    Object.entries(PARALLEL_TABLE).map(([n, v]) => [Number(n), v.totalDays])
+  ),
 }
 
 /**
