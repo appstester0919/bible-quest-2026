@@ -1,5 +1,6 @@
 'use client'
 
+import { Suspense } from 'react'
 import { useState, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { completeOnboarding, redesignPlan } from './actions'
@@ -45,6 +46,14 @@ type OldEnrollment = {
 }
 
 export default function OnboardingPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center text-[var(--color-muted)]">載入中...</div>}>
+      <OnboardingInner />
+    </Suspense>
+  )
+}
+
+function OnboardingInner() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const isRedesign = searchParams.get('mode') === 'redesign'
