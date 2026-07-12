@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { getBooksMeta, type BookMeta } from '@/lib/bible/lookup'
+import { getRequiredDays, type Scope } from '@/lib/bible/scope'
 import {
   getMyGroups,
   getPendingRequestsForMyAdminGroups,
@@ -362,7 +363,7 @@ export default function DashboardPage() {
   const xpNeeded = 100
   const hktToday = getHKTDate()
   const todayCompleted = sessions.some(s => s.date_local === hktToday)
-  const totalDays = totalPlanDays > 0 ? totalPlanDays : (enrollment?.total_days ?? 0)
+  const totalDays = totalPlanDays > 0 ? totalPlanDays : (enrollment ? getRequiredDays(enrollment.scope as Scope, enrollment.chapters_per_day) : 0)
   const completedDays = new Set(sessions.map(s => s.date_local)).size
   const planProgress = totalDays > 0 ? Math.round((completedDays / totalDays) * 100) : 0
   const userInitial = (profile?.email || user?.email || '?').charAt(0).toUpperCase()

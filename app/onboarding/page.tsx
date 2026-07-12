@@ -95,7 +95,7 @@ function OnboardingInner() {
           .from('reading_sessions')
           .select('*', { count: 'exact', head: true })
           .eq('enrollment_id', enrollment.id)
-        setOldProgress({ read: count ?? 0, total: enrollment.total_days * enrollment.chapters_per_day })
+        setOldProgress({ read: count ?? 0, total: getRequiredDays(enrollment.scope as Scope, enrollment.chapters_per_day) * enrollment.chapters_per_day })
       }
     })()
   }, [isRedesign])
@@ -173,7 +173,7 @@ function OnboardingInner() {
               <div className="text-sm font-bold text-amber-900">📌 當前計劃</div>
               <div className="text-xs text-amber-800 space-y-0.5">
                 <div>範圍：{oldEnrollment.scope === 'nt' ? '新約' : oldEnrollment.scope === 'ot' ? '舊約' : '新舊約'}</div>
-                <div>每日 {oldEnrollment.chapters_per_day} 章 · 共 {oldEnrollment.total_days} 天</div>
+                <div>每日 {oldEnrollment.chapters_per_day} 章 · 共 {getRequiredDays(oldEnrollment.scope, oldEnrollment.chapters_per_day)} 天</div>
                 {oldProgress && (
                   <div>已完成 {oldProgress.read} 章 / {oldProgress.total} 章</div>
                 )}

@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { subscribeToPush, unsubscribeFromPush, getPushPermissionStatus } from '@/lib/push'
 import { updateDisplayName } from '@/lib/groupActions'
+import { getRequiredDays } from '@/lib/bible/scope'
+import type { Scope } from '@/lib/bible/scope'
 
 const REMINDER_TIMES = [
   { value: '07:00', label: '早上 7:00' },
@@ -273,7 +275,9 @@ export default function SettingsPage() {
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-[var(--color-muted)]">總天數</span>
-                  <span className="font-bold text-[var(--color-primary)]">{currentEnrollment.total_days} 天</span>
+                  <span className="font-bold text-[var(--color-primary)]">
+                    {getRequiredDays(currentEnrollment.scope as Scope, currentEnrollment.chapters_per_day)} 天
+                  </span>
                 </div>
                 <div className="flex justify-between text-sm pt-2 border-t border-[var(--color-muted)]/10">
                   <span className="text-[var(--color-muted)]">已完成週目</span>
