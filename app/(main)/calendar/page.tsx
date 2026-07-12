@@ -6,6 +6,7 @@ import 'react-calendar/dist/Calendar.css'
 import { formatReadingPlanFull } from '@/lib/chineseBibleAbbreviations'
 import { createClient } from '@/lib/supabase/client'
 import { getBooksMeta, type BookMeta } from '@/lib/bible/lookup'
+import { generateReadingPlan } from '@/lib/bible/planGenerator'
 import { celebrate } from '@/lib/confetti'
 import { markLessonComplete, unmarkDayComplete, recalcUserStatsAfterCompletion, markPlanComplete } from '@/lib/actions'
 import { checkInAllMyGroups } from '@/lib/groupActions'
@@ -48,48 +49,8 @@ function getHKToday(): Date {
 }
 
 function buildPlan(enrollment: Enrollment, books: BookMeta[]): Map<string, string[]> {
-  const plan = new Map<string, string[]>()
-  const scopeBooks = enrollment.scope === 'nt'
-    ? books.filter((_, i) => i >= 39)
-    : enrollment.scope === 'ot'
-    ? books.filter((_, i) => i < 39)
-    : books
-
-  let bookIdx = 0
-  let chapterInBook = 1
-  let start: Date
-  if (enrollment.started_at) {
-    const [y, m, d] = enrollment.started_at.split('T')[0].split('-').map(Number)
-    start = new Date(y, m - 1, d)
-  } else if (enrollment.created_at) {
-    const [y, m, d] = enrollment.created_at.split('T')[0].split('-').map(Number)
-    start = new Date(y, m - 1, d)
-  } else {
-    start = getHKToday()
-  }
-
-  let currentStr = toHKDateString(start)
-  const MAX_DAYS = 400 // generate up to 400 days of plan
-
-  for (let day = 0; day < MAX_DAYS && bookIdx < scopeBooks.length; day++) {
-    const dayRefs: string[] = []
-    for (let i = 0; i < enrollment.chapters_per_day && bookIdx < scopeBooks.length; i++) {
-      const book = scopeBooks[bookIdx]
-      dayRefs.push(`${book.name} ${chapterInBook}`)
-      chapterInBook++
-      if (chapterInBook > book.chapters) {
-        bookIdx++
-        chapterInBook = 1
-      }
-    }
-    plan.set(currentStr, dayRefs)
-    // Advance by one day (local HK date)
-    const [cy, cm, cd] = currentStr.split('-').map(Number)
-    const next = new Date(cy, cm - 1, cd + 1)
-    currentStr = toHKDateString(next)
-  }
-
-  return plan
+  // Delegate to the shared plan generator — handles all reading_order modes.
+  return generateReadingPlan(enrollment, books, 400)
 }
 
 export default function CalendarPage() {

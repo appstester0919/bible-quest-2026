@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { getBooksMeta, type BookMeta } from '@/lib/bible/lookup'
 import { getRequiredDays, type Scope } from '@/lib/bible/scope'
+import { generateReadingPlan } from '@/lib/bible/planGenerator'
 import {
   getMyGroups,
   getPendingRequestsForMyAdminGroups,
@@ -35,6 +36,7 @@ interface Enrollment {
   status: string
   started_at?: string
   created_at?: string
+  reading_order?: string | null
 }
 
 interface ReadingSession {
@@ -180,7 +182,7 @@ export default function DashboardPage() {
 
         const { data: enrollmentsData, error } = await supabase
           .from('user_plan_enrollments')
-          .select('id, scope, chapters_per_day, total_days, status, started_at')
+          .select('id, scope, chapters_per_day, total_days, status, started_at, reading_order')
           .eq('user_id', authUser.id)
           .eq('status', 'active')
           .order('started_at', { ascending: false })
@@ -227,36 +229,10 @@ export default function DashboardPage() {
 
         // Count today's refs for display
         if (!error && enrollmentsData && booksMeta.length > 0) {
-          const scopeBooks = enrollmentsData.scope === 'nt'
-            ? booksMeta.filter((_, i) => i >= 39)
-            : enrollmentsData.scope === 'ot'
-            ? booksMeta.filter((_, i) => i < 39)
-            : booksMeta
-
-          const planMap = new Map<string, string[]>()
-          let bookIdx = 0
-          let chapterInBook = 1
-          let start: Date
-          if (enrollmentsData.started_at) {
-            const [y, m, d] = enrollmentsData.started_at.split('T')[0].split('-').map(Number)
-            start = new Date(y, m - 1, d)
-          } else {
-            const [y, mo, da] = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Hong_Kong' }).split('-').map(Number)
-            start = new Date(y, mo - 1, da)
-          }
-          const current = new Date(start)
-          for (let day = 0; day < 730 && bookIdx < scopeBooks.length; day++) {
-            const refs: string[] = []
-            for (let i = 0; i < enrollmentsData.chapters_per_day && bookIdx < scopeBooks.length; i++) {
-              const book = scopeBooks[bookIdx]
-              refs.push(`${book.name} ${chapterInBook}`)
-              chapterInBook++
-              if (chapterInBook > book.chapters) { bookIdx++; chapterInBook = 1 }
-            }
-            const key = current.toLocaleDateString('en-CA', { timeZone: 'Asia/Hong_Kong' })
-            planMap.set(key, refs)
-            current.setDate(current.getDate() + 1)
-          }
+          // Use shared plan generator so all views (dashboard / calendar / lesson card)
+          // see the SAME chapter schedule — especially for nt_ot plans with
+          // parallel / nt_then_ot / ot_then_nt reading orders.
+          const planMap = generateReadingPlan(enrollmentsData, booksMeta, 400)
           const hkt = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Hong_Kong' })
           setTodayRefsCount((planMap.get(hkt) ?? []).length)
           setTotalPlanDays(planMap.size)

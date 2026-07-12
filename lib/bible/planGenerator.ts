@@ -1,0 +1,221 @@
+// ============================================================================
+// Reading plan generator — single source of truth for which chapters to read
+// on each calendar date, given an enrollment's scope + reading_order.
+//
+// Handles 4 reading modes:
+//   1. scope = 'nt'                          → read NT chapters linearly
+//   2. scope = 'ot'                          → read OT chapters linearly
+//   3. scope = 'nt_ot', order = 'parallel'  → daily split (e.g. NT 2 + OT 5)
+//   4. scope = 'nt_ot', order = 'nt_then_ot' → finish all NT, then all OT
+//   5. scope = 'nt_ot', order = 'ot_then_nt' → finish all OT, then all NT
+//
+// For mode 3 (parallel): reading_order stores "N-OT" format (e.g. "2-5")
+// ============================================================================
+
+export type BookMeta = {
+  name: string          // e.g. "創世記"
+  abbr: string          // e.g. "創"
+  /** 0-based canonical index (創 = 0, …, 瑪 = 38, 太 = 39, …, 啓 = 64) */
+  index: number
+  chapters: number
+}
+
+export type EnrollmentLite = {
+  scope: 'nt' | 'ot' | 'nt_ot'
+  chapters_per_day: number
+  reading_order?: string | null  // for nt_ot: "2-5" / "nt_then_ot" / "ot_then_nt"
+  started_at?: string | null
+}
+
+function toHKDateString(date: Date): string {
+  return date.toLocaleDateString('en-CA', { timeZone: 'Asia/Hong_Kong' })
+}
+
+function advanceDate(date: Date, days: number): Date {
+  const next = new Date(date)
+  next.setDate(next.getDate() + days)
+  return next
+}
+
+/**
+ * Parse reading_order for parallel mode → { nt, ot } chapters per day.
+ * Returns null if not parallel / not parseable.
+ */
+function parseParallelSplit(readingOrder: string | null): { nt: number; ot: number } | null {
+  if (!readingOrder) return null
+  const m = readingOrder.match(/^(\d+)-(\d+)$/)
+  if (!m) return null
+  return { nt: Number(m[1]), ot: Number(m[2]) }
+}
+
+/**
+ * Generate the full reading plan map: date_string → chapter refs.
+ *
+ * @param enrollment  - the active plan enrollment
+ * @param books       - full bible book list (65 books, OT first)
+ * @param maxDays     - cap to prevent infinite loops (default 400)
+ */
+export function generateReadingPlan(
+  enrollment: EnrollmentLite,
+  books: BookMeta[],
+  maxDays = 400
+): Map<string, string[]> {
+  const plan = new Map<string, string[]>()
+
+  // ── Start date ──────────────────────────────────────────────────────────
+  const start = enrollment.started_at
+    ? new Date(enrollment.started_at.split('T')[0] + 'T00:00:00')
+    : new Date()
+
+  // ── Mode 1 & 2: linear single-testament ─────────────────────────────────
+  if (enrollment.scope === 'nt' || enrollment.scope === 'ot') {
+    const scopeBooks = enrollment.scope === 'nt'
+      ? books.filter((b) => b.index >= 39)
+      : books.filter((b) => b.index < 39)
+
+    let bookIdx = 0
+    let chapterInBook = 1
+    let date = new Date(start)
+
+    for (let day = 0; day < maxDays && bookIdx < scopeBooks.length; day++) {
+      const refs: string[] = []
+      for (let i = 0; i < enrollment.chapters_per_day && bookIdx < scopeBooks.length; i++) {
+        const book = scopeBooks[bookIdx]
+        refs.push(`${book.name} ${chapterInBook}`)
+        chapterInBook++
+        if (chapterInBook > book.chapters) {
+          bookIdx++
+          chapterInBook = 1
+        }
+      }
+      plan.set(toHKDateString(date), refs)
+      date = advanceDate(date, 1)
+    }
+    return plan
+  }
+
+  // ── Mode 3+: nt_ot ──────────────────────────────────────────────────────
+  const otBooks = books.filter((b) => b.index < 39)
+  const ntBooks = books.filter((b) => b.index >= 39)
+
+  const ro: string | null = enrollment.reading_order ?? null
+  const split = parseParallelSplit(ro)
+  const order = ro
+
+  let date = new Date(start)
+
+  if (split) {
+    // ── Parallel: each day reads N chapters from NT + M chapters from OT ──
+    // The NT/OT loops run independently — they both finish around the same day
+    // when chapters_per_day = N + M.
+    let ntBookIdx = 0, ntChapter = 1, ntRemaining = 260
+    let otBookIdx = 0, otChapter = 1, otRemaining = 929
+
+    for (let day = 0; day < maxDays && (ntRemaining > 0 || otRemaining > 0); day++) {
+      const refs: string[] = []
+
+      // NT today
+      let ntToday = Math.min(split.nt, ntRemaining)
+      for (let i = 0; i < ntToday && ntBookIdx < ntBooks.length; i++) {
+        const book = ntBooks[ntBookIdx]
+        refs.push(`${book.name} ${ntChapter}`)
+        ntChapter++
+        if (ntChapter > book.chapters) {
+          ntBookIdx++
+          ntChapter = 1
+        }
+      }
+      ntRemaining -= ntToday
+
+      // OT today
+      let otToday = Math.min(split.ot, otRemaining)
+      for (let i = 0; i < otToday && otBookIdx < otBooks.length; i++) {
+        const book = otBooks[otBookIdx]
+        refs.push(`${book.name} ${otChapter}`)
+        otChapter++
+        if (otChapter > book.chapters) {
+          otBookIdx++
+          otChapter = 1
+        }
+      }
+      otRemaining -= otToday
+
+      plan.set(toHKDateString(date), refs)
+      date = advanceDate(date, 1)
+    }
+    return plan
+  }
+
+  if (order === 'nt_then_ot' || order === 'ot_then_nt') {
+    // ── Sequential: finish first testament, then second ──────────────────
+    const first  = order === 'nt_then_ot' ? ntBooks : otBooks
+    const second = order === 'nt_then_ot' ? otBooks : ntBooks
+    const firstTotal  = order === 'nt_then_ot' ? 260 : 929
+    const secondTotal = order === 'nt_then_ot' ? 929 : 260
+
+    // Phase 1: first testament
+    let bookIdx = 0
+    let chapterInBook = 1
+    let remaining = firstTotal
+
+    while (remaining > 0 && bookIdx < first.length && plan.size < maxDays) {
+      const refs: string[] = []
+      const today = Math.min(enrollment.chapters_per_day, remaining)
+      for (let i = 0; i < today && bookIdx < first.length; i++) {
+        const book = first[bookIdx]
+        refs.push(`${book.name} ${chapterInBook}`)
+        chapterInBook++
+        if (chapterInBook > book.chapters) {
+          bookIdx++
+          chapterInBook = 1
+        }
+      }
+      remaining -= today
+      plan.set(toHKDateString(date), refs)
+      date = advanceDate(date, 1)
+    }
+
+    // Phase 2: second testament
+    bookIdx = 0
+    chapterInBook = 1
+    remaining = secondTotal
+
+    while (remaining > 0 && bookIdx < second.length && plan.size < maxDays) {
+      const refs: string[] = []
+      const today = Math.min(enrollment.chapters_per_day, remaining)
+      for (let i = 0; i < today && bookIdx < second.length; i++) {
+        const book = second[bookIdx]
+        refs.push(`${book.name} ${chapterInBook}`)
+        chapterInBook++
+        if (chapterInBook > book.chapters) {
+          bookIdx++
+          chapterInBook = 1
+        }
+      }
+      remaining -= today
+      plan.set(toHKDateString(date), refs)
+      date = advanceDate(date, 1)
+    }
+    return plan
+  }
+
+  // Fallback (legacy data without reading_order): linear NT+OT
+  const scopeBooks = books
+  let bookIdx = 0
+  let chapterInBook = 1
+  for (let day = 0; day < maxDays && bookIdx < scopeBooks.length; day++) {
+    const refs: string[] = []
+    for (let i = 0; i < enrollment.chapters_per_day && bookIdx < scopeBooks.length; i++) {
+      const book = scopeBooks[bookIdx]
+      refs.push(`${book.name} ${chapterInBook}`)
+      chapterInBook++
+      if (chapterInBook > book.chapters) {
+        bookIdx++
+        chapterInBook = 1
+      }
+    }
+    plan.set(toHKDateString(date), refs)
+    date = advanceDate(date, 1)
+  }
+  return plan
+}
