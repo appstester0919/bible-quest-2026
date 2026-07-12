@@ -33,7 +33,7 @@ export const DAILY_CHAPTER_OPTIONS: Record<Scope, number[]> = {
 export const DAYS_TABLE: Record<Scope, Record<number, number>> = {
   nt: {
     1: 260,  2: 130, 3: 87,  4: 65,  5: 52,  6: 44,
-    7: 37,   8: 33,  9: 29, 10: 26, 15: 18, 20: 13,
+    7: 38,   8: 33,  9: 29, 10: 26, 15: 18, 20: 13,
   },
   ot: {
     3: 310, 4: 233, 5: 186, 6: 155, 7: 133, 8: 117,
