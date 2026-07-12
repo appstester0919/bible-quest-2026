@@ -14,6 +14,7 @@ export async function completeOnboarding(formData: FormData): Promise<{ error?: 
     const scope = formData.get('scope') as 'nt' | 'ot' | 'nt_ot'
     const readingOrder = formData.get('reading_order') as string | null
     const totalDays = parseInt(formData.get('total_days') as string, 10)
+    const startDate = formData.get('start_date') as string | null
 
     const scopeChapters = { nt: 260, ot: 929, nt_ot: 1189 }
     const chaptersPerDay = Math.ceil(scopeChapters[scope] / totalDays)
@@ -43,6 +44,7 @@ export async function completeOnboarding(formData: FormData): Promise<{ error?: 
         total_days: totalDays,
         chapters_per_day: chaptersPerDay,
         status: 'active',
+        started_at: startDate ? new Date(startDate + 'T00:00:00').toISOString() : new Date().toISOString(),
       })
       .select()
       .single()
