@@ -2,6 +2,97 @@
 
 import { createClient } from '@/lib/supabase/server'
 
+export type RedesignPlanInput = {
+  oldEnrollmentId: string
+  scope: 'nt' | 'ot' | 'nt_ot'
+  totalDays: number
+  startDate: string | null
+  ntChapters: number
+  otChapters: number
+  keepProgress: boolean
+}
+
+export async function redesignPlan(input: RedesignPlanInput): Promise<{ error?: string; newEnrollmentId?: string }> {
+  try {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return { error: '請先登入' }
+
+    const { scope, totalDays, startDate, ntChapters, otChapters, keepProgress, oldEnrollmentId } = input
+
+    // 1. Read old enrollment to determine effective start_date
+    const { data: oldEnrollment, error: oldErr } = await supabase
+      .from('user_plan_enrollments')
+      .select('id, started_at, scope, chapters_per_day, total_days')
+      .eq('id', oldEnrollmentId)
+      .eq('user_id', user.id)
+      .single()
+
+    if (oldErr || !oldEnrollment) {
+      return { error: '舊計劃不存在' }
+    }
+
+    // 2. Determine started_at
+    //    If keepProgress: keep the OLD started_at so day-counter continues
+    //    Else: use the new startDate (or today)
+    let startedAt: string
+    if (keepProgress) {
+      startedAt = oldEnrollment.started_at
+    } else {
+      const d = startDate ? new Date(startDate + 'T00:00:00') : new Date()
+      startedAt = d.toISOString()
+    }
+
+    // 3. Mark OLD enrollment as 'abandoned' (preserves reading_sessions FK)
+    const { error: archiveErr } = await supabase
+      .from('user_plan_enrollments')
+      .update({ status: 'abandoned' })
+      .eq('id', oldEnrollmentId)
+      .eq('user_id', user.id)
+
+    if (archiveErr) {
+      console.error('[redesignPlan] archive old failed:', archiveErr)
+      return { error: `標記舊計劃失敗: ${archiveErr.message}` }
+    }
+
+    // 4. Build new enrollment
+    let readingOrder: string | null = null
+    if (scope === 'nt_ot') {
+      readingOrder = `${ntChapters}-${otChapters}`
+    }
+
+    const { data: newEnrollment, error: insertErr } = await supabase
+      .from('user_plan_enrollments')
+      .insert({
+        user_id: user.id,
+        scope,
+        reading_order: readingOrder,
+        total_days: totalDays,
+        chapters_per_day: ntChapters + otChapters,
+        status: 'active',
+        started_at: startedAt,
+      })
+      .select()
+      .single()
+
+    if (insertErr) {
+      console.error('[redesignPlan] insert new failed:', insertErr)
+      // Rollback: restore old enrollment to active
+      await supabase
+        .from('user_plan_enrollments')
+        .update({ status: 'active' })
+        .eq('id', oldEnrollmentId)
+      return { error: `建立新計劃失敗: ${insertErr.message}` }
+    }
+
+    console.log('[redesignPlan] success:', { oldId: oldEnrollmentId, newId: newEnrollment.id, keepProgress })
+    return { newEnrollmentId: newEnrollment.id }
+  } catch (err) {
+    console.error('[redesignPlan] fatal:', err)
+    return { error: `系統錯誤: ${String(err)}` }
+  }
+}
+
 export async function completeOnboarding(formData: FormData): Promise<{ error?: string }> {
   try {
     const supabase = await createClient()

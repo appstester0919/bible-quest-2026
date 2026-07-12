@@ -255,7 +255,7 @@ export default function SettingsPage() {
         <div className="bg-white rounded-2xl p-5 shadow-sm">
           <h2 className="text-lg font-bold text-[var(--color-primary)] mb-1">📖 讀經計劃</h2>
           <p className="text-sm text-[var(--color-muted)] mb-4">
-            查看或重啟你的讀經計劃
+            查看或修改你的讀經計劃
           </p>
 
           {currentEnrollment ? (
@@ -283,15 +283,26 @@ export default function SettingsPage() {
                 </div>
               </div>
 
+              {/* Redesign plan — change scope or daily chapters */}
+              <a
+                href="/onboarding?mode=redesign"
+                className="block w-full py-2.5 px-4 bg-[var(--color-success)] text-white rounded-xl font-bold text-sm text-center hover:bg-[#46A302] transition-all"
+              >
+                ⚙️ 重新設計計劃
+              </a>
+              <p className="text-xs text-[var(--color-muted)] mt-1.5 text-center">
+                改變範圍或每日章數
+              </p>
+
               <button
                 onClick={() => setConfirmShow(true)}
                 disabled={updatingPlan}
-                className="w-full py-2.5 px-4 bg-[var(--color-primary)] text-white rounded-xl font-bold text-sm hover:bg-[#374151] active:translate-y-0.5 transition-all disabled:opacity-50"
+                className="mt-3 w-full py-2.5 px-4 bg-[var(--color-primary)] text-white rounded-xl font-bold text-sm hover:bg-[#374151] active:translate-y-0.5 transition-all disabled:opacity-50"
               >
                 🔄 重新開始新一週目
               </button>
-              <p className="text-xs text-[var(--color-muted)] mt-2 text-center">
-                會保留你嘅完成次數，重新計算讀經進度
+              <p className="text-xs text-[var(--color-muted)] mt-1.5 text-center">
+                同樣計劃重新讀一次
               </p>
             </>
           ) : completedPlans > 0 ? (
