@@ -74,7 +74,7 @@ export async function recalcUserStatsAfterCompletion(dateLocal: string): Promise
 
   const { data: allSessions } = await supabase
     .from('reading_sessions')
-    .select('date_local')
+    .select('date_local, xp_earned')
     .eq('user_id', user.id)
     .order('date_local', { ascending: true })
 
@@ -101,7 +101,10 @@ export async function recalcUserStatsAfterCompletion(dateLocal: string): Promise
     }
   }
 
-  const totalXp = uniqueDates.length * 10
+  // XP model: sum of xp_earned across all reading_sessions.
+// Currently each chapter is worth 10 XP (set in calendar handleCompleteDay).
+// Level = floor(sqrt(total_xp / 100)) + 1 → 100/400/900/1600... for L2/L3/L4/L5
+  const totalXp = (allSessions ?? []).reduce((sum, s) => sum + (s.xp_earned || 0), 0)
   const level = Math.floor(Math.sqrt(totalXp / 100)) + 1
 
   let longestStreak = streak
@@ -202,8 +205,8 @@ export async function unmarkDayComplete(
     }
   }
 
-  // XP = number of unique days completed * 10
-  const totalXp = uniqueDates.length * 10
+  // XP = sum of xp_earned across all remaining reading_sessions
+  const totalXp = (remaining ?? []).reduce((sum, s) => sum + (s.xp_earned || 0), 0)
   const level = Math.floor(Math.sqrt(totalXp / 100)) + 1
 
   console.log('[unmarkDayComplete] recalculated:', { uniqueDates, streak, totalXp, level, todayStr, yesterdayStr })

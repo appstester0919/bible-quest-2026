@@ -170,7 +170,9 @@ export default function CalendarPage() {
     try {
       // Insert all chapters in PARALLEL for speed (INSERT only, no结算)
       const insertPromises = refs.map((ref, i) =>
-        markLessonComplete(enrollment.id, ref, i === 0 ? 10 : 0, key)
+        // Each chapter worth 10 XP — XP scales with effort, so finishing a
+        // day with 10 chapters gives 100 XP (vs old model: only 10 XP / day).
+        markLessonComplete(enrollment.id, ref, 10, key)
       )
       const results = await Promise.all(insertPromises)
       const insertedCount = results.filter(r => r.success).length
