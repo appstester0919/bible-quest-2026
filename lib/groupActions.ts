@@ -510,3 +510,35 @@ export async function updateDisplayName(name: string): Promise<{ success: boolea
   revalidatePath('/dashboard')
   return { success: true }
 }
+
+// ─── Rename group (admin only) ────────────────────────────────────────────────
+export async function renameGroup(groupId: string, newName: string): Promise<{ success: boolean; error?: string }> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { success: false, error: 'Not authenticated' }
+
+  const trimmed = newName.trim()
+  if (!trimmed || trimmed.length > 30) {
+    return { success: false, error: '群組名稱必須為 1-30 字' }
+  }
+
+  // Verify the caller is the group creator (admin)
+  const { data: group } = await supabase
+    .from('groups')
+    .select('id, created_by')
+    .eq('id', groupId)
+    .single()
+  if (!group) return { success: false, error: '群組不存在' }
+  if (group.created_by !== user.id) {
+    return { success: false, error: '只有組長可以更改群組名稱' }
+  }
+
+  const { error } = await supabase
+    .from('groups')
+    .update({ name: trimmed })
+    .eq('id', groupId)
+  if (error) return { success: false, error: error.message }
+
+  revalidatePath('/dashboard')
+  return { success: true }
+}

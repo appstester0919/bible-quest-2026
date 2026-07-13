@@ -15,6 +15,7 @@ import {
   cancelJoinRequest,
   createGroup,
   leaveGroup,
+  renameGroup,
   type GroupWithProgress,
   type PendingRequestInfo,
 } from '@/lib/groupActions'
@@ -141,6 +142,9 @@ export default function DashboardPage() {
   const [groupFontSize, setGroupFontSize] = useState<number>(14)
   const [pendingAdminRequests, setPendingAdminRequests] = useState<PendingRequestInfo[]>([])
   const [myPendingRequests, setMyPendingRequests] = useState<Array<{ id: string; group_id: string; group_name: string; created_at: string }>>([])
+  const [renameFor, setRenameFor] = useState<{ id: string; name: string } | null>(null)
+  const [renameDraft, setRenameDraft] = useState('')
+  const [renaming, setRenaming] = useState(false)
   const [showCreateGroup, setShowCreateGroup] = useState(false)
   const [newGroupName, setNewGroupName] = useState('')
   const [creatingGroup, setCreatingGroup] = useState(false)
@@ -324,6 +328,32 @@ export default function DashboardPage() {
       alert('退出失敗：' + (res.error || ''))
     } else {
       await refreshGroups()
+    }
+  }
+
+  async function handleRenameSubmit() {
+    if (!renameFor) return
+    const trimmed = renameDraft.trim()
+    if (!trimmed || trimmed.length > 30) {
+      alert('群組名稱必須為 1-30 字')
+      return
+    }
+    if (trimmed === renameFor.name) {
+      setRenameFor(null)
+      return
+    }
+    setRenaming(true)
+    try {
+      const res = await renameGroup(renameFor.id, trimmed)
+      if (!res.success) {
+        alert('更改失敗：' + (res.error || ''))
+      } else {
+        await refreshGroups()
+        setRenameFor(null)
+        setRenameDraft('')
+      }
+    } finally {
+      setRenaming(false)
     }
   }
 
@@ -607,9 +637,20 @@ export default function DashboardPage() {
                 <div key={g.id} className="border border-gray-100 rounded-xl p-3" style={{ fontSize: groupFontSize }}>
                   <div className="flex items-start justify-between mb-2">
                     <div className="flex-1 min-w-0">
-                      <p className="font-bold text-[var(--color-primary)] truncate">
-                        {g.name} {g.my_role === 'admin' && <span className="text-xs ml-1">⭐</span>}
-                      </p>
+                      <div className="flex items-center gap-1">
+                        <p className="font-bold text-[var(--color-primary)] truncate">
+                          {g.name} {g.my_role === 'admin' && <span className="text-xs ml-1">⭐</span>}
+                        </p>
+                        {g.my_role === 'admin' && (
+                          <button
+                            onClick={() => { setRenameFor({ id: g.id, name: g.name }); setRenameDraft(g.name) }}
+                            className="text-xs px-1.5 py-0.5 text-gray-500 hover:text-[var(--color-primary)]"
+                            title="更改群組名稱"
+                          >
+                            ✏️
+                          </button>
+                        )}
+                      </div>
                       <p className="text-xs text-muted mt-0.5">
                         今日 <span className="font-bold text-[var(--color-primary)]">{g.today_count}</span>/{g.today_total}
                         {g.member_count < g.today_total && (
@@ -676,6 +717,43 @@ export default function DashboardPage() {
           </div>
         </div>
       </main>
+
+      {/* Rename Group Modal (admin only) */}
+      {renameFor && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center">
+          <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full max-w-sm p-6">
+            <h3 className="text-lg font-bold mb-3">更改群組名稱</h3>
+            <p className="text-xs text-muted mb-3">只有組長（⭐）可以更改群組名稱</p>
+            <input
+              type="text"
+              value={renameDraft}
+              onChange={(e) => setRenameDraft(e.target.value)}
+              placeholder="新群組名稱"
+              maxLength={30}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-base mb-4"
+              autoFocus
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleRenameSubmit()
+              }}
+            />
+            <div className="flex gap-2">
+              <button
+                onClick={() => { setRenameFor(null); setRenameDraft('') }}
+                className="flex-1 px-4 py-2 bg-gray-100 rounded-lg font-medium"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleRenameSubmit}
+                disabled={renaming || !renameDraft.trim()}
+                className="flex-1 px-4 py-2 bg-[var(--color-primary)] text-white rounded-lg font-bold disabled:opacity-50"
+              >
+                {renaming ? '儲存中...' : '儲存'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Create Group Modal */}
       {showCreateGroup && (
