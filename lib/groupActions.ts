@@ -109,6 +109,13 @@ export async function requestJoinGroup(inviteCode: string): Promise<{ success: b
   const { data: pending } = await supabase.from('group_join_requests').select('status').eq('group_id', group.id).eq('user_id', user.id).single()
   if (pending?.status === 'pending') return { success: false, error: '你已申請過，請等待審批' }
 
+  // Check member count limit (30) — don't even allow request if full
+  const { count: memberCount } = await supabase
+    .from('group_members')
+    .select('*', { count: 'exact', head: true })
+    .eq('group_id', group.id)
+  if ((memberCount ?? 0) >= 30) return { success: false, error: '群組已滿（最多30人）' }
+
   // Get display name from profile
   const { data: profile } = await supabase.from('profiles').select('display_name').eq('id', user.id).single()
   const displayName = profile?.display_name?.trim() || '組員'
@@ -210,13 +217,18 @@ export async function leaveGroup(groupId: string): Promise<{ success: boolean; e
   const { error: mErr } = await supabase.from('group_members').delete().eq('group_id', groupId).eq('user_id', user.id)
   if (mErr) return { success: false, error: mErr.message }
 
-  // If user was the creator, promote random remaining member (or delete group if empty)
+  // If user was the creator, promote a random remaining member (or delete group if empty)
   if (group.created_by === user.id) {
-    const { data: remaining } = await supabase.from('group_members').select('user_id').eq('group_id', groupId).limit(1)
+    // Fetch all remaining members and pick one at random
+    const { data: remaining } = await supabase
+      .from('group_members')
+      .select('user_id')
+      .eq('group_id', groupId)
     if (remaining && remaining.length > 0) {
-      // Promote first remaining member as new admin (random pick — first by joined_at is acceptable here)
-      await supabase.from('groups').update({ created_by: remaining[0].user_id }).eq('id', groupId)
-      await supabase.from('group_members').update({ role: 'admin' }).eq('group_id', groupId).eq('user_id', remaining[0].user_id)
+      // Random selection from remaining members
+      const newAdmin = remaining[Math.floor(Math.random() * remaining.length)]
+      await supabase.from('groups').update({ created_by: newAdmin.user_id }).eq('id', groupId)
+      await supabase.from('group_members').update({ role: 'admin' }).eq('group_id', groupId).eq('user_id', newAdmin.user_id)
     } else {
       // No members left — delete the group
       await supabase.from('groups').delete().eq('id', groupId)

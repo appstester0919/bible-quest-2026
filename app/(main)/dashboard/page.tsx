@@ -15,6 +15,7 @@ import {
   cancelJoinRequest,
   createGroup,
   leaveGroup,
+  deleteGroup,
   renameGroup,
   type GroupWithProgress,
   type PendingRequestInfo,
@@ -326,6 +327,17 @@ export default function DashboardPage() {
     const res = await leaveGroup(groupId)
     if (!res.success) {
       alert('退出失敗：' + (res.error || ''))
+    } else {
+      await refreshGroups()
+    }
+  }
+
+  async function handleDeleteGroup(groupId: string, groupName: string) {
+    if (!confirm(`⚠️ 確定刪除「${groupName}」？\n\n此操作無法復原。所有組員、check-in 記錄將一併刪除。`)) return
+    if (!confirm(`再確認：刪除群組「${groupName}」？`)) return
+    const res = await deleteGroup(groupId)
+    if (!res.success) {
+      alert('刪除失敗：' + (res.error || ''))
     } else {
       await refreshGroups()
     }
@@ -685,14 +697,24 @@ export default function DashboardPage() {
                       <span className="font-bold text-[var(--color-success)]">✓</span> {g.today_completed_names.join('、')}
                     </p>
                   )}
-                  {/* Leave group button (if member) */}
-                  <div className="mt-2 text-right">
-                    <button
-                      onClick={() => handleLeaveGroup(g.id, g.name)}
-                      className="text-[10px] text-red-500 underline"
-                    >
-                      退出群組
-                    </button>
+                  {/* Leave / Delete group buttons */}
+                  <div className="mt-2 flex justify-end gap-3 text-[10px]">
+                    {g.my_role === 'admin' ? (
+                      <button
+                        onClick={() => handleDeleteGroup(g.id, g.name)}
+                        className="text-red-600 underline font-bold"
+                        title="刪除群組（包含所有組員及 check-in 記錄，無法復原）"
+                      >
+                        刪除群組
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => handleLeaveGroup(g.id, g.name)}
+                        className="text-red-500 underline"
+                      >
+                        退出群組
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}
