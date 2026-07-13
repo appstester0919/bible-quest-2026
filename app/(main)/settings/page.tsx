@@ -24,7 +24,7 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(false)
   const [saved, setSaved] = useState(false)
   const [reminderTime, setReminderTime] = useState('20:00')
-  const [currentEnrollment, setCurrentEnrollment] = useState<{ id: string; scope: string; chapters_per_day: number; total_days: number } | null>(null)
+  const [currentEnrollment, setCurrentEnrollment] = useState<{ id: string; scope: string; chapters_per_day: number; total_days: number; reading_order?: string | null } | null>(null)
   const [completedPlans, setCompletedPlans] = useState(0)
   const [updatingPlan, setUpdatingPlan] = useState(false)
   const [confirmShow, setConfirmShow] = useState(false)
@@ -59,7 +59,7 @@ export default function SettingsPage() {
     if (!user) return
     const { data: enrollment } = await supabase
       .from('user_plan_enrollments')
-      .select('id, scope, chapters_per_day, total_days, status')
+      .select('id, scope, chapters_per_day, total_days, status, reading_order')
       .eq('user_id', user.id)
       .eq('status', 'active')
       .maybeSingle()
@@ -89,14 +89,43 @@ export default function SettingsPage() {
         .update({ status: 'abandoned' })
         .eq('id', currentEnrollment.id)
 
+      // Re-derive total_days from scope + chapters_per_day so legacy data
+      // (which may have wrong total_days) doesn't get copied forward.
+      // For nt_ot we also need to validate the reading_order against the
+      // current DB CHECK constraint.
+      const scope = currentEnrollment.scope as 'nt' | 'ot' | 'nt_ot'
+      const cpd = currentEnrollment.chapters_per_day
+      const properTotalDays =
+        scope === 'nt'   ? Math.ceil(260 / cpd) :
+        scope === 'ot'   ? Math.ceil(929 / cpd) :
+        /* nt_ot */        cpd   // legacy fallback — will be re-derived by generator
+
+      // For nt_ot scope, reading_order is REQUIRED by the DB CHECK constraint.
+      // If the old enrollment has a valid value, copy it; otherwise compute a
+      // sensible default based on chapters_per_day.
+      let readingOrder: string | null = null
+      if (scope === 'nt_ot') {
+        const old = (currentEnrollment as { reading_order?: string | null }).reading_order
+        if (old && /^[0-9]+-[0-9]+$|^nt_then_ot$|^ot_then_nt$/.test(old)) {
+          readingOrder = old
+        } else {
+          // Legacy nt_ot row without reading_order — synthesize a parallel split
+          // that matches the cpd. Use ~20% NT, 80% OT ratio as a sane default.
+          const ntCh = Math.max(1, Math.ceil(cpd * 0.2))
+          const otCh = cpd - ntCh
+          readingOrder = `${ntCh}-${otCh}`
+        }
+      }
+
       // Create new enrollment
       const { error } = await supabase
         .from('user_plan_enrollments')
         .insert({
           user_id: user.id,
-          scope: currentEnrollment.scope,
-          chapters_per_day: currentEnrollment.chapters_per_day,
-          total_days: currentEnrollment.total_days,
+          scope,
+          chapters_per_day: cpd,
+          total_days: properTotalDays,
+          reading_order: readingOrder,
           status: 'active',
           started_at: new Date().toISOString(),
         })
