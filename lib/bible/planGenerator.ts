@@ -147,52 +147,57 @@ export function generateReadingPlan(
   }
 
   if (order === 'nt_then_ot' || order === 'ot_then_nt') {
-    // ── Sequential: finish first testament, then second ──────────────────
-    const first  = order === 'nt_then_ot' ? ntBooks : otBooks
-    const second = order === 'nt_then_ot' ? otBooks : ntBooks
-    const firstTotal  = order === 'nt_then_ot' ? 260 : 929
-    const secondTotal = order === 'nt_then_ot' ? 929 : 260
+    // ── Priority mode: read primary testament first each day; if the primary
+    // testament is fully done, fill remaining daily quota from the secondary.
+    //
+    // Behavior:
+    //   • nt_then_ot: read NT chapters first. Once NT is exhausted (within the
+    //     day or globally), the remaining quota is filled from OT.
+    //   • ot_then_nt: symmetric.
+    //
+    // Day layout for nt_then_ot at 6 ch/day:
+    //   Day 1-43: 6 NT chapters
+    //   Day 44:   NT has 260/260 done by chapter 2 → fill remaining 4 from OT
+    //   Day 45+:  all 6 chapters from OT
+    const primary   = order === 'nt_then_ot' ? ntBooks : otBooks
+    const secondary = order === 'nt_then_ot' ? otBooks : ntBooks
+    const primaryTotal   = order === 'nt_then_ot' ? 260 : 929
+    const secondaryTotal = order === 'nt_then_ot' ? 929 : 260
 
-    // Phase 1: first testament
-    let bookIdx = 0
-    let chapterInBook = 1
-    let remaining = firstTotal
+    let priBookIdx = 0, priChapter = 1, priRemaining = primaryTotal
+    let secBookIdx = 0, secChapter = 1, secRemaining = secondaryTotal
 
-    while (remaining > 0 && bookIdx < first.length && plan.size < maxDays) {
+    for (let day = 0; day < maxDays && (priRemaining > 0 || secRemaining > 0); day++) {
       const refs: string[] = []
-      const today = Math.min(enrollment.chapters_per_day, remaining)
-      for (let i = 0; i < today && bookIdx < first.length; i++) {
-        const book = first[bookIdx]
-        refs.push(`${book.name} ${chapterInBook}`)
-        chapterInBook++
-        if (chapterInBook > book.chapters) {
-          bookIdx++
-          chapterInBook = 1
+      let quota = enrollment.chapters_per_day
+
+      // Primary testament — read up to quota chapters
+      const priToday = Math.min(quota, priRemaining)
+      for (let i = 0; i < priToday && priBookIdx < primary.length; i++) {
+        const book = primary[priBookIdx]
+        refs.push(`${book.name} ${priChapter}`)
+        priChapter++
+        if (priChapter > book.chapters) {
+          priBookIdx++
+          priChapter = 1
         }
       }
-      remaining -= today
-      plan.set(toHKDateString(date), refs)
-      date = advanceDate(date, 1)
-    }
+      priRemaining -= priToday
+      quota -= priToday
 
-    // Phase 2: second testament
-    bookIdx = 0
-    chapterInBook = 1
-    remaining = secondTotal
-
-    while (remaining > 0 && bookIdx < second.length && plan.size < maxDays) {
-      const refs: string[] = []
-      const today = Math.min(enrollment.chapters_per_day, remaining)
-      for (let i = 0; i < today && bookIdx < second.length; i++) {
-        const book = second[bookIdx]
-        refs.push(`${book.name} ${chapterInBook}`)
-        chapterInBook++
-        if (chapterInBook > book.chapters) {
-          bookIdx++
-          chapterInBook = 1
+      // Secondary testament — fill any remaining quota
+      const secToday = Math.min(quota, secRemaining)
+      for (let i = 0; i < secToday && secBookIdx < secondary.length; i++) {
+        const book = secondary[secBookIdx]
+        refs.push(`${book.name} ${secChapter}`)
+        secChapter++
+        if (secChapter > book.chapters) {
+          secBookIdx++
+          secChapter = 1
         }
       }
-      remaining -= today
+      secRemaining -= secToday
+
       plan.set(toHKDateString(date), refs)
       date = advanceDate(date, 1)
     }

@@ -55,8 +55,8 @@ export type NtOtOrder = 'parallel' | 'nt_then_ot' | 'ot_then_nt'
 
 export const NT_OT_ORDERS: { id: NtOtOrder; label: string; desc: string }[] = [
   { id: 'parallel',   label: '新舊並行',   desc: '每日新舊兩邊都讀，同時完成' },
-  { id: 'nt_then_ot', label: '先新後舊',   desc: '先讀完新約，再讀舊約' },
-  { id: 'ot_then_nt', label: '先舊後新',   desc: '先讀完舊約，再讀新約' },
+  { id: 'nt_then_ot', label: '新約優先',   desc: '優先讀新約；當日新約讀完，餘下章數自動填舊約' },
+  { id: 'ot_then_nt', label: '舊約優先',   desc: '優先讀舊約；當日舊約讀完，餘下章數自動填新約' },
 ]
 
 /**
