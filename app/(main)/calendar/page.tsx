@@ -107,10 +107,18 @@ export default function CalendarPage() {
   }, [enrollment, books])
 
   const completedDays = useMemo(() => {
+    // Defensive: only count sessions for the CURRENT enrollment. If somehow
+    // stale sessions from a previous enrollment leak into state (e.g. after
+    // a redesign where the user navigated quickly between pages), filter them
+    // out here so the progress count stays accurate.
     const set = new Set<string>()
-    sessions.forEach(s => set.add(s.date_local))
+    sessions.forEach(s => {
+      if (enrollment && s.enrollment_id === enrollment.id) {
+        set.add(s.date_local)
+      }
+    })
     return set
-  }, [sessions])
+  }, [sessions, enrollment])
 
   const tileContent = useCallback(({ date }: { date: Date }) => {
     const key = dateToHKDateString(date)

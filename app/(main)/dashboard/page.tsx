@@ -335,8 +335,15 @@ export default function DashboardPage() {
     )
   }
 
-  const xpInCurrent = profile ? (profile.total_xp % 100) : 0
-  const xpNeeded = 100
+  // XP needed for the CURRENT level cap is hard-coded; instead compute the
+  // next-level threshold using the canonical formula:
+  //   level N = floor(sqrt(total_xp / 100)) + 1
+  //   total_xp_for_level(N) = (N-1)² × 100
+  // So XP needed to reach the NEXT level = (level)² × 100
+  const xpForNextLevel = profile ? profile.level * profile.level * 100 : 100
+  const xpForCurrentLevel = profile ? (profile.level - 1) * (profile.level - 1) * 100 : 0
+  const xpInCurrent = profile ? profile.total_xp - xpForCurrentLevel : 0
+  const xpNeeded = xpForNextLevel - xpForCurrentLevel
   const hktToday = getHKTDate()
   const todayCompleted = sessions.some(s => s.date_local === hktToday)
   const totalDays = totalPlanDays > 0 ? totalPlanDays : (enrollment ? getRequiredDays(enrollment.scope as Scope, enrollment.chapters_per_day) : 0)
