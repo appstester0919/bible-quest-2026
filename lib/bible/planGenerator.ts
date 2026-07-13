@@ -106,16 +106,19 @@ export function generateReadingPlan(
 
   if (split) {
     // ── Parallel: each day reads N chapters from NT + M chapters from OT ──
-    // The NT/OT loops run independently — they both finish around the same day
-    // when chapters_per_day = N + M.
+    // Fill behavior: if NT is exhausted within a day, the unused NT quota
+    // is filled from OT (and vice versa). This avoids wasting quota while
+    // one testament is finished early.
     let ntBookIdx = 0, ntChapter = 1, ntRemaining = 260
     let otBookIdx = 0, otChapter = 1, otRemaining = 929
 
     for (let day = 0; day < maxDays && (ntRemaining > 0 || otRemaining > 0); day++) {
       const refs: string[] = []
+      let ntQuota = split.nt
+      let otQuota = split.ot
 
-      // NT today
-      let ntToday = Math.min(split.nt, ntRemaining)
+      // NT today — capped by remaining NT chapters
+      let ntToday = Math.min(ntQuota, ntRemaining)
       for (let i = 0; i < ntToday && ntBookIdx < ntBooks.length; i++) {
         const book = ntBooks[ntBookIdx]
         refs.push(`${book.name} ${ntChapter}`)
@@ -127,8 +130,8 @@ export function generateReadingPlan(
       }
       ntRemaining -= ntToday
 
-      // OT today
-      let otToday = Math.min(split.ot, otRemaining)
+      // OT today — first read the planned OT quota, then fill any unused NT quota
+      let otToday = Math.min(otQuota, otRemaining)
       for (let i = 0; i < otToday && otBookIdx < otBooks.length; i++) {
         const book = otBooks[otBookIdx]
         refs.push(`${book.name} ${otChapter}`)
@@ -139,6 +142,38 @@ export function generateReadingPlan(
         }
       }
       otRemaining -= otToday
+
+      // Fill unused NT quota with OT
+      const unusedNtQuota = ntQuota - ntToday
+      if (unusedNtQuota > 0 && otRemaining > 0) {
+        const fillToday = Math.min(unusedNtQuota, otRemaining)
+        for (let i = 0; i < fillToday && otBookIdx < otBooks.length; i++) {
+          const book = otBooks[otBookIdx]
+          refs.push(`${book.name} ${otChapter}`)
+          otChapter++
+          if (otChapter > book.chapters) {
+            otBookIdx++
+            otChapter = 1
+          }
+        }
+        otRemaining -= fillToday
+      }
+
+      // Fill unused OT quota with NT (if NT still has remaining)
+      const unusedOtQuota = otQuota - otToday
+      if (unusedOtQuota > 0 && ntRemaining > 0) {
+        const fillToday = Math.min(unusedOtQuota, ntRemaining)
+        for (let i = 0; i < fillToday && ntBookIdx < ntBooks.length; i++) {
+          const book = ntBooks[ntBookIdx]
+          refs.push(`${book.name} ${ntChapter}`)
+          ntChapter++
+          if (ntChapter > book.chapters) {
+            ntBookIdx++
+            ntChapter = 1
+          }
+        }
+        ntRemaining -= fillToday
+      }
 
       plan.set(toHKDateString(date), refs)
       date = advanceDate(date, 1)
