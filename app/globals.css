@@ -24,7 +24,7 @@
   --color-bq-danger: #FF4B4B;
   --color-bq-accent: #CE82FF;
   --color-bq-surface: #FFFFFF;
-  --color-bq-background: #F7F7F7;
+  --color-bq-background: rgba(247, 247, 247, 0.92); /* overlay on bg.png */
   --color-bq-muted: #9CA3AF;
   --color-bq-ink: #1F2937;
   --color-bq-ink-soft: #4B5563;
@@ -107,7 +107,7 @@
 
 html {
   font-family: var(--font-sans);
-  background-color: var(--color-background);
+  background: var(--color-background) url('/bg.png') center / cover no-repeat fixed;
   color: var(--color-primary);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -116,7 +116,7 @@ html {
 body {
   min-height: 100dvh;
   overscroll-behavior: none;
-  background-color: var(--color-background);
+  background: transparent;
 }
 
 .scripture-text {
