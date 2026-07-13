@@ -157,10 +157,30 @@ export default function SettingsPage() {
     }
   }
 
-  function handleSaveReminder() {
-    localStorage.setItem('bq_reminder_time', reminderTime)
-    setSaved(true)
-    setTimeout(() => setSaved(false), 2000)
+  async function handleSaveReminder() {
+    setLoading(true)
+    try {
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) {
+        alert('請先登入')
+        return
+      }
+      // Persist to profile so the cron route can read user's chosen time.
+      const { error } = await supabase
+        .from('profiles')
+        .update({ reminder_time: reminderTime })
+        .eq('id', user.id)
+      if (error) {
+        alert('儲存失敗: ' + error.message)
+        return
+      }
+      localStorage.setItem('bq_reminder_time', reminderTime)
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2000)
+    } finally {
+      setLoading(false)
+    }
   }
 
   async function handleSignOut() {
