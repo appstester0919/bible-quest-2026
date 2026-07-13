@@ -1,17 +1,20 @@
 /**
  * Reading scope utilities.
  * Scope chapter counts (canonical):
- *   nt     = 260 chapters  (Matthew → Revelation, books 39–64)
+ *   nt     = 259 chapters  (Matthew → Revelation, books 39–64)
  *   ot     = 929 chapters  (Genesis → Malachi,  books 0–38)
- *   nt_ot  = 1189 chapters (all 65 books)
+ *   nt_ot  = 1188 chapters (all 65 books)
+ *
+ * NT count verified against public/bible-data.json (sum of chapters for
+ * books[39..64] = 259). OT = 929. Total = 1188.
  */
 
 export type Scope = 'nt' | 'ot' | 'nt_ot'
 
 export const SCOPE_CHAPTERS: Record<Scope, number> = {
-  nt: 260,
+  nt: 259,
   ot: 929,
-  nt_ot: 1189,
+  nt_ot: 1188,
 }
 
 export const SCOPE_LABELS: Record<Scope, string> = {

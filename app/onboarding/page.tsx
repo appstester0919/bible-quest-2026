@@ -18,9 +18,9 @@ import {
 import { createClient } from '@/lib/supabase/client'
 
 const SCOPES: { id: Scope; label: string; desc: string }[] = [
-  { id: 'nt',     label: '新約',         desc: '260 章聖經' },
+  { id: 'nt',     label: '新約',         desc: '259 章聖經' },
   { id: 'ot',     label: '舊約',         desc: '929 章聖經' },
-  { id: 'nt_ot',  label: '新約 + 舊約',  desc: '1189 章聖經' },
+  { id: 'nt_ot',  label: '新約 + 舊約',  desc: '1188 章聖經' },
 ]
 
 function getMinDate(): string {
@@ -125,7 +125,7 @@ function OnboardingInner() {
 
   // For parallel: nt/ot per day comes from PARALLEL_TABLE
   // For sequential: chaptersPerDay goes entirely to whichever testament is active
-  const ntChapters   = scope === 'nt_ot' && ntOtOrder === 'parallel' ? (parallelInfo?.nt ?? 0) : (scope === 'nt_ot' ? chaptersPerDay : Math.ceil(260 / (planDays || 1)))
+  const ntChapters   = scope === 'nt_ot' && ntOtOrder === 'parallel' ? (parallelInfo?.nt ?? 0) : (scope === 'nt_ot' ? chaptersPerDay : Math.ceil(259 / (planDays || 1)))
   const otChapters   = scope === 'nt_ot' && ntOtOrder === 'parallel' ? (parallelInfo?.ot ?? 0) : 0
 
   const completionDate = getEstimatedCompletionDate(scope, planDays, new Date(startDate + 'T00:00:00'))
@@ -380,7 +380,7 @@ function OnboardingInner() {
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-[var(--color-muted)]">新約用時</span>
-                    <span className="font-bold text-[var(--color-primary)]">{Math.ceil(260 / chaptersPerDay)} 天</span>
+                    <span className="font-bold text-[var(--color-primary)]">{Math.ceil(259 / chaptersPerDay)} 天</span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-[var(--color-muted)]">舊約用時</span>

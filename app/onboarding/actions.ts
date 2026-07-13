@@ -121,7 +121,7 @@ export async function completeOnboarding(formData: FormData): Promise<{ error?: 
       ntChapters = n ?? 0
       otChapters = o ?? 0
     } else {
-      ntChapters = Math.ceil(260 / totalDays)
+      ntChapters = Math.ceil(259 / totalDays)
       otChapters = 0
     }
 

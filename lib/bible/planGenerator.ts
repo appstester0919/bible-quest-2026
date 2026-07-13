@@ -109,7 +109,7 @@ export function generateReadingPlan(
     // Fill behavior: if NT is exhausted within a day, the unused NT quota
     // is filled from OT (and vice versa). This avoids wasting quota while
     // one testament is finished early.
-    let ntBookIdx = 0, ntChapter = 1, ntRemaining = 260
+    let ntBookIdx = 0, ntChapter = 1, ntRemaining = 259
     let otBookIdx = 0, otChapter = 1, otRemaining = 929
 
     for (let day = 0; day < maxDays && (ntRemaining > 0 || otRemaining > 0); day++) {
@@ -196,8 +196,8 @@ export function generateReadingPlan(
     //   Day 45+:  all 6 chapters from OT
     const primary   = order === 'nt_then_ot' ? ntBooks : otBooks
     const secondary = order === 'nt_then_ot' ? otBooks : ntBooks
-    const primaryTotal   = order === 'nt_then_ot' ? 260 : 929
-    const secondaryTotal = order === 'nt_then_ot' ? 929 : 260
+    const primaryTotal   = order === 'nt_then_ot' ? 259 : 929
+    const secondaryTotal = order === 'nt_then_ot' ? 929 : 259
 
     let priBookIdx = 0, priChapter = 1, priRemaining = primaryTotal
     let secBookIdx = 0, secChapter = 1, secRemaining = secondaryTotal
