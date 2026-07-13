@@ -248,58 +248,24 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        {/* Push Notifications */}
+        {/* Push Notifications — temporarily disabled; Vercel free tier does not
+    support Cron Jobs needed to schedule the daily reminder. Will be
+    re-enabled once we move to a backend that supports cron (e.g. Supabase
+    pg_cron + Edge Function) or upgrade to Vercel Pro. */}
         <div className="bg-white rounded-2xl p-5 shadow-sm">
           <h2 className="text-lg font-bold text-[var(--color-primary)] mb-1">🔔 讀經提醒</h2>
-          <p className="text-sm text-[var(--color-muted)] mb-4">
+          <p className="text-sm text-[var(--color-muted)] mb-3">
             每日提醒你完成讀經
           </p>
-
-          {pushPermission === 'unsupported' ? (
-            <p className="text-sm text-[var(--color-danger)]">
-              你的瀏覽器不支援推送通知
+          <div className="bg-[var(--color-background)] rounded-xl p-4 text-sm text-[var(--color-muted)] leading-relaxed">
+            <p className="font-bold text-[var(--color-primary)] mb-1">⏸️ 暫停服務</p>
+            <p>
+              推送通知功能暫時關閉中。等將來平台升級或遷移到支援排程嘅後端（例如 Supabase pg_cron + Edge Function）後會重新啟用。
             </p>
-          ) : (
-            <>
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <p className="font-bold text-[var(--color-primary)]">推送通知</p>
-                  <p className="text-sm text-[var(--color-muted)]">
-                    狀態：{pushPermission === 'granted' ? '已允許' : pushPermission === 'denied' ? '已拒絕' : '未設定'}
-                  </p>
-                </div>
-                <button
-                  onClick={handleTogglePush}
-                  disabled={loading || pushPermission === 'denied'}
-                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${isSubscribed ? 'bg-[var(--color-success)]' : 'bg-[var(--color-muted)]/30'} disabled:opacity-50`}
-                  aria-label={isSubscribed ? '關閉通知' : '開啟通知'}
-                >
-                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${isSubscribed ? 'translate-x-6' : 'translate-x-1'}`} />
-                </button>
-              </div>
-
-              <div className="border-t border-[var(--color-muted)]/10 pt-4">
-                <label className="text-sm font-bold text-[var(--color-primary)] block mb-2">
-                  提醒時間
-                </label>
-                <select
-                  value={reminderTime}
-                  onChange={(e) => setReminderTime(e.target.value)}
-                  className="w-full p-3 rounded-xl border border-[var(--color-muted)]/20 bg-[var(--color-background)] text-[var(--color-primary)] text-sm"
-                >
-                  {REMINDER_TIMES.map((t) => (
-                    <option key={t.value} value={t.value}>{t.label}</option>
-                  ))}
-                </select>
-                <button
-                  onClick={handleSaveReminder}
-                  className="mt-3 w-full py-2.5 px-4 bg-[var(--color-primary)] text-white rounded-xl font-bold text-sm hover:bg-[#374151] active:translate-y-0.5 transition-all"
-                >
-                  {saved ? '✓ 已儲存' : '儲存設定'}
-                </button>
-              </div>
-            </>
-          )}
+            <p className="mt-2 text-xs">
+              在此期間，你可以喺 app 入面手動打開「日曆」睇下今日讀咗未。
+            </p>
+          </div>
         </div>
 
         {/* Plan Management */}
