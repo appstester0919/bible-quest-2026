@@ -45,7 +45,8 @@ export default function SignupPage() {
     }
 
     if (result) {
-      setError(result.message)
+      const msg = result?.message || ''
+      setError(msg || '註冊失敗，請稍後再試')
       setLoading(false)
       return
     }
