@@ -63,6 +63,14 @@ create table public.user_plan_enrollments (
   start_chapter        int  not null default 1
                           check (start_chapter >= 1),
                           -- 1-based chapter within start_book_index.
+  nt_start_book_index  int  not null default 39
+                          check (nt_start_book_index between 39 and 64),
+                          -- Per-testament NT start (39=馬太 to 64=啟示錄). Used when
+                          -- scope='nt' or as the NT half of a 'nt_ot' plan.
+  ot_start_book_index  int  not null default 0
+                          check (ot_start_book_index between 0 and 38),
+                          -- Per-testament OT start (0=創世記 to 38=瑪拉基). Used when
+                          -- scope='ot' or as the OT half of a 'nt_ot' plan.
   started_at           timestamptz not null default now(),
   completed_at         timestamptz,
   paused_at            timestamptz,
