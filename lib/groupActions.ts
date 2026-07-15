@@ -330,21 +330,15 @@ export async function getMyGroups(): Promise<{ groups: GroupWithProgress[]; erro
   const { supabase, user } = await getAuthUser()
   if (!user) return { groups: [], error: 'Not authenticated' }
 
-  // Get memberships
-  const { data: memberships } = await supabase.from('group_members').select('group_id, role').eq('user_id', user.id)
+  // Step 1: get memberships (needed to know which group IDs to query)
+  const { data: memberships } = await supabase
+    .from('group_members').select('group_id, role').eq('user_id', user.id)
   if (!memberships || memberships.length === 0) return { groups: [] }
 
   const groupIds = memberships.map(m => m.group_id)
   const myRoleByGroup = new Map(memberships.map(m => [m.group_id, m.role]))
 
-  // Get groups
-  const { data: groups, error: gErr } = await supabase.from('groups').select('id, name, invite_code, created_by, created_at').in('id', groupIds)
-  if (gErr || !groups) return { groups: [], error: gErr?.message }
-
-  // Get all members of these groups (approved)
-  const { data: allMembers } = await supabase.from('group_members').select('group_id, user_id, display_name, joined_at').in('group_id', groupIds)
-
-  // Get all checkins for last 5 days
+  // Step 2: generate dates (needed for checkins query)
   const today = new Date()
   const dates: string[] = []
   for (let i = 0; i < 5; i++) {
@@ -353,11 +347,20 @@ export async function getMyGroups(): Promise<{ groups: GroupWithProgress[]; erro
   }
   const todayStr = getHKTDateStr(today)
 
-  const { data: checkins } = await supabase
-    .from('group_checkins')
-    .select('group_id, user_id, date_local')
-    .in('group_id', groupIds)
-    .in('date_local', dates)
+  // Step 3: parallel fetch groups + members + checkins
+  const [groupsResult, allMembersResult, checkinsResult] = await Promise.all([
+    supabase.from('groups').select('id, name, invite_code, created_by, created_at').in('id', groupIds),
+    supabase.from('group_members').select('group_id, user_id, display_name, joined_at').in('group_id', groupIds),
+    supabase.from('group_checkins').select('group_id, user_id, date_local')
+      .in('group_id', groupIds)
+      .in('date_local', dates),
+  ])
+
+  const { data: groups, error: gErr } = groupsResult
+  if (gErr || !groups) return { groups: [], error: gErr?.message }
+
+  const { data: allMembers } = allMembersResult
+  const { data: checkins } = checkinsResult
 
   // Build progress data
   const membersByGroup = new Map<string, Array<{ user_id: string; display_name: string }>>()

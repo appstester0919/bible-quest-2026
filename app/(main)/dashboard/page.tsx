@@ -156,7 +156,6 @@ export default function DashboardPage() {
   const [creatingGroup, setCreatingGroup] = useState(false)
   const [showInviteFor, setShowInviteFor] = useState<{ id: string; code: string; name: string } | null>(null)
   const [pendingAction, setPendingAction] = useState<string | null>(null)
-
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -182,6 +181,7 @@ export default function DashboardPage() {
         if (profileData || statsData) {
           setProfile({ id: authUser.id, email: profileData?.email || authUser.email || '', ...profileData, ...statsData } as Profile)
         }
+
         console.log('[dashboard] merged profile:', JSON.stringify({
           id: authUser.id,
           current_streak: statsData?.current_streak,
@@ -249,6 +249,8 @@ export default function DashboardPage() {
         setLoading(false)
       }
     }
+    // Kick off fetchData AND refreshGroups in PARALLEL — no reason to wait for
+    // user/profile/enrollment before loading group data (they are independent).
     fetchData()
     refreshGroups()
   }, [router])
