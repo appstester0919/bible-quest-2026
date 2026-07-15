@@ -29,7 +29,7 @@ export default function BottomNavigation() {
         bottom: '20px',
         left: '50%',
         transform: 'translateX(-50%)',
-        zIndex: 99999,
+        zIndex: 40,
         backgroundColor: 'white',
         borderRadius: '999px',
         boxShadow: '0 8px 32px rgba(0, 0, 0, 0.2)',
