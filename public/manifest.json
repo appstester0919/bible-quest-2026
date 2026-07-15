@@ -1,6 +1,6 @@
 {
-  "name": "Bible Quest 聖經任務",
-  "short_name": "Bible Quest",
+  "name": "爾國臨格",
+  "short_name": "爾國臨格",
   "description": "每日讀經，養成習慣 — Duolingo風格聖經閱讀App",
   "start_url": "/dashboard",
   "display": "standalone",

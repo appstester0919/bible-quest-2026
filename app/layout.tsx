@@ -2,13 +2,13 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Bible Quest 聖經任務",
+  title: "爾國臨格",
   description: "每日讀經，養成習慣。為大專基督徒而設的讀經計劃應用。",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "Bible Quest",
+    title: "爾國臨格",
   },
   icons: {
     icon: [{ url: "/icons/icon-192.png" }],
