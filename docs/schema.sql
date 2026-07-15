@@ -53,9 +53,16 @@ create table public.user_plan_enrollments (
   reading_order        text,
                           -- reading_order: nullable for nt/ot; format "N-OT" for nt_ot (e.g. "7-5" = nt 7ch/day, ot 5ch/day)
   total_days           int  not null
-                          check (total_days between 40 and 365),
+                          check (total_days between 1 and 365),
   chapters_per_day     int  not null,
-                          -- ceil(scope_chapters / total_days). scope nt=260, ot=929, nt_ot=1189.
+                          -- ceil(scope_chapters / total_days). scope nt=259, ot=929, nt_ot=1188.
+  start_book_index     int  not null default 0
+                          check (start_book_index between 0 and 64),
+                          -- 0-based book index where the plan starts (創=0, …, 瑪=38, 太=39, …, 啓=64).
+                          -- NT plans use 39 (馬太福音) by default. OT plans use 0 (創世記).
+  start_chapter        int  not null default 1
+                          check (start_chapter >= 1),
+                          -- 1-based chapter within start_book_index.
   started_at           timestamptz not null default now(),
   completed_at         timestamptz,
   paused_at            timestamptz,
