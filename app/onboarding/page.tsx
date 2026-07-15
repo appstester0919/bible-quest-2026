@@ -17,6 +17,113 @@ import {
 } from '@/lib/bible/scope'
 import { createClient } from '@/lib/supabase/client'
 
+// ─── Bible book metadata (issue #6: start position picker) ────────────────
+import { BIBLE_BOOKS, NT_BOOKS, OT_BOOKS, type BibleBook } from '@/lib/bible/books'
+
+/**
+ * Picker UI: a single row of 2 buttons (book + chapter).
+ * Click book button → expand book table; click chapter button → expand chapter table.
+ * Each table collapses after selection.
+ */
+function StartPositionRow({
+  label,
+  selectedBookIdx,
+  selectedChapter,
+  onSelectBook,
+  onSelectChapter,
+  books,
+}: {
+  label: string
+  selectedBookIdx: number
+  selectedChapter: number
+  onSelectBook: (bookIdx: number) => void
+  onSelectChapter: (ch: number) => void
+  books: BibleBook[]
+}) {
+  const [bookOpen, setBookOpen] = useState(false)
+  const [chapterOpen, setChapterOpen] = useState(false)
+  const selectedBook = books.find((b) => b.index === selectedBookIdx)!
+  const maxChapter = selectedBook.chapters
+
+  return (
+    <div>
+      <div className="text-xs font-bold text-[var(--color-muted)] mb-1.5">
+        {label}
+      </div>
+      <div className="grid grid-cols-[1fr_auto] gap-2">
+        <button
+          type="button"
+          onClick={() => {
+            setBookOpen((v) => !v)
+            setChapterOpen(false)
+          }}
+          className="py-2 px-3 rounded-xl font-bold text-sm border-2 border-[var(--color-muted)]/20 bg-white text-[var(--color-primary)] text-left"
+        >
+          📖 {selectedBook.name}
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setChapterOpen((v) => !v)
+            setBookOpen(false)
+          }}
+          className="py-2 px-3 rounded-xl font-bold text-sm border-2 border-[var(--color-muted)]/20 bg-white text-[var(--color-primary)] min-w-[5rem]"
+        >
+          {selectedChapter}章
+        </button>
+      </div>
+
+      {bookOpen && (
+        <div className="mt-2 p-2 bg-[var(--color-background)] rounded-xl max-h-48 overflow-y-auto">
+          <div className="grid grid-cols-3 gap-1.5">
+            {books.map((b) => (
+              <button
+                key={b.index}
+                type="button"
+                onClick={() => {
+                  onSelectBook(b.index)
+                  setBookOpen(false)
+                }}
+                className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-all ${
+                  b.index === selectedBookIdx
+                    ? 'bg-[var(--color-success)] text-white'
+                    : 'bg-white text-[var(--color-primary)] hover:bg-[var(--color-success)]/10'
+                }`}
+              >
+                {b.name}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {chapterOpen && (
+        <div className="mt-2 p-2 bg-[var(--color-background)] rounded-xl max-h-48 overflow-y-auto">
+          <div className="grid grid-cols-6 gap-1.5">
+            {Array.from({ length: maxChapter }, (_, i) => i + 1).map((ch) => (
+              <button
+                key={ch}
+                type="button"
+                onClick={() => {
+                  onSelectChapter(ch)
+                  setChapterOpen(false)
+                }}
+                className={`py-1.5 px-1 rounded-lg text-xs font-bold transition-all ${
+                  ch === selectedChapter
+                    ? 'bg-[var(--color-success)] text-white'
+                    : 'bg-white text-[var(--color-primary)] hover:bg-[var(--color-success)]/10'
+                }`}
+              >
+                {ch}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 const SCOPES: { id: Scope; label: string; desc: string }[] = [
   { id: 'nt',     label: '新約',         desc: '259 章聖經' },
   { id: 'ot',     label: '舊約',         desc: '929 章聖經' },
@@ -69,6 +176,13 @@ function OnboardingInner() {
   const [startDate, setStartDate]  = useState(getToday())
   const [loading, setLoading]     = useState(false)
   const [error, setError]         = useState('')
+
+  // Start position state (issue #6)
+  // Defaults: NT 馬太福音 1 章 (idx 39), OT 創世記 1 章 (idx 0)
+  const [ntStartBook, setNtStartBook]     = useState(39)
+  const [ntStartChapter, setNtStartChapter] = useState(1)
+  const [otStartBook, setOtStartBook]     = useState(0)
+  const [otStartChapter, setOtStartChapter] = useState(1)
 
   const [oldEnrollment, setOldEnrollment] = useState<OldEnrollment | null>(null)
   const [keepProgress, setKeepProgress] = useState(false)
@@ -154,6 +268,11 @@ function OnboardingInner() {
         otChapters,
         ntOtOrder,
         keepProgress,
+        // Issue #6: start position
+        ntStartBook,
+        ntStartChapter,
+        otStartBook,
+        otStartChapter,
       })
       if (result.error) {
         setError(result.error)
@@ -172,6 +291,11 @@ function OnboardingInner() {
       // Server must NOT recalculate via Math.ceil(259/totalDays) — that formula
       // only makes sense for NT and silently corrupts OT plans (issue #5).
       fd.append('chapters_per_day', String(ntChapters + otChapters))
+      // Issue #6: start position
+      fd.append('nt_start_book', String(ntStartBook))
+      fd.append('nt_start_chapter', String(ntStartChapter))
+      fd.append('ot_start_book', String(otStartBook))
+      fd.append('ot_start_chapter', String(otStartChapter))
       if (scope === 'nt_ot') {
         // Parallel: "N-OT" format. Sequential: 'nt_then_ot' / 'ot_then_nt'
         const ro = ntOtOrder === 'parallel' ? `${ntChapters}-${otChapters}` : ntOtOrder
@@ -288,6 +412,47 @@ function OnboardingInner() {
               <p className="text-xs text-[var(--color-muted)] mt-2">
                 {NT_OT_ORDERS.find((o) => o.id === ntOtOrder)?.desc}
               </p>
+            </div>
+          )}
+
+          {/* Start position picker (issue #6) */}
+          {(scope === 'nt' || scope === 'nt_ot' || scope === 'ot') && (
+            <div className="bg-white rounded-2xl p-4 shadow-sm space-y-3">
+              <div className="text-sm font-bold text-[var(--color-primary)]">
+                📍 開始位置
+              </div>
+              {(scope === 'nt' || scope === 'nt_ot') && (
+                <StartPositionRow
+                  label="新約"
+                  selectedBookIdx={ntStartBook}
+                  selectedChapter={ntStartChapter}
+                  onSelectBook={(i) => {
+                    setNtStartBook(i)
+                    const newBook = NT_BOOKS.find((b) => b.index === i)
+                    if (newBook && ntStartChapter > newBook.chapters) {
+                      setNtStartChapter(1)
+                    }
+                  }}
+                  onSelectChapter={setNtStartChapter}
+                  books={NT_BOOKS}
+                />
+              )}
+              {(scope === 'ot' || scope === 'nt_ot') && (
+                <StartPositionRow
+                  label="舊約"
+                  selectedBookIdx={otStartBook}
+                  selectedChapter={otStartChapter}
+                  onSelectBook={(i) => {
+                    setOtStartBook(i)
+                    const newBook = OT_BOOKS.find((b) => b.index === i)
+                    if (newBook && otStartChapter > newBook.chapters) {
+                      setOtStartChapter(1)
+                    }
+                  }}
+                  onSelectChapter={setOtStartChapter}
+                  books={OT_BOOKS}
+                />
+              )}
             </div>
           )}
 

@@ -11,6 +11,11 @@ export type RedesignPlanInput = {
   otChapters: number
   ntOtOrder: 'parallel' | 'nt_then_ot' | 'ot_then_nt'
   keepProgress: boolean
+  // Issue #6: per-testament start position
+  ntStartBook: number
+  ntStartChapter: number
+  otStartBook: number
+  otStartChapter: number
 }
 
 export async function redesignPlan(input: RedesignPlanInput): Promise<{ error?: string; newEnrollmentId?: string }> {
