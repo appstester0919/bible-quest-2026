@@ -26,6 +26,113 @@ import { BIBLE_BOOKS, NT_BOOKS, OT_BOOKS, type BibleBook } from '@/lib/bible/boo
  * Click book button → expand book table; click chapter button → expand chapter table.
  * Each table collapses after selection.
  */
+function BookModal({
+  books,
+  selectedBookIdx,
+  onSelect,
+  onClose,
+}: {
+  books: BibleBook[]
+  selectedBookIdx: number
+  onSelect: (bookIdx: number) => void
+  onClose: () => void
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
+      {/* Backdrop */}
+      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+      {/* Sheet */}
+      <div className="relative z-10 w-full max-w-md bg-white rounded-t-3xl sm:rounded-2xl max-h-[85vh] flex flex-col">
+        {/* Header */}
+        <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--color-muted)]/10">
+          <span className="font-bold text-[var(--color-primary)]">選擇書卷</span>
+          <button
+            type="button"
+            onClick={onClose}
+            className="w-8 h-8 flex items-center justify-center rounded-full bg-[var(--color-background)] text-[var(--color-muted)] font-bold"
+          >
+            ✕
+          </button>
+        </div>
+        {/* Book list */}
+        <div className="flex-1 overflow-y-auto p-3">
+          <div className="grid grid-cols-5 gap-1.5">
+            {books.map((b) => (
+              <button
+                key={b.index}
+                type="button"
+                onClick={() => { onSelect(b.index); onClose() }}
+                className={`py-2 px-1 rounded-xl text-sm font-bold text-center transition-all ${
+                  b.index === selectedBookIdx
+                    ? 'bg-[var(--color-success)] text-white shadow-[var(--shadow-button)]'
+                    : 'bg-[var(--color-background)] text-[var(--color-primary)] hover:bg-[var(--color-success)]/10'
+                }`}
+              >
+                <div className="text-base leading-tight">{b.abbr}</div>
+                <div className="text-[10px] font-normal opacity-70 leading-tight mt-0.5">{b.chapters}章</div>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ChapterModal({
+  book,
+  selectedChapter,
+  onSelect,
+  onClose,
+}: {
+  book: BibleBook
+  selectedChapter: number
+  onSelect: (ch: number) => void
+  onClose: () => void
+}) {
+  const cols = book.chapters <= 20 ? 6 : book.chapters <= 40 ? 7 : 8
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
+      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+      <div className="relative z-10 w-full max-w-md bg-white rounded-t-3xl sm:rounded-2xl max-h-[60vh] flex flex-col">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--color-muted)]/10">
+          <span className="font-bold text-[var(--color-primary)]">
+            {book.abbr} · 第 {selectedChapter} 章
+          </span>
+          <button
+            type="button"
+            onClick={onClose}
+            className="w-8 h-8 flex items-center justify-center rounded-full bg-[var(--color-background)] text-[var(--color-muted)] font-bold"
+          >
+            ✕
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto p-3">
+          <div
+            className="grid gap-1.5"
+            style={{ gridTemplateColumns: `repeat(${cols}, 1fr)` }}
+          >
+            {Array.from({ length: book.chapters }, (_, i) => i + 1).map((ch) => (
+              <button
+                key={ch}
+                type="button"
+                onClick={() => { onSelect(ch); onClose() }}
+                className={`py-2 rounded-xl text-sm font-bold text-center transition-all ${
+                  ch === selectedChapter
+                    ? 'bg-[var(--color-success)] text-white shadow-[var(--shadow-button)]'
+                    : 'bg-[var(--color-background)] text-[var(--color-primary)] hover:bg-[var(--color-success)]/10'
+                }`}
+              >
+                {ch}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function StartPositionRow({
   label,
   selectedBookIdx,
@@ -44,7 +151,6 @@ function StartPositionRow({
   const [bookOpen, setBookOpen] = useState(false)
   const [chapterOpen, setChapterOpen] = useState(false)
   const selectedBook = books.find((b) => b.index === selectedBookIdx)!
-  const maxChapter = selectedBook.chapters
 
   return (
     <div>
@@ -54,20 +160,16 @@ function StartPositionRow({
       <div className="grid grid-cols-[1fr_auto] gap-2">
         <button
           type="button"
-          onClick={() => {
-            setBookOpen((v) => !v)
-            setChapterOpen(false)
-          }}
-          className="py-2 px-3 rounded-xl font-bold text-sm border-2 border-[var(--color-muted)]/20 bg-white text-[var(--color-primary)] text-left"
+          onClick={() => { setBookOpen(true); setChapterOpen(false) }}
+          className="py-2 px-3 rounded-xl font-bold text-sm border-2 border-[var(--color-muted)]/20 bg-white text-[var(--color-primary)] text-left flex items-center gap-2"
         >
-          📖 {selectedBook.name}
+          <span className="text-base">📖</span>
+          <span className="font-bold">{selectedBook.abbr}</span>
+          <span className="text-xs text-[var(--color-muted)] font-normal ml-auto">{selectedBook.chapters}章</span>
         </button>
         <button
           type="button"
-          onClick={() => {
-            setChapterOpen((v) => !v)
-            setBookOpen(false)
-          }}
+          onClick={() => { setChapterOpen(true); setBookOpen(false) }}
           className="py-2 px-3 rounded-xl font-bold text-sm border-2 border-[var(--color-muted)]/20 bg-white text-[var(--color-primary)] min-w-[5rem]"
         >
           {selectedChapter}章
@@ -75,51 +177,25 @@ function StartPositionRow({
       </div>
 
       {bookOpen && (
-        <div className="mt-2 p-2 bg-[var(--color-background)] rounded-xl max-h-48 overflow-y-auto">
-          <div className="grid grid-cols-3 gap-1.5">
-            {books.map((b) => (
-              <button
-                key={b.index}
-                type="button"
-                onClick={() => {
-                  onSelectBook(b.index)
-                  setBookOpen(false)
-                }}
-                className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-all ${
-                  b.index === selectedBookIdx
-                    ? 'bg-[var(--color-success)] text-white'
-                    : 'bg-white text-[var(--color-primary)] hover:bg-[var(--color-success)]/10'
-                }`}
-              >
-                {b.name}
-              </button>
-            ))}
-          </div>
-        </div>
+        <BookModal
+          books={books}
+          selectedBookIdx={selectedBookIdx}
+          onSelect={(idx) => {
+            onSelectBook(idx)
+            // Reset chapter to 1 when book changes
+            const newBook = books.find((b) => b.index === idx)!
+            if (selectedChapter > newBook.chapters) onSelectChapter(1)
+          }}
+          onClose={() => setBookOpen(false)}
+        />
       )}
-
       {chapterOpen && (
-        <div className="mt-2 p-2 bg-[var(--color-background)] rounded-xl max-h-48 overflow-y-auto">
-          <div className="grid grid-cols-6 gap-1.5">
-            {Array.from({ length: maxChapter }, (_, i) => i + 1).map((ch) => (
-              <button
-                key={ch}
-                type="button"
-                onClick={() => {
-                  onSelectChapter(ch)
-                  setChapterOpen(false)
-                }}
-                className={`py-1.5 px-1 rounded-lg text-xs font-bold transition-all ${
-                  ch === selectedChapter
-                    ? 'bg-[var(--color-success)] text-white'
-                    : 'bg-white text-[var(--color-primary)] hover:bg-[var(--color-success)]/10'
-                }`}
-              >
-                {ch}
-              </button>
-            ))}
-          </div>
-        </div>
+        <ChapterModal
+          book={selectedBook}
+          selectedChapter={selectedChapter}
+          onSelect={onSelectChapter}
+          onClose={() => setChapterOpen(false)}
+        />
       )}
     </div>
   )
@@ -135,9 +211,14 @@ function getMinDate(): string {
   const y = new Date().getFullYear()
   return `${y}-01-01`
 }
+function getTomorrow(): string {
+  const d = new Date()
+  d.setDate(d.getDate() + 1)
+  return d.toLocaleDateString('en-CA', { timeZone: 'Asia/Hong_Kong' })
+}
 function getToday(): string {
   // Use HK timezone — at midnight HKT, UTC is already previous day,
-  // so toISOString() would block "today" selection.
+  // so toLocaleDateString('en-CA') gives the correct local calendar date.
   return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Hong_Kong' })
 }
 
@@ -229,9 +310,8 @@ function OnboardingInner() {
   const parallelInfo = scope === 'nt_ot' && ntOtOrder === 'parallel' ? PARALLEL_TABLE[chaptersPerDay] : null
 
   // Plan days depends on nt_ot order
-  // Issue #6: if user picked a non-default start position, planDays is
-  // recalculated as ceil(remaining_chapters / chaptersPerDay) rather than
-  // the DAYS_TABLE default (which assumes start at 創世記 1 / 馬太 1).
+  // Issue #6 fix: total_days for nt_ot = ceil((nt_remaining + ot_remaining) / chapters_per_day)
+  // This correctly scales when user picks custom start positions for either testament.
   let planDays: number
   if (scope === 'nt_ot' && ntOtOrder !== 'parallel') {
     // Sequential: primary testament starts at user position; secondary always
@@ -243,12 +323,10 @@ function OnboardingInner() {
     const secondaryDays = Math.ceil(secondaryTotal / chaptersPerDay)
     planDays = Math.ceil(primaryRemaining / chaptersPerDay) + secondaryDays
   } else if (parallelInfo) {
-    // Parallel: use PARALLEL_TABLE but recalc if user picked custom starts
+    // Parallel: user formula — total pool = nt_remaining + ot_remaining
     const ntRemaining = getRemainingChapters('nt', BIBLE_BOOKS, ntStartBook, ntStartChapter)
     const otRemaining = getRemainingChapters('ot', BIBLE_BOOKS, otStartBook, otStartChapter)
-    const ntDays = Math.ceil(ntRemaining / chaptersPerDay)
-    const otDays = Math.ceil(otRemaining / chaptersPerDay)
-    planDays = Math.max(ntDays, otDays) // both testaments finish in parallel
+    planDays = Math.ceil((ntRemaining + otRemaining) / chaptersPerDay)
   } else {
     // Single-testament (nt or ot): recalc from remaining chapter count
     const remaining = scope === 'nt'
@@ -398,7 +476,7 @@ function OnboardingInner() {
               type="date"
               value={startDate}
               min={getMinDate()}
-              max={getToday()}
+              max={getTomorrow()}
               onChange={(e) => setStartDate(e.target.value)}
               className="w-full px-3 py-2.5 rounded-xl border border-[var(--color-muted)]/20 bg-[var(--color-background)] text-[var(--color-primary)] text-base"
             />
