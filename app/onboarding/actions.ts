@@ -108,25 +108,20 @@ export async function completeOnboarding(formData: FormData): Promise<{ error?: 
     const totalDays = parseInt(formData.get('total_days') as string, 10)
     const startDate = formData.get('start_date') as string | null
 
-    // For nt_ot: reading_order stores "N-OT" (e.g. "7-5") meaning nt=7 ch/day, ot=5 ch/day
-    // For nt/ot: reading_order is null
+    // Trust the client-supplied chapters_per_day. For nt_ot this is the sum of
+    // NT + OT per day; for nt/ot it's the chapters/day the user picked.
+    // (Previously this branch did `Math.ceil(259 / totalDays)` for both NT and OT,
+    //  which silently produced wrong values for OT since 929 ≠ 259 — see issue #5.)
     let readingOrder: string | null = null
-    let ntChapters: number
-    let otChapters: number
-
     if (scope === 'nt_ot') {
+      // readingOrder format: "N-OT" e.g. "2-5" → nt=2, ot=5 (parallel),
+      // or "nt_then_ot" / "ot_then_nt" (sequential). Only used as a stored hint;
+      // planGenerator reads chapters_per_day directly.
       readingOrder = formData.get('reading_order') as string
-      // readingOrder format: "N-OT" e.g. "7-5" → nt=7, ot=5
-      const [n, o] = (readingOrder ?? '').split('-').map(Number)
-      ntChapters = n ?? 0
-      otChapters = o ?? 0
-    } else {
-      ntChapters = Math.ceil(259 / totalDays)
-      otChapters = 0
     }
 
-    // chapters_per_day = nt + ot (total chapters read per day)
-    const chaptersPerDay = ntChapters + otChapters
+    // chapters_per_day = the value the client pre-computed and verified on submit.
+    const chaptersPerDay = parseInt(formData.get('chapters_per_day') as string, 10)
 
     console.log('[onboarding] insert', { user_id: user.id, scope, totalDays, chaptersPerDay, readingOrder })
 

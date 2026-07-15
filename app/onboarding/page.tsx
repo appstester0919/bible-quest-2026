@@ -125,7 +125,10 @@ function OnboardingInner() {
 
   // For parallel: nt/ot per day comes from PARALLEL_TABLE
   // For sequential: chaptersPerDay goes entirely to whichever testament is active
-  const ntChapters   = scope === 'nt_ot' && ntOtOrder === 'parallel' ? (parallelInfo?.nt ?? 0) : (scope === 'nt_ot' ? chaptersPerDay : Math.ceil(259 / (planDays || 1)))
+  // For nt/ot (single-testament): chaptersPerDay IS the daily chapter count for that scope.
+  // (Previously this branch did Math.ceil(259 / planDays), which produced a wrong value
+  //  for OT because 929 ≠ 259 — see issue #5.)
+  const ntChapters   = scope === 'nt_ot' && ntOtOrder === 'parallel' ? (parallelInfo?.nt ?? 0) : (scope === 'nt_ot' ? chaptersPerDay : chaptersPerDay)
   const otChapters   = scope === 'nt_ot' && ntOtOrder === 'parallel' ? (parallelInfo?.ot ?? 0) : 0
 
   const completionDate = getEstimatedCompletionDate(scope, planDays, new Date(startDate + 'T00:00:00'))
@@ -163,6 +166,12 @@ function OnboardingInner() {
       fd.append('scope', scope)
       fd.append('total_days', String(planDays))
       fd.append('start_date', startDate)
+      // Trust the UI's computed total daily chapters. For nt_ot parallel this is
+      // ntChapters + otChapters (e.g. 2+5=7); for sequential and single-testament
+      // modes it equals the chaptersPerDay the user picked (e.g. OT 3 章 → 3).
+      // Server must NOT recalculate via Math.ceil(259/totalDays) — that formula
+      // only makes sense for NT and silently corrupts OT plans (issue #5).
+      fd.append('chapters_per_day', String(ntChapters + otChapters))
       if (scope === 'nt_ot') {
         // Parallel: "N-OT" format. Sequential: 'nt_then_ot' / 'ot_then_nt'
         const ro = ntOtOrder === 'parallel' ? `${ntChapters}-${otChapters}` : ntOtOrder
