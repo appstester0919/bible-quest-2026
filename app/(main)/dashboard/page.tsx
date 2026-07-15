@@ -202,25 +202,15 @@ export default function DashboardPage() {
         if (sessionsErr) errors.push(`sessions: ${sessionsErr.message}`)
         setSessions(sessionsData ?? [])
 
-        // Compute live global stats directly from reading_sessions + user_stats
-        const { data: allSessions } = await supabase
-          .from('reading_sessions').select('id, user_id, date_local')
-        const totalChapters = allSessions?.length ?? 0
-
-        // Active readers: distinct users with sessions in last 30 days
-        const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString().split('T')[0]
-        const recentSessions = allSessions?.filter(s => s.date_local >= thirtyDaysAgo) ?? []
-        const activeReaders = new Set(recentSessions.map(s => s.user_id)).size
-
-        const { data: plansData } = await supabase
-          .from('user_stats').select('completed_plans')
-        const totalPlansCompleted = (plansData ?? []).reduce((s, r) => s + (r.completed_plans ?? 0), 0)
-
-        setGlobalStats({
-          total_chapters_read: totalChapters,
-          active_readers: activeReaders,
-          total_plans_completed: totalPlansCompleted,
-        })
+        // Use global_stats view for server-calculated values
+        const { data: gsData } = await supabase.from('global_stats').select('*').single()
+        if (gsData) {
+          setGlobalStats({
+            total_chapters_read: gsData.total_chapters_read ?? 0,
+            active_readers: gsData.active_readers ?? 0,
+            total_plans_completed: gsData.total_plans_completed ?? 0,
+          })
+        }
 
         // Load bible data for plan computation
         const res = await fetch('/bible-data.json')
