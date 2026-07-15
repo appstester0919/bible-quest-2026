@@ -14,6 +14,7 @@ import {
   getRequiredDays,
   getEstimatedCompletionDate,
   getSequentialDays,
+  getRemainingChapters,
 } from '@/lib/bible/scope'
 import { createClient } from '@/lib/supabase/client'
 
@@ -228,13 +229,32 @@ function OnboardingInner() {
   const parallelInfo = scope === 'nt_ot' && ntOtOrder === 'parallel' ? PARALLEL_TABLE[chaptersPerDay] : null
 
   // Plan days depends on nt_ot order
+  // Issue #6: if user picked a non-default start position, planDays is
+  // recalculated as ceil(remaining_chapters / chaptersPerDay) rather than
+  // the DAYS_TABLE default (which assumes start at 創世記 1 / 馬太 1).
   let planDays: number
   if (scope === 'nt_ot' && ntOtOrder !== 'parallel') {
-    planDays = getSequentialDays(chaptersPerDay, ntOtOrder as 'nt_then_ot' | 'ot_then_nt')
+    // Sequential: primary testament starts at user position; secondary always
+    // starts at its testament head. Compute sequentially.
+    const primaryRemaining = scope === 'nt_ot' && ntOtOrder === 'nt_then_ot'
+      ? getRemainingChapters('nt', BIBLE_BOOKS, ntStartBook, ntStartChapter)
+      : getRemainingChapters('ot', BIBLE_BOOKS, otStartBook, otStartChapter)
+    const secondaryTotal = ntOtOrder === 'nt_then_ot' ? 929 : 259
+    const secondaryDays = Math.ceil(secondaryTotal / chaptersPerDay)
+    planDays = Math.ceil(primaryRemaining / chaptersPerDay) + secondaryDays
   } else if (parallelInfo) {
-    planDays = parallelInfo.totalDays
+    // Parallel: use PARALLEL_TABLE but recalc if user picked custom starts
+    const ntRemaining = getRemainingChapters('nt', BIBLE_BOOKS, ntStartBook, ntStartChapter)
+    const otRemaining = getRemainingChapters('ot', BIBLE_BOOKS, otStartBook, otStartChapter)
+    const ntDays = Math.ceil(ntRemaining / chaptersPerDay)
+    const otDays = Math.ceil(otRemaining / chaptersPerDay)
+    planDays = Math.max(ntDays, otDays) // both testaments finish in parallel
   } else {
-    planDays = requiredDays
+    // Single-testament (nt or ot): recalc from remaining chapter count
+    const remaining = scope === 'nt'
+      ? getRemainingChapters('nt', BIBLE_BOOKS, ntStartBook, ntStartChapter)
+      : getRemainingChapters('ot', BIBLE_BOOKS, otStartBook, otStartChapter)
+    planDays = Math.ceil(remaining / chaptersPerDay)
   }
 
   // For parallel: nt/ot per day comes from PARALLEL_TABLE

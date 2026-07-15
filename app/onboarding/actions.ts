@@ -24,7 +24,7 @@ export async function redesignPlan(input: RedesignPlanInput): Promise<{ error?: 
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return { error: '請先登入' }
 
-    const { scope, totalDays, startDate, ntChapters, otChapters, ntOtOrder, keepProgress, oldEnrollmentId } = input
+    const { scope, totalDays, startDate, ntChapters, otChapters, ntOtOrder, keepProgress, oldEnrollmentId, ntStartBook, ntStartChapter, otStartBook, otStartChapter } = input
 
     // 1. Read old enrollment to determine effective start_date
     const { data: oldEnrollment, error: oldErr } = await supabase
@@ -76,6 +76,11 @@ export async function redesignPlan(input: RedesignPlanInput): Promise<{ error?: 
         reading_order: readingOrder,
         total_days: totalDays,
         chapters_per_day: ntChapters + otChapters,
+        // Issue #6: per-testament start position
+        start_book_index: scope === 'nt' ? ntStartBook : otStartBook,
+        start_chapter: scope === 'nt' ? ntStartChapter : otStartChapter,
+        nt_start_book_index: ntStartBook,
+        ot_start_book_index: otStartBook,
         status: 'active',
         started_at: startedAt,
       })
@@ -128,7 +133,37 @@ export async function completeOnboarding(formData: FormData): Promise<{ error?: 
     // chapters_per_day = the value the client pre-computed and verified on submit.
     const chaptersPerDay = parseInt(formData.get('chapters_per_day') as string, 10)
 
-    console.log('[onboarding] insert', { user_id: user.id, scope, totalDays, chaptersPerDay, readingOrder })
+    // Issue #6: per-testament start position
+    const ntStartBook = parseInt(formData.get('nt_start_book') as string, 10) || 39
+    const ntStartChapter = parseInt(formData.get('nt_start_chapter') as string, 10) || 1
+    const otStartBook = parseInt(formData.get('ot_start_book') as string, 10) || 0
+    const otStartChapter = parseInt(formData.get('ot_start_chapter') as string, 10) || 1
+
+    // For DB: derive the single-column start_book_index from the relevant
+    // per-testament field (migration 010 column). For nt_ot, NT start wins
+    // as the "primary" canonical signal.
+    const startBookIndex = scope === 'nt' ? ntStartBook : otStartBook
+
+    // Issue #6: recalculate total_days from the remaining chapter count when
+    // the user has chosen a non-default start position. The client may have
+    // computed planDays from DAYS_TABLE (which assumes start = 創世記 1 / 馬太 1);
+    // for custom starts we need to recompute against the actual remaining
+    // chapter count so total_days reflects the real plan length.
+    //
+    // We can't call getRemainingChapters() here directly (it needs the books
+    // metadata, which the server doesn't have), so the client pre-computes
+    // totalDays and sends it in 'total_days'. The previous plan's behavior:
+    //   - For 'nt' / 'ot' default starts, totalDays = DAYS_TABLE[scope][chaptersPerDay]
+    //   - For 'nt_ot' parallel, totalDays = PARALLEL_TABLE[chaptersPerDay].totalDays
+    //   - For 'nt_ot' sequential, totalDays = getSequentialDays(...)
+    //
+    // The client already implements these correctly (see page.tsx planDays
+    // computation). The server trusts the client value and writes it to DB.
+
+    console.log('[onboarding] insert', {
+      user_id: user.id, scope, totalDays, chaptersPerDay, readingOrder,
+      ntStartBook, ntStartChapter, otStartBook, otStartChapter,
+    })
 
     // Mark any existing active enrollments as 'abandoned' before creating
     // a new one. Otherwise the user can end up with multiple 'active' rows,
@@ -152,6 +187,11 @@ export async function completeOnboarding(formData: FormData): Promise<{ error?: 
         reading_order: readingOrder, // null for nt/ot; "N-OT" string for nt_ot (e.g. "7-5")
         total_days: totalDays,
         chapters_per_day: chaptersPerDay,
+        // Issue #6: per-testament start position (migrations 010 + 011)
+        start_book_index: startBookIndex,
+        start_chapter: scope === 'nt' ? ntStartChapter : otStartChapter,
+        nt_start_book_index: ntStartBook,
+        ot_start_book_index: otStartBook,
         status: 'active',
         started_at: startDate ? new Date(startDate + 'T00:00:00').toISOString() : new Date().toISOString(),
       })
