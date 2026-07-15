@@ -8,7 +8,7 @@ import { createClient } from '@/lib/supabase/client'
 import { getBooksMeta, type BookMeta } from '@/lib/bible/lookup'
 import { generateReadingPlan } from '@/lib/bible/planGenerator'
 import { celebrate } from '@/lib/confetti'
-import { markLessonComplete, unmarkDayComplete, recalcUserStatsAfterCompletion, markPlanComplete } from '@/lib/actions'
+import { markDayCompleteBatch, unmarkDayComplete, markPlanComplete } from '@/lib/actions'
 import { checkInAllMyGroups } from '@/lib/groupActions'
 
 interface Enrollment {
@@ -168,26 +168,17 @@ export default function CalendarPage() {
 
     setIsCompleting(true)
     try {
-      // Insert all chapters in PARALLEL for speed (INSERT only, no结算)
-      const insertPromises = refs.map((ref, i) =>
-        // Each chapter worth 10 XP — XP scales with effort, so finishing a
-        // day with 10 chapters gives 100 XP (vs old model: only 10 XP / day).
-        markLessonComplete(enrollment.id, ref, 10, key)
-      )
-      const results = await Promise.all(insertPromises)
-      const insertedCount = results.filter(r => r.success).length
-      if (insertedCount === 0) {
-        alert('寫入失敗')
+      // Single RPC: bulk INSERT all chapters + recalculate stats server-side.
+      // Replaces N × markLessonComplete() + recalcUserStatsAfterCompletion()
+      // which saved ~N × (auth rtt + insert rtt) round-trips.
+      const result = await markDayCompleteBatch(enrollment.id, refs, key)
+      if (!result.success) {
+        alert(`寫入失敗: ${result.error}`)
         setIsCompleting(false)
         return
       }
-      // Recalculate stats ONCE after all inserts (not per-chapter)
-      const stats = await recalcUserStatsAfterCompletion(key)
-      console.log('[handleCompleteDay] stats recalculated:', stats)
-      if (!stats.success) {
-        console.error('[handleCompleteDay] stats recalc failed:', stats.error)
-      }
-      // Sync group check-ins AFTER inserts + stats
+
+      // Sync group check-ins fire-and-forget (non-blocking)
       checkInAllMyGroups(key).catch(e => console.error('[handleCompleteDay] group sync err:', e))
 
       // Check if plan is now fully completed
@@ -196,8 +187,7 @@ export default function CalendarPage() {
         await markPlanComplete(enrollment.id)
       }
 
-      // Stats already recalculated via recalcUserStatsAfterCompletion above
-      await celebrate({ type: 'burst', particleCount: Math.min(insertedCount * 30, 180) })
+      await celebrate({ type: 'burst', particleCount: Math.min(refs.length * 30, 180) })
       setSessions(prev => [...prev, ...refs.map((ref, i) => ({
         id: `new-${i}`,
         enrollment_id: enrollment.id,

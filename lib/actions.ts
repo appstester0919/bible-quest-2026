@@ -265,6 +265,105 @@ export async function unmarkDayComplete(
 }
 
 /**
+ * Batch-mark multiple chapters as complete in a single DB round-trip.
+ * Replaces N × markLessonComplete() calls with a single bulk INSERT.
+ * Then recalculates stats server-side (no full-session transfer).
+ */
+export async function markDayCompleteBatch(
+  enrollmentId: string,
+  refs: string[],
+  dateLocal: string
+): Promise<{ success: boolean; insertedCount?: number; error?: string }> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { success: false, error: 'Not authenticated' }
+  if (!refs || refs.length === 0) return { success: false, error: 'No refs provided' }
+
+  // ── Step 1: Bulk INSERT all chapters in ONE round-trip ──────────────────────
+  const now = new Date()
+  const rows = refs.map(ref => {
+    const parts = ref.trim().split(/\s+/)
+    const bookZh = parts[0]
+    // Handle "創 1" or "創1" or "創 1:3"
+    const chapterPart = parts[1] ?? '1'
+    const chapter = parseInt(chapterPart.replace(/:\d+$/, ''), 10) || 1
+    return {
+      enrollment_id: enrollmentId,
+      user_id: user.id,
+      chapter_ref: ref,
+      date_local: dateLocal,
+      xp_earned: 10,
+      day_number: 1,
+      book_zh: bookZh,
+      chapter,
+    }
+  })
+
+  const { error: insertError } = await supabase
+    .from('reading_sessions')
+    .insert(rows)
+
+  if (insertError) {
+    console.error('[markDayCompleteBatch] bulk INSERT failed:', insertError)
+    return { success: false, error: insertError.message }
+  }
+
+  // ── Step 2: Recalculate user stats server-side (single SELECT + UPDATE) ───
+  const { data: allSessions } = await supabase
+    .from('reading_sessions')
+    .select('date_local, xp_earned')
+    .eq('user_id', user.id)
+
+  const uniqueDates = [...new Set((allSessions ?? []).map((r: { date_local: string }) => r.date_local))].sort()
+
+  const todayStr = getHKTDateStr()
+  const todayHKT = new Date(new Date().toLocaleString('en-CA', { timeZone: 'Asia/Hong_Kong' }))
+  const yesterdayStr = getHKTDateStr(new Date(todayHKT.getTime() - 86400000))
+
+  let streak = 0
+  if (uniqueDates.length > 0) {
+    let lastValidIdx = uniqueDates.length - 1
+    for (let i = uniqueDates.length - 1; i >= 0; i--) {
+      if (uniqueDates[i] <= todayStr) { lastValidIdx = i; break }
+    }
+    const lastDate = uniqueDates[lastValidIdx]
+    if (lastDate === todayStr || lastDate === yesterdayStr) {
+      streak = 1
+      for (let i = lastValidIdx - 1; i >= 0; i--) {
+        const diffDays = Math.round((new Date(uniqueDates[i + 1]).getTime() - new Date(uniqueDates[i]).getTime()) / 86400000)
+        if (diffDays === 1) streak++
+        else break
+      }
+    }
+  }
+
+  const totalXp = (allSessions ?? []).reduce((sum: number, s: { xp_earned?: number }) => sum + (s.xp_earned ?? 0), 0)
+  const level = Math.floor(Math.sqrt(totalXp / 100)) + 1
+  const lastDateVal = uniqueDates.length > 0 ? uniqueDates[uniqueDates.length - 1] : null
+
+  let longestStreak = streak
+  let currentRun = 1
+  for (let i = 1; i < uniqueDates.length; i++) {
+    const diffDays = Math.round((new Date(uniqueDates[i]).getTime() - new Date(uniqueDates[i - 1]).getTime()) / 86400000)
+    if (diffDays === 1) { currentRun++; longestStreak = Math.max(longestStreak, currentRun) }
+    else currentRun = 1
+  }
+
+  await supabase
+    .from('user_stats')
+    .update({
+      total_xp: totalXp,
+      level,
+      current_streak: streak,
+      longest_streak: Math.max(longestStreak, streak),
+      last_completed_date: lastDateVal,
+    })
+    .eq('user_id', user.id)
+
+  return { success: true, insertedCount: refs.length }
+}
+
+/**
  * Mark a plan enrollment as completed.
  * Called when user finishes all days in a plan.
  */
