@@ -318,6 +318,10 @@ export async function checkInAllMyGroups(dateLocal: string): Promise<{ success: 
   const upsertResults = await Promise.all(upsertPromises)
   const count = upsertResults.filter(r => r.ok).length
   console.log('[checkInAllMyGroups] done', { dateLocal, count, total: memberships.length, results: JSON.stringify(upsertResults) })
+
+  // Revalidate dashboard so group check-in status reflects immediately
+  revalidatePath('/dashboard')
+
   return { success: true, count, debug: { memberships, upsertResults } }
 }
 

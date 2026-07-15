@@ -1,6 +1,7 @@
 'use server'
 
 import { createClient } from '@/lib/supabase/server'
+import { revalidatePath } from 'next/cache'
 
 // ─── Date helpers (HKT-only, avoids .toISOString() UTC offset bug) ─────────────
 function getHKTDateStr(date: Date = new Date()): string {
@@ -359,6 +360,9 @@ export async function markDayCompleteBatch(
       last_completed_date: lastDateVal,
     })
     .eq('user_id', user.id)
+
+  // Revalidate dashboard so group check-in status reflects immediately
+  revalidatePath('/dashboard')
 
   return { success: true, insertedCount: refs.length }
 }
