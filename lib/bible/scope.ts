@@ -120,3 +120,71 @@ export function getEstimatedCompletionDate(
   d.setDate(d.getDate() + actualDays)
   return d
 }
+
+// ─── Start position (issue #6) ────────────────────────────────────────────
+
+/** NT starts at index 39 (馬太福音) in the canonical 0-based book list */
+export const NT_FIRST_BOOK_INDEX = 39
+/** NT ends at index 64 (啟示錄) */
+export const NT_LAST_BOOK_INDEX = 64
+/** OT starts at index 0 (創世記) */
+export const OT_FIRST_BOOK_INDEX = 0
+/** OT ends at index 38 (瑪拉基書) */
+export const OT_LAST_BOOK_INDEX = 38
+
+/**
+ * Compute the remaining chapter count from a custom start position to the
+ * end of the relevant testament.
+ *
+ *   NT plan:    startBookIndex ∈ [39, 64] (馬太 to 啟示錄)
+ *   OT plan:    startBookIndex ∈ [0, 38]  (創世記 to 瑪拉基)
+ *   NT_OT plan: handled in planGenerator.ts (per-side starts)
+ *
+ * @param scope            'nt' | 'ot' (nt_ot not supported here — use
+ *                         planGenerator for combined plans)
+ * @param books            full 65-book list (OT first, NT second)
+ * @param startBookIndex   0-based canonical book index (0=創, 39=太, 64=啓)
+ * @param startChapter     1-based chapter within the start book
+ * @returns                remaining chapter count, >= 1
+ */
+export function getRemainingChapters(
+  scope: 'nt' | 'ot',
+  books: { index: number; chapters: number }[],
+  startBookIndex: number,
+  startChapter: number
+): number {
+  // Restrict to the relevant testament
+  const minBook = scope === 'nt' ? NT_FIRST_BOOK_INDEX : OT_FIRST_BOOK_INDEX
+  const maxBook = scope === 'nt' ? NT_LAST_BOOK_INDEX : OT_LAST_BOOK_INDEX
+  if (startBookIndex < minBook || startBookIndex > maxBook) {
+    throw new Error(
+      `startBookIndex ${startBookIndex} out of range for scope '${scope}' ` +
+        `(expected ${minBook}..${maxBook})`
+    )
+  }
+  if (startChapter < 1) {
+    throw new Error(`startChapter must be >= 1, got ${startChapter}`)
+  }
+
+  // Sum chapters before startBookIndex (within this testament)
+  const before = books
+    .filter((b) => b.index >= minBook && b.index < startBookIndex)
+    .reduce((sum, b) => sum + b.chapters, 0)
+
+  // Validate: startChapter must not exceed the start book's chapter count
+  const startBook = books.find((b) => b.index === startBookIndex)
+  if (!startBook) {
+    throw new Error(
+      `startBookIndex ${startBookIndex} not present in bible book list`
+    )
+  }
+  if (startChapter > startBook.chapters) {
+    throw new Error(
+      `startChapter ${startChapter} exceeds start book ` +
+        `(${startBook.chapters} chapters)`
+    )
+  }
+
+  const total = scope === 'nt' ? 259 : 929
+  return total - before - (startChapter - 1)
+}
