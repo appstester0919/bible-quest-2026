@@ -39,6 +39,11 @@ interface Enrollment {
   started_at?: string
   created_at?: string
   reading_order?: string | null
+  // Issue #6: custom start position fields
+  start_book_index?: number
+  start_chapter?: number
+  nt_start_book_index?: number
+  ot_start_book_index?: number
 }
 
 interface ReadingSession {
@@ -187,7 +192,7 @@ export default function DashboardPage() {
 
         const { data: enrollmentsData, error } = await supabase
           .from('user_plan_enrollments')
-          .select('id, scope, chapters_per_day, total_days, status, started_at, reading_order')
+          .select('id, scope, chapters_per_day, total_days, status, started_at, reading_order, start_book_index, start_chapter, nt_start_book_index, ot_start_book_index')
           .eq('user_id', authUser.id)
           .eq('status', 'active')
           .order('started_at', { ascending: false })
