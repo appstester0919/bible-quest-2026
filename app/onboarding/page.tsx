@@ -580,91 +580,71 @@ function OnboardingInner() {
               計劃預覽
             </div>
 
-            {scope !== 'nt_ot' ? (
-              <div>
-                <div className="text-xs text-[var(--color-muted)] mb-2">
-                  計劃天數（揀每日章數後自動計算）
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {Object.entries(daysTable).map(([chapters, days]) => (
-                    <div
-                      key={chapters}
-                      className={`py-2 px-3 rounded-xl text-sm font-bold transition-all ${
-                        Number(chapters) === chaptersPerDay
-                          ? 'bg-[var(--color-success)] text-white shadow-[var(--shadow-button)]'
-                          : 'bg-[var(--color-background)] text-[var(--color-muted)]'
-                      }`}
-                    >
-                      {days}天
+            {/* nt_ot: parallel + sequential breakdown */}
+            {scope === 'nt_ot' ? (
+              <>
+                <div className="grid grid-cols-2 gap-2">
+                  {/* NT summary */}
+                  <div className="bg-[var(--color-background)] rounded-xl p-3 space-y-1">
+                    <div className="text-xs text-[var(--color-muted)]">新約</div>
+                    <div className="font-bold text-[var(--color-primary)]">
+                      {NT_BOOKS.find((b) => b.index === ntStartBook)?.abbr ?? '太'}
+                      {' '}
+                      第{ntStartChapter}章起
                     </div>
-                  ))}
+                    <div className="text-xs text-[var(--color-muted)]">
+                      剩 {getRemainingChapters('nt', BIBLE_BOOKS, ntStartBook, ntStartChapter)} 章
+                    </div>
+                    <div className="text-sm font-bold text-[var(--color-primary)]">
+                      {ntChapters} 章/天 · {ntOtOrder === 'parallel' ? '並行' : ntOtOrder === 'nt_then_ot' ? '先新後舊' : '先舊後新'}
+                    </div>
+                  </div>
+                  {/* OT summary */}
+                  <div className="bg-[var(--color-background)] rounded-xl p-3 space-y-1">
+                    <div className="text-xs text-[var(--color-muted)]">舊約</div>
+                    <div className="font-bold text-[var(--color-primary)]">
+                      {OT_BOOKS.find((b) => b.index === otStartBook)?.abbr ?? '創'}
+                      {' '}
+                      第{otStartChapter}章起
+                    </div>
+                    <div className="text-xs text-[var(--color-muted)]">
+                      剩 {getRemainingChapters('ot', BIBLE_BOOKS, otStartBook, otStartChapter)} 章
+                    </div>
+                    <div className="text-sm font-bold text-[var(--color-primary)]">
+                      {otChapters} 章/天
+                    </div>
+                  </div>
                 </div>
-              </div>
+              </>
             ) : (
-              <div>
-                <div className="text-xs text-[var(--color-muted)] mb-2">
-                  {ntOtOrder === 'parallel' ? '並行計劃天數' : '順序計劃天數'}
+              /* NT or OT single testament */
+              <div className="bg-[var(--color-background)] rounded-xl p-3 space-y-1">
+                <div className="text-xs text-[var(--color-muted)]">
+                  {scope === 'nt' ? '新約' : '舊約'}
                 </div>
-                <div className="flex flex-wrap gap-2">
-                  {Object.entries(daysTable).map(([n, days]) => {
-                    // Sequential: show actual total days for THIS order
-                    const actualDays = ntOtOrder === 'parallel'
-                      ? Number(days)
-                      : getSequentialDays(Number(n), ntOtOrder as 'nt_then_ot' | 'ot_then_nt')
-                    const isActive = chaptersPerDay === Number(n)
-                    return (
-                      <div
-                        key={n}
-                        onClick={() => setChapters(Number(n))}
-                        className={`py-2 px-3 rounded-xl text-sm font-bold transition-all cursor-pointer ${
-                          isActive
-                            ? 'bg-[var(--color-success)] text-white shadow-[var(--shadow-button)]'
-                            : 'bg-[var(--color-background)] text-[var(--color-muted)] hover:bg-[var(--color-success)]/10'
-                        }`}
-                      >
-                        {n}章 · {actualDays}天
-                      </div>
-                    )
-                  })}
+                <div className="font-bold text-[var(--color-primary)]">
+                  {(scope === 'nt' ? NT_BOOKS : OT_BOOKS).find(
+                    (b) => b.index === (scope === 'nt' ? ntStartBook : otStartBook)
+                  )?.abbr ?? '創'}
+                  {' 第'}
+                  {scope === 'nt' ? ntStartChapter : otStartChapter}
+                  章起
+                </div>
+                <div className="text-xs text-[var(--color-muted)]">
+                  剩{' '}
+                  {scope === 'nt'
+                    ? getRemainingChapters('nt', BIBLE_BOOKS, ntStartBook, ntStartChapter)
+                    : getRemainingChapters('ot', BIBLE_BOOKS, otStartBook, otStartChapter)}
+                  章 · {chaptersPerDay} 章/天
                 </div>
               </div>
             )}
 
             <div className="pt-3 border-t border-[var(--color-muted)]/10 space-y-1.5">
-              {scope === 'nt_ot' && ntOtOrder === 'parallel' && parallelInfo ? (
-                <>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-[var(--color-muted)]">新約章數</span>
-                    <span className="font-bold text-[var(--color-primary)]">{ntChapters} 章/天</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-[var(--color-muted)]">舊約章數</span>
-                    <span className="font-bold text-[var(--color-primary)]">{otChapters} 章/天</span>
-                  </div>
-                </>
-              ) : scope === 'nt_ot' ? (
-                <>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-[var(--color-muted)]">讀經順序</span>
-                    <span className="font-bold text-[var(--color-primary)]">
-                      {ntOtOrder === 'nt_then_ot' ? '先新後舊' : ntOtOrder === 'ot_then_nt' ? '先舊後新' : '並行'}
-                    </span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-[var(--color-muted)]">新約用時</span>
-                    <span className="font-bold text-[var(--color-primary)]">{Math.ceil(259 / chaptersPerDay)} 天</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-[var(--color-muted)]">舊約用時</span>
-                    <span className="font-bold text-[var(--color-primary)]">{Math.ceil(929 / chaptersPerDay)} 天</span>
-                  </div>
-                </>
-              ) : (
-                <div className="flex justify-between text-sm">
-                  <span className="text-[var(--color-muted)]">每日章數</span>
-                  <span className="font-bold text-[var(--color-primary)]">{chaptersPerDay} 章</span>
-                </div>
-              )}
+              <div className="flex justify-between text-sm">
+                <span className="text-[var(--color-muted)]">每日章數</span>
+                <span className="font-bold text-[var(--color-primary)]">{chaptersPerDay} 章</span>
+              </div>
               <div className="flex justify-between text-sm">
                 <span className="text-[var(--color-muted)]">總天數</span>
                 <span className="font-bold text-[var(--color-primary)]">{planDays} 天</span>
