@@ -81,6 +81,9 @@ export async function redesignPlan(input: RedesignPlanInput): Promise<{ error?: 
         start_chapter: scope === 'nt' ? ntStartChapter : otStartChapter,
         nt_start_book_index: ntStartBook,
         ot_start_book_index: otStartBook,
+        // Migration 013: per-testament start chapter for nt_ot plans.
+        nt_start_chapter: ntStartChapter,
+        ot_start_chapter: otStartChapter,
         status: 'active',
         started_at: startedAt,
       })
@@ -192,6 +195,11 @@ export async function completeOnboarding(formData: FormData): Promise<{ error?: 
         start_chapter: scope === 'nt' ? ntStartChapter : otStartChapter,
         nt_start_book_index: ntStartBook,
         ot_start_book_index: otStartBook,
+        // Migration 013: per-testament start chapter for nt_ot plans.
+        // For nt/ot single-testament scopes these are NULL — the generator
+        // falls back to start_chapter for those.
+        nt_start_chapter: ntStartChapter,
+        ot_start_chapter: otStartChapter,
         status: 'active',
         started_at: startDate ? new Date(startDate + 'T00:00:00').toISOString() : new Date().toISOString(),
       })

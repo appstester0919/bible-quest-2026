@@ -44,6 +44,11 @@ export type EnrollmentLite = {
   /** 1-based chapter within the start book (NT and OT share this).
    *  Defaults to 1 when not provided. */
   start_chapter?: number
+  /** Per-testament start chapter (migration 013). For 'nt_ot' scope, these
+   *  take precedence over start_chapter for the matching testament.
+   *  Falls back to start_chapter when not provided. */
+  nt_start_chapter?: number
+  ot_start_chapter?: number
 }
 
 /** Default NT start (馬太福音 1 章) */
@@ -60,6 +65,21 @@ function advanceDate(date: Date, days: number): Date {
   const next = new Date(date)
   next.setDate(next.getDate() + days)
   return next
+}
+
+/**
+ * Clamp start chapter into [1, bookChapters] range. Returns 1 if the input is
+ * undefined / non-positive / exceeds the book's chapter count. This is the
+ * defensive fallback for legacy enrollments that wrote the same start_chapter
+ * for both testaments (e.g. OT chapter 110 stored against a 5-chapter NT book).
+ */
+function clampChapter(
+  chapter: number | undefined,
+  bookChapters: number
+): number {
+  if (!chapter || chapter < 1) return 1
+  if (chapter > bookChapters) return 1
+  return chapter
 }
 
 /**
@@ -161,16 +181,28 @@ export function generateReadingPlan(
     const otStartBook = enrollment.ot_start_book_index
       ?? enrollment.start_book_index
       ?? DEFAULT_OT_START_BOOK
-    const startChapter = enrollment.start_chapter ?? DEFAULT_START_CHAPTER
+    // Per-testament start chapter takes precedence. For backwards compat with
+    // enrollments written before migration 013 (single start_chapter column),
+    // fall back to start_chapter and clamp to the start book's chapter count.
+    const ntStartBookMeta = books.find((b) => b.index === ntStartBook)
+    const otStartBookMeta = books.find((b) => b.index === otStartBook)
+    const ntStartChapter = clampChapter(
+      enrollment.nt_start_chapter ?? enrollment.start_chapter,
+      ntStartBookMeta?.chapters ?? 999
+    )
+    const otStartChapter = clampChapter(
+      enrollment.ot_start_chapter ?? enrollment.start_chapter,
+      otStartBookMeta?.chapters ?? 999
+    )
 
     // Compute initial remaining chapter counts. The books[] passed to
     // getRemainingChapters is the full 65-book list; the helper handles
     // per-testament scoping internally.
     const ntInitialRemaining = ntStartBook >= NT_FIRST_BOOK_INDEX
-      ? getRemainingChapters('nt', books, ntStartBook, startChapter)
+      ? getRemainingChapters('nt', books, ntStartBook, ntStartChapter)
       : 259
     const otInitialRemaining = otStartBook <= OT_FIRST_BOOK_INDEX + 38
-      ? getRemainingChapters('ot', books, otStartBook, startChapter)
+      ? getRemainingChapters('ot', books, otStartBook, otStartChapter)
       : 929
 
     let ntBookArrIdx = ntBooks.findIndex((b) => b.index === ntStartBook)
@@ -178,8 +210,8 @@ export function generateReadingPlan(
     if (ntBookArrIdx < 0) ntBookArrIdx = 0
     if (otBookArrIdx < 0) otBookArrIdx = 0
 
-    let ntBookIdx = ntBookArrIdx, ntChapter = startChapter, ntRemaining = ntInitialRemaining
-    let otBookIdx = otBookArrIdx, otChapter = startChapter, otRemaining = otInitialRemaining
+    let ntBookIdx = ntBookArrIdx, ntChapter = ntStartChapter, ntRemaining = ntInitialRemaining
+    let otBookIdx = otBookArrIdx, otChapter = otStartChapter, otRemaining = otInitialRemaining
 
     for (let day = 0; day < maxDays && (ntRemaining > 0 || otRemaining > 0); day++) {
       const refs: string[] = []

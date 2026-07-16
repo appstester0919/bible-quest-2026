@@ -276,4 +276,56 @@ describe('generateReadingPlan — issue #6 start position', () => {
       expect(days[0]).toEqual(['創世記 1', '創世記 2'])
     })
   })
+
+  // Migration 013: per-testament start chapter for nt_ot plans
+  describe('nt_ot with per-testament start chapter (migration 013)', () => {
+    it('OT side starts at 詩篇 110, NT side defaults to 太 1', () => {
+      // Reproduces the original bug: OT user-picked Psalms chapter 110,
+      // NT side defaulted. Before the fix, planGenerator would throw
+      // "startChapter 110 exceeds start book (28 chapters)" because it
+      // applied the OT chapter 110 to the NT side too.
+      const plan = generateReadingPlan(
+        {
+          scope: 'nt_ot',
+          chapters_per_day: 3,
+          reading_order: '2-1', // 2 NT + 1 OT per day
+          started_at: startDate,
+          nt_start_book_index: 39, // 馬太
+          nt_start_chapter: 1,
+          ot_start_book_index: 18, // 詩篇
+          ot_start_chapter: 110,
+        },
+        books
+      )
+      const days = firstNDays(plan, 2)
+      // Day 1: NT 太 1, 2 + OT 詩篇 110
+      expect(days[0]).toEqual(['馬太福音 1', '馬太福音 2', '詩篇 110'])
+      // Day 2: NT 太 3, 4 + OT 詩篇 111
+      expect(days[1]).toEqual(['馬太福音 3', '馬太福音 4', '詩篇 111'])
+    })
+
+    it('legacy start_chapter (no per-testament) is clamped when out of range', () => {
+      // Pre-migration-013 enrollments wrote the same start_chapter to both
+      // sides. If it was huge (e.g. 110) and the start_book was 5-chapter
+      // (e.g. 帖前 51), the plan would throw. Now it clamps to 1.
+      const plan = generateReadingPlan(
+        {
+          scope: 'nt_ot',
+          chapters_per_day: 2,
+          reading_order: '1-1',
+          started_at: startDate,
+          nt_start_book_index: 51, // 帖前 (5 chapters)
+          ot_start_book_index: 18, // 詩篇
+          // Only legacy start_chapter (no per-testament)
+          start_chapter: 110,
+        },
+        books
+      )
+      const days = firstNDays(plan, 1)
+      // NT side clamped to 帖前 1
+      expect(days[0]).toContain('帖撒羅尼迦前書 1')
+      // OT side: 110 is within 詩篇 (150 ch), so uses 110
+      expect(days[0]).toContain('詩篇 110')
+    })
+  })
 })
