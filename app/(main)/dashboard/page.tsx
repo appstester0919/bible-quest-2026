@@ -663,7 +663,8 @@ export default function DashboardPage() {
                   {/* Today's completed names */}
                   {g.today_completed_names.length > 0 && (
                     <p className="text-xs text-muted">
-                      <span className="font-bold text-[var(--color-success)]">✓</span> {g.today_completed_names.join('、')}
+                      <span className="font-bold text-[var(--color-success)]">✓ 今日已完成者：</span>
+                      {g.today_completed_names.join('、')}
                     </p>
                   )}
                   {/* Leave / Delete group buttons */}
