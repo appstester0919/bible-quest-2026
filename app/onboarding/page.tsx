@@ -20,6 +20,7 @@ import { createClient } from '@/lib/supabase/client'
 
 // ─── Bible book metadata (issue #6: start position picker) ────────────────
 import { BIBLE_BOOKS, NT_BOOKS, OT_BOOKS, type BibleBook } from '@/lib/bible/books'
+import { generateReadingPlan, type EnrollmentLite } from '@/lib/bible/planGenerator'
 
 /**
  * Picker UI: a single row of 2 buttons (book + chapter).
@@ -309,24 +310,30 @@ function OnboardingInner() {
   // nt_ot: 3 reading orders
   const parallelInfo = scope === 'nt_ot' && ntOtOrder === 'parallel' ? PARALLEL_TABLE[chaptersPerDay] : null
 
-  // Plan days depends on nt_ot order
-  // Issue #6 fix: total_days for nt_ot = ceil((nt_remaining + ot_remaining) / chapters_per_day)
-  // This correctly scales when user picks custom start positions for either testament.
+  // Plan days = exactly what planGenerator will produce. We can't summarize
+  // nt_ot sequential modes with a closed-form formula because each day may
+  //   • nt_ot parallel:    mix NT and OT quotas every day; ceiling = (nt+ot)/cpd
+  //   • nt_ot nt_then_ot:  primary reads quota-full first, secondary fills
+  //                        leftover once primary is exhausted (both per-day
+  //                        AND globally) → days depend on spillover ratios.
+  //   • nt_ot ot_then_nt:  symmetric swap.
+  // Closed-form ceil sum drifts off by ±1 day whenever primary is short.
+  // Instead, run the same planGenerator the dashboard/calendar/lesson use
+  // and report its day count — guaranteed to match what's actually planned.
   let planDays: number
-  if (scope === 'nt_ot' && ntOtOrder !== 'parallel') {
-    // Sequential: primary testament starts at user position; secondary always
-    // starts at its testament head. Compute sequentially.
-    const primaryRemaining = scope === 'nt_ot' && ntOtOrder === 'nt_then_ot'
-      ? getRemainingChapters('nt', BIBLE_BOOKS, ntStartBook, ntStartChapter)
-      : getRemainingChapters('ot', BIBLE_BOOKS, otStartBook, otStartChapter)
-    const secondaryTotal = ntOtOrder === 'nt_then_ot' ? 929 : 259
-    const secondaryDays = Math.ceil(secondaryTotal / chaptersPerDay)
-    planDays = Math.ceil(primaryRemaining / chaptersPerDay) + secondaryDays
-  } else if (parallelInfo) {
-    // Parallel: user formula — total pool = nt_remaining + ot_remaining
-    const ntRemaining = getRemainingChapters('nt', BIBLE_BOOKS, ntStartBook, ntStartChapter)
-    const otRemaining = getRemainingChapters('ot', BIBLE_BOOKS, otStartBook, otStartChapter)
-    planDays = Math.ceil((ntRemaining + otRemaining) / chaptersPerDay)
+  if (scope === 'nt_ot') {
+    const enrollment: EnrollmentLite = {
+      scope: 'nt_ot',
+      chapters_per_day: chaptersPerDay,
+      reading_order: ntOtOrder,
+      nt_start_book_index: ntStartBook,
+      ot_start_book_index: otStartBook,
+      nt_start_chapter: ntStartChapter,
+      ot_start_chapter: otStartChapter,
+      started_at: startDate + 'T00:00:00',
+    }
+    const plan = generateReadingPlan(enrollment, BIBLE_BOOKS, 730)
+    planDays = plan.size
   } else {
     // Single-testament (nt or ot): recalc from remaining chapter count
     const remaining = scope === 'nt'
