@@ -385,5 +385,38 @@ describe('generateReadingPlan — issue #6 start position', () => {
       const days = firstNDays(plan, 1)
       expect(days[0]).toEqual(['詩篇 100', '詩篇 101', '詩篇 102'])
     })
+
+    it('ot_then_nt: secondary (NT) starts at user-picked nt_start_book', () => {
+      // Reproduces user report 2026-07-16: nt_then_ot/ot_then_nt
+      // previously ignored the secondary testament's user-chosen start
+      // (hardcoded to 0/1). After fix, NT should start at user-picked book
+      // (e.g. 約貳 = index 62), not 太 1.
+      // Use ot_then_nt + 22/day. Day 43 leaves 5 OT chapters; day 44 fills
+      // the remaining 17 quota from NT starting at the user-picked book.
+      const plan = generateReadingPlan(
+        {
+          scope: 'nt_ot',
+          chapters_per_day: 22,
+          reading_order: 'ot_then_nt',
+          started_at: startDate,
+          ot_start_book_index: 0,
+          ot_start_chapter: 1,
+          nt_start_book_index: 62, // 約貳 (1 chapter) — matches user's "NT 從門開始"
+          nt_start_chapter: 1,
+        },
+        books
+      )
+      const days = firstNDays(plan, 50)
+      // Find the first day with NT refs (after OT runs out). Use NT-only
+      // regex to avoid matching OT 書名 like 約書亞記.
+      const ntRegex = /^(馬太|馬可|路加|約翰|使徒|羅馬|哥林多|加拉太|以弗所|腓立比|歌羅西|帖撒羅尼迦|提摩太|提多|腓利門|希伯來|雅各|彼得|約翰|猶大|啟示錄)/
+      const firstNtDay = days.find((d) => d.some((r) => ntRegex.test(r)))
+      expect(firstNtDay).toBeDefined()
+      const firstNtRef = firstNtDay!.find((r) => ntRegex.test(r))!
+      expect(firstNtRef).toBe('約翰二書 1')
+      // Plan should never start NT at the legacy default (太/可/加/約翰福音)
+      const legacyNtRefs = days.flat().filter((r) => /^(馬太|馬可|路加|約翰福音)/.test(r))
+      expect(legacyNtRefs).toEqual([])
+    })
   })
 })

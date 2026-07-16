@@ -301,33 +301,53 @@ export function generateReadingPlan(
     const secondaryTotal = order === 'nt_then_ot' ? 929 : 259
 
     // Issue #6: primary testament starts at its user-chosen position;
-    // secondary always starts from its testament head (it's only read
-    // AFTER primary is done, so its start is implicitly 0/1 for OT or
-    // 39/1 for NT — no need for a user-controlled start).
+    // secondary now ALSO honors its user-chosen start position (per
+    // user request 2026-07-16: even though OT is only read AFTER primary is
+    // done, the user wants OT to start at their picked book, not head of OT).
     const primaryStartBook = order === 'nt_then_ot'
       ? (enrollment.nt_start_book_index ?? enrollment.start_book_index ?? DEFAULT_NT_START_BOOK)
       : (enrollment.ot_start_book_index ?? enrollment.start_book_index ?? DEFAULT_OT_START_BOOK)
+    const secondaryStartBook = order === 'nt_then_ot'
+      ? (enrollment.ot_start_book_index ?? DEFAULT_OT_START_BOOK)
+      : (enrollment.nt_start_book_index ?? DEFAULT_NT_START_BOOK)
     // Per-testament start chapter takes precedence. Fall back to start_chapter
     // for legacy rows and clamp to [1, bookChapters] to avoid throwing when
-    // the legacy value exceeds the primary book's chapter count.
+    // the legacy value exceeds the start book's chapter count.
     const primaryStartBookMeta = books.find((b) => b.index === primaryStartBook)
+    const secondaryStartBookMeta = books.find((b) => b.index === secondaryStartBook)
     const primaryStartChapter = clampChapter(
       order === 'nt_then_ot'
         ? (enrollment.nt_start_chapter ?? enrollment.start_chapter)
         : (enrollment.ot_start_chapter ?? enrollment.start_chapter),
       primaryStartBookMeta?.chapters ?? 999
     )
+    const secondaryStartChapter = clampChapter(
+      order === 'nt_then_ot'
+        ? enrollment.ot_start_chapter
+        : enrollment.nt_start_chapter,
+      secondaryStartBookMeta?.chapters ?? 999
+    )
 
     const primaryScope: 'nt' | 'ot' = order === 'nt_then_ot' ? 'nt' : 'ot'
     const primaryInitialRemaining = getRemainingChapters(
       primaryScope, books, primaryStartBook, primaryStartChapter
     )
+    // Secondary remaining counts only from its user-picked start, so the plan
+    // doesn't re-read already-completed primary chapters later in OT.
+    const secondaryInitialRemaining = getRemainingChapters(
+      order === 'nt_then_ot' ? 'ot' : 'nt',
+      books,
+      secondaryStartBook,
+      secondaryStartChapter
+    )
 
     let priBookArrIdx = primary.findIndex((b) => b.index === primaryStartBook)
     if (priBookArrIdx < 0) priBookArrIdx = 0
+    let secBookArrIdx = secondary.findIndex((b) => b.index === secondaryStartBook)
+    if (secBookArrIdx < 0) secBookArrIdx = 0
 
     let priBookIdx = priBookArrIdx, priChapter = primaryStartChapter, priRemaining = primaryInitialRemaining
-    let secBookIdx = 0, secChapter = 1, secRemaining = secondaryTotal
+    let secBookIdx = secBookArrIdx, secChapter = secondaryStartChapter, secRemaining = secondaryInitialRemaining
 
     for (let day = 0; day < maxDays && (priRemaining > 0 || secRemaining > 0); day++) {
       const refs: string[] = []
