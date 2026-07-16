@@ -1,6 +1,6 @@
 /* eslint-disable no-undef */
 
-const CACHE_NAME = 'bible-quest-v1'
+const CACHE_NAME = 'bible-quest-v2'
 
 // ─── Install ──────────────────────────────────────────────────────────────────
 self.addEventListener('install', (event) => {
@@ -38,6 +38,11 @@ self.addEventListener('fetch', (event) => {
 
   if (request.method !== 'GET') return
   if (url.protocol === 'chrome-extension:') return
+
+  // Bypass cross-origin font requests (CSP connect-src issues with SW fetch)
+  if (url.hostname === 'fonts.googleapis.com' || url.hostname === 'fonts.gstatic.com') {
+    return // let the browser handle it directly
+  }
 
   // Network-first for HTML pages
   if (request.mode === 'navigate') {
