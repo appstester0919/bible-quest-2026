@@ -86,40 +86,12 @@ function getGreeting(): string {
 }
 
 // ─── Compute today's reading href from enrollment + books (client-only) ─────
+// Uses shared generateReadingPlan() so dashboard's today link matches the
+// actual plan schedule (especially for nt_ot with per-testament start
+// books/chapters and parallel/nt_then_ot/ot_then_nt reading orders).
 function computeTodayHref(enrollment: Enrollment | null, books: BookMeta[]): string {
   if (!enrollment || books.length === 0) return '#'
-  const scopeBooks = enrollment.scope === 'nt'
-    ? books.filter((_, i) => i >= 39)
-    : enrollment.scope === 'ot'
-    ? books.filter((_, i) => i < 39)
-    : books
-
-  const planMap = new Map<string, string[]>()
-  let bookIdx = 0
-  let chapterInBook = 1
-  let start: Date
-  if (enrollment.started_at) {
-    const [y, m, d] = enrollment.started_at.split('T')[0].split('-').map(Number)
-    start = new Date(y, m - 1, d)
-  } else {
-    const [y, mo, da] = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Hong_Kong' }).split('-').map(Number)
-    start = new Date(y, mo - 1, da)
-  }
-
-  const current = new Date(start)
-  for (let day = 0; day < 730 && bookIdx < scopeBooks.length; day++) {
-    const refs: string[] = []
-    for (let i = 0; i < enrollment.chapters_per_day && bookIdx < scopeBooks.length; i++) {
-      const book = scopeBooks[bookIdx]
-      refs.push(`${book.name} ${chapterInBook}`)
-      chapterInBook++
-      if (chapterInBook > book.chapters) { bookIdx++; chapterInBook = 1 }
-    }
-    const key = current.toLocaleDateString('en-CA', { timeZone: 'Asia/Hong_Kong' })
-    planMap.set(key, refs)
-    current.setDate(current.getDate() + 1)
-  }
-
+  const planMap = generateReadingPlan(enrollment, books, 730)
   const hkt = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Hong_Kong' })
   const todayRefs = planMap.get(hkt) ?? []
   if (todayRefs.length === 0) return '#'
