@@ -328,4 +328,62 @@ describe('generateReadingPlan — issue #6 start position', () => {
       expect(days[0]).toContain('詩篇 110')
     })
   })
+
+  // Migration 013 follow-up: nt_then_ot / ot_then_nt branches were also
+  // using the legacy start_chapter column without clamping.
+  describe('nt_ot sequential modes with per-testament start chapter', () => {
+    it('nt_then_ot: primary testament uses nt_start_chapter', () => {
+      const plan = generateReadingPlan(
+        {
+          scope: 'nt_ot',
+          chapters_per_day: 5,
+          reading_order: 'nt_then_ot',
+          started_at: startDate,
+          nt_start_book_index: 42, // 約翰福音
+          nt_start_chapter: 5,
+        },
+        books
+      )
+      const days = firstNDays(plan, 1)
+      expect(days[0]).toEqual(['約翰福音 5', '約翰福音 6', '約翰福音 7', '約翰福音 8', '約翰福音 9'])
+    })
+
+    it('nt_then_ot: legacy start_chapter=54 is clamped to NT start book chapters', () => {
+      // Reproduces the user's reported error: "startChapter 54 exceeds
+      // start book (3 chapters)" — when scope=nt_ot, reading_order=nt_then_ot,
+      // nt_start_book_index is a 3-chapter book (eg 52 帖後), and the legacy
+      // start_chapter=54 was wrongly applied to NT side.
+      const plan = generateReadingPlan(
+        {
+          scope: 'nt_ot',
+          chapters_per_day: 2,
+          reading_order: 'nt_then_ot',
+          started_at: startDate,
+          nt_start_book_index: 52, // 帖後 (3 chapters)
+          ot_start_book_index: 0,  // 創世記
+          start_chapter: 54,        // legacy single column, exceeds 帖後 chapters
+        },
+        books
+      )
+      const days = firstNDays(plan, 1)
+      // NT side clamped from 54 to 1 (帖後 only has 3 ch, so 54 > 3 → 1)
+      expect(days[0]).toContain('帖撒羅尼迦後書 1')
+    })
+
+    it('ot_then_nt: primary testament uses ot_start_chapter', () => {
+      const plan = generateReadingPlan(
+        {
+          scope: 'nt_ot',
+          chapters_per_day: 3,
+          reading_order: 'ot_then_nt',
+          started_at: startDate,
+          ot_start_book_index: 18, // 詩篇
+          ot_start_chapter: 100,
+        },
+        books
+      )
+      const days = firstNDays(plan, 1)
+      expect(days[0]).toEqual(['詩篇 100', '詩篇 101', '詩篇 102'])
+    })
+  })
 })

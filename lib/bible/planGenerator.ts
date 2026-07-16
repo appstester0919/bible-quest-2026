@@ -307,7 +307,16 @@ export function generateReadingPlan(
     const primaryStartBook = order === 'nt_then_ot'
       ? (enrollment.nt_start_book_index ?? enrollment.start_book_index ?? DEFAULT_NT_START_BOOK)
       : (enrollment.ot_start_book_index ?? enrollment.start_book_index ?? DEFAULT_OT_START_BOOK)
-    const primaryStartChapter = enrollment.start_chapter ?? DEFAULT_START_CHAPTER
+    // Per-testament start chapter takes precedence. Fall back to start_chapter
+    // for legacy rows and clamp to [1, bookChapters] to avoid throwing when
+    // the legacy value exceeds the primary book's chapter count.
+    const primaryStartBookMeta = books.find((b) => b.index === primaryStartBook)
+    const primaryStartChapter = clampChapter(
+      order === 'nt_then_ot'
+        ? (enrollment.nt_start_chapter ?? enrollment.start_chapter)
+        : (enrollment.ot_start_chapter ?? enrollment.start_chapter),
+      primaryStartBookMeta?.chapters ?? 999
+    )
 
     const primaryScope: 'nt' | 'ot' = order === 'nt_then_ot' ? 'nt' : 'ot'
     const primaryInitialRemaining = getRemainingChapters(
