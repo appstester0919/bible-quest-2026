@@ -310,7 +310,7 @@ export function generateReadingPlan(
     const secondaryStartBook = order === 'nt_then_ot'
       ? (enrollment.ot_start_book_index ?? DEFAULT_OT_START_BOOK)
       : (enrollment.nt_start_book_index ?? DEFAULT_NT_START_BOOK)
-    // Per-testament start chapter takes precedence. Fall back to start_chapter
+    // Per-testament start chapter takes precedence. Fall back to start_chapter (REBUILD_TRIGGER_TEST)
     // for legacy rows and clamp to [1, bookChapters] to avoid throwing when
     // the legacy value exceeds the start book's chapter count.
     const primaryStartBookMeta = books.find((b) => b.index === primaryStartBook)
