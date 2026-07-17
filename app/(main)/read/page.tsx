@@ -147,41 +147,51 @@ export default function ReadPage() {
     fetchData()
   }, [router])
 
-  // Auto-load today's reading from URL params once books are available
+  // Auto-load today's reading from URL params once books are available.
+  // Queue-based: refs may span multiple books (e.g. NT+OT parallel plan),
+  // so we expand the entire refs array into a chapter queue, NOT a start/end range.
   useEffect(() => {
     if (!autoLoadedRefs || books.length === 0 || chapters.length > 0) return
-    const refs = autoLoadedRefs
-    console.log('[read] auto-loading:', refs)
+    console.log('[read] auto-loading:', autoLoadedRefs)
 
-    const first = refs[0].trim()
-    const last = refs[refs.length - 1].trim()
-
-    const parseRef = (ref: string) => {
-      const parts = ref.split(/\s+/)
-      return { bookName: parts[0] || '', chapter: parseInt(parts[1] || '1', 10) || 1 }
+    // Expand refs into per-chapter queue (handles cross-book ranges)
+    const queue: { book: BookMeta; chapter: number }[] = []
+    for (const ref of autoLoadedRefs) {
+      const parts = ref.trim().split(/\s+/)
+      const bookName = parts[0]
+      const chapter = parseInt((parts[1] || '1').replace(/:\d+$/, ''), 10) || 1
+      const book = books.find(b => b.name === bookName)
+      if (!book) { console.warn('[read] book not found', bookName); continue }
+      queue.push({ book, chapter })
     }
+    if (queue.length === 0) return
 
-    const { bookName: startName, chapter: startCh } = parseRef(first)
-    const { bookName: endName, chapter: endCh } = parseRef(last)
+    setStartBook(queue[0].book)
+    setStartChapter(queue[0].chapter)
+    setEndBook(queue[queue.length - 1].book)
+    setEndChapter(queue[queue.length - 1].chapter)
 
-    const startBook = books.find(b => b.name === startName)
-    const endBook = books.find(b => b.name === endName)
-    if (!startBook || !endBook) { console.warn('[read] book not found', { startName, endName }); return }
-
-    setStartBook(startBook)
-    setStartChapter(startCh)
-    setEndBook(endBook)
-    setEndChapter(endCh)
+    loadChapterQueue(queue)
   }, [autoLoadedRefs, books])
 
-  // Trigger auto-load once all 4 selection states are set
-  useEffect(() => {
-    if (!autoLoadedRefs || chapters.length > 0) return
-    if (startBook && startChapter && endBook && endChapter) {
-      handleDisplay()
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoLoadedRefs, startBook, startChapter, endBook, endChapter, chapters.length])
+  // Expand a multi-book chapter queue into ChapterData + audioQueue (parallel fill)
+  const loadChapterQueue = useCallback(async (queue: { book: BookMeta; chapter: number }[]) => {
+    setScriptureLoading(true)
+    // Parallel fetch all chapters — avoid N× roundtrip penalty on 22-chapter days
+    const results = await Promise.all(queue.map(async (item) => {
+      const verses = await getChapter(item.book.abbr, item.chapter)
+      return { item, chapterData: { bookAbbr: item.book.abbr, bookName: item.book.name, chapter: item.chapter, verses } }
+    }))
+    // Re-order to match original queue order (preserves parallel/sequential NT/OT order)
+    const ordered = results
+      .map((r, i) => ({ ...r, originalIdx: i }))
+      .sort((a, b) => a.originalIdx - b.originalIdx)
+    setChapters(ordered.map(r => r.chapterData))
+    setAudioQueue(queue)
+    setCurrentChapterIdx(0)
+    setIsPlaying(false)
+    setScriptureLoading(false)
+  }, [])
 
   // Audio setup
   useEffect(() => {
@@ -823,22 +833,39 @@ export default function ReadPage() {
         {/* ── Scripture Display ─────────────────────────────────── */}
         {chapters.length > 0 && (
           <div>
-            {chapters.map(chapter => (
-              <div key={`${chapter.bookAbbr}-${chapter.chapter}`} style={{
-                background: C.bgCard, borderRadius: '10px',
-                padding: '20px', marginBottom: '20px',
-                border: `1px solid ${C.borderLight}`,
-                borderLeft: `4px solid ${C.accentGold}`,
-                boxShadow: '0 2px 8px rgba(61,41,20,0.06)',
-              }}>
-                <h2 style={{
-                  fontFamily: 'Georgia, serif', fontSize: '1.3em',
-                  fontWeight: 600, color: C.chapterTitle,
-                  marginBottom: '16px', paddingBottom: '10px',
-                  borderBottom: `1px solid ${C.borderColor}`,
+            {chapters.map((chapter, idx) => {
+              // Detect testament by book category (NT = gospels/pauline/general, OT = everything else)
+              const isNT = ['gospels','pauline','general'].includes(bookToCategory[chapter.bookAbbr] || '')
+              const testament = isNT ? 'NT' : 'OT'
+              const testamentBg = isNT ? '#E8D5F0' : '#FFE5C2'
+              const testamentText = isNT ? '#5C2A6D' : '#8B4513'
+              const totalChapters = audioQueue.length
+              return (
+                <div key={`${chapter.bookAbbr}-${chapter.chapter}`} style={{
+                  background: C.bgCard, borderRadius: '10px',
+                  padding: '20px', marginBottom: '20px',
+                  border: `1px solid ${C.borderLight}`,
+                  borderLeft: `4px solid ${C.accentGold}`,
+                  boxShadow: '0 2px 8px rgba(61,41,20,0.06)',
+                  position: 'relative',
                 }}>
-                  {chapter.bookName} {chapter.chapter} 章
-                </h2>
+                  <span style={{
+                    position: 'absolute', top: '12px', right: '12px',
+                    background: testamentBg, color: testamentText,
+                    fontSize: '0.7rem', fontWeight: 700,
+                    padding: '3px 8px', borderRadius: '6px',
+                  }}>
+                    {testament} · 第 {idx + 1}/{totalChapters} 章
+                  </span>
+                  <h2 style={{
+                    fontFamily: 'Georgia, serif', fontSize: '1.3em',
+                    fontWeight: 600, color: C.chapterTitle,
+                    marginBottom: '16px', paddingBottom: '10px',
+                    paddingRight: '90px', // leave room for badge
+                    borderBottom: `1px solid ${C.borderColor}`,
+                  }}>
+                    {chapter.bookName} {chapter.chapter} 章
+                  </h2>
                 {chapter.verses.map(([num, text]) => (
                   <div key={num} style={{
                     marginBottom: '12px', display: 'flex', gap: '12px',
@@ -862,8 +889,9 @@ export default function ReadPage() {
                     </span>
                   </div>
                 ))}
-              </div>
-            ))}
+                </div>
+              )
+            })}
 
             {/* Complete button — only show when all today's required chapters are loaded */}
             {audioQueue.length > 0 && (
