@@ -117,7 +117,18 @@ export default function SettingsPage() {
         }
       }
 
-      // Create new enrollment
+      // Create new enrollment. Copy per-testament start position from the old
+      // enrollment so users who started mid-Bible (e.g. 帖前 / 約伯記) keep that
+      // starting point across restarts. Without this, generateReadingPlan
+      // falls back to chapter 1 and the new plan begins at 太1 / 創1.
+      const oldEnr = currentEnrollment as {
+        start_book_index?: number | null
+        start_chapter?: number | null
+        nt_start_book_index?: number | null
+        ot_start_book_index?: number | null
+        nt_start_chapter?: number | null
+        ot_start_chapter?: number | null
+      }
       const { error } = await supabase
         .from('user_plan_enrollments')
         .insert({
@@ -126,6 +137,12 @@ export default function SettingsPage() {
           chapters_per_day: cpd,
           total_days: properTotalDays,
           reading_order: readingOrder,
+          start_book_index: oldEnr.start_book_index ?? null,
+          start_chapter: oldEnr.start_chapter ?? null,
+          nt_start_book_index: oldEnr.nt_start_book_index ?? null,
+          ot_start_book_index: oldEnr.ot_start_book_index ?? null,
+          nt_start_chapter: oldEnr.nt_start_chapter ?? null,
+          ot_start_chapter: oldEnr.ot_start_chapter ?? null,
           status: 'active',
           started_at: new Date().toISOString(),
         })
