@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { markLessonComplete, recalcUserStatsAfterCompletion } from '@/lib/actions'
+import { markDayCompleteBatch, recalcUserStatsAfterCompletion } from '@/lib/actions'
 import { checkInAllMyGroups } from '@/lib/groupActions'
 import { useRouter } from 'next/navigation'
 import { getChapter, getBooksMeta, type BookMeta } from '@/lib/bible/lookup'
@@ -397,52 +397,37 @@ export default function ReadPage() {
     }
     setIsCompleting(true)
     try {
-      // Insert ALL queued chapters in PARALLEL for speed
-      // First chapter gets xp_earned=10 (triggers daily XP award)
-      // Subsequent chapters get xp_earned=0 (record only, no extra XP)
-      const insertPromises = audioQueue.map((item, i) => {
-        const chapterRef = `${item.book.name} ${item.chapter}`
-        const xp = i === 0 ? 10 : 0
-        return markLessonComplete(enrollment.id, chapterRef, xp).then(result => ({
-          success: result.success, chapterRef, error: result.error
-        }))
-      })
-      const insertResults = await Promise.all(insertPromises)
-      const insertedCount = insertResults.filter(r => r.success).length
-      const failedCount = insertResults.filter(r => !r.success).length
-      const firstError = insertResults.find(r => !r.success)?.error || ''
-
-      if (failedCount > 0 && insertedCount === 0) {
-        alert(`全部寫入失敗：${firstError}`)
+      // Use markDayCompleteBatch: single round-trip, server-side XP sum
+      // (10 XP per chapter). The previous per-chapter markLessonComplete
+      // approach awarded only 10 XP for the first chapter and 0 for the rest.
+      const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Hong_Kong' })
+      const refs = audioQueue.map(item => `${item.book.name} ${item.chapter}`)
+      const result = await markDayCompleteBatch(enrollment.id, refs, today)
+      if (!result.success) {
+        alert(`寫入失敗: ${result.error || 'unknown'}`)
         setIsCompleting(false)
         return
       }
+      const insertedCount = result.insertedCount ?? refs.length
 
-      if (insertedCount > 0) {
-        // Recalculate stats ONCE after all inserts (not per-chapter)
-        const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Hong_Kong' })
-        const stats = await recalcUserStatsAfterCompletion(today)
-        if (!stats.success) {
-          console.error('[handleComplete] stats recalc failed:', stats.error)
-        }
-        // Sync group check-ins AFTER inserts + stats
-        await checkInAllMyGroups(today)
-        celebrate({ type: 'burst', particleCount: Math.min(insertedCount * 30, 180) })
-        const now = new Date()
-        const hkt = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Hong_Kong' }))
-        setTodaySession({ id: 'new', enrollment_id: enrollment.id, chapter_ref: `${audioQueue[0].book.name} ${audioQueue[0].chapter}`, date_local: hkt.toISOString().split('T')[0] })
-        // Update local profile state so XP/level/streak reflect server-calculated values immediately
-        if (stats.success) {
-          setProfile((prev: any) => prev ? {
-            ...prev,
-            total_xp: stats.totalXp,
-            level: stats.level,
-            current_streak: stats.currentStreak,
-          } : prev)
-        }
-        if (failedCount > 0) {
-          alert(`已記錄 ${insertedCount} 章，但有 ${failedCount} 章失敗：${firstError}`)
-        }
+      // Sync group check-ins AFTER inserts
+      await checkInAllMyGroups(today)
+      celebrate({ type: 'burst', particleCount: Math.min(insertedCount * 30, 180) })
+      const now = new Date()
+      const hkt = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Hong_Kong' }))
+      setTodaySession({ id: 'new', enrollment_id: enrollment.id, chapter_ref: refs[0], date_local: today })
+
+      // Refresh local stats so XP/level/streak reflect the batch write
+      const fresh = await recalcUserStatsAfterCompletion(today)
+      if (fresh.success) {
+        setProfile((prev: any) => prev ? {
+          ...prev,
+          total_xp: fresh.totalXp,
+          level: fresh.level,
+          current_streak: fresh.currentStreak,
+        } : prev)
+      } else {
+        console.error('[handleComplete] stats recalc failed:', fresh.error)
       }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
@@ -920,7 +905,7 @@ export default function ReadPage() {
                   : isCompleting
                   ? '處理中...'
                   : allRequiredLoaded
-                  ? `完成讀經 ✓（+10 XP）`
+                  ? `完成讀經 ✓（+${todayRequiredRefs.length * 10} XP）`
                   : `需完成 ${todayRequiredRefs.length} 章才能標記完成`}
               </button>
             )}
