@@ -9,6 +9,13 @@ function getHKTDateStr(date: Date = new Date()): string {
   return date.toLocaleDateString('en-CA', { timeZone: 'Asia/Hong_Kong' })
 }
 
+// ─── Future-date guard (public launch: cannot mark future dates complete) ──────
+// A YYYY-MM-DD string is "future" if it's strictly after today in HKT.
+function isFutureDate(dateLocal: string): boolean {
+  const today = getHKTDateStr()
+  return dateLocal > today
+}
+
 export async function markLessonComplete(
   enrollmentId: string,
   chapterRef: string,
@@ -25,6 +32,11 @@ export async function markLessonComplete(
   const now = new Date()
   // FIX: use en-CA+HKT to get YYYY-MM-DD directly — no UTC offset issue
   const dateLocal = dateLocalOverride || getHKTDateStr(now)
+
+  // Future-date guard (public launch): cannot mark a future day as complete
+  if (dateLocalOverride && isFutureDate(dateLocal)) {
+    return { success: false, error: 'cannot mark a future date as complete' }
+  }
 
   console.log('[markLessonComplete]', { user_id: user.id, enrollment_id: enrollmentId, chapter_ref: chapterRef, xp_earned: xpEarned, date_local: dateLocal })
 
@@ -279,6 +291,11 @@ export async function markDayCompleteBatch(
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { success: false, error: 'Not authenticated' }
   if (!refs || refs.length === 0) return { success: false, error: 'No refs provided' }
+
+  // Future-date guard (public launch): cannot mark a future day as complete
+  if (isFutureDate(dateLocal)) {
+    return { success: false, error: 'cannot mark a future date as complete' }
+  }
 
   // ── Step 1: Bulk INSERT all chapters in ONE round-trip ──────────────────────
   const now = new Date()

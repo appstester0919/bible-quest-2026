@@ -166,6 +166,12 @@ export default function CalendarPage() {
     if (!refs || refs.length === 0) return
     if (completedDays.has(key) || !enrollment) return
 
+    // Future-date guard (public launch): cannot mark a future day as complete
+    if (key > hktToday) {
+      alert('未到嘅日子無法標記完成')
+      return
+    }
+
     setIsCompleting(true)
     try {
       // Single RPC: bulk INSERT all chapters + recalculate stats server-side.
@@ -302,6 +308,10 @@ export default function CalendarPage() {
                 {completedDays.has(selectedKey!) ? (
                   <div className="text-center py-3 bg-[#D7FFB8] rounded-xl text-[#2D7A01] font-extrabold">
                     ✓ 已完成
+                  </div>
+                ) : selectedKey! > hktToday ? (
+                  <div className="text-center py-3 bg-[var(--color-background)] rounded-xl text-[var(--color-muted)] font-bold">
+                    🔒 此日尚未到期，無法標記完成
                   </div>
                 ) : (
                   <button

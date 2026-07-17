@@ -79,6 +79,14 @@ export default function CustomCalendar({ plan, completedDays, selectedDate, onSe
 
   const handleTileClick = async (day: typeof calendarDays[0]) => {
     if (!day.date || !day.key) return
+
+    // Future-date guard (public launch): cannot mark a future day as complete
+    // Allow past/today to keep existing complete/uncomplete flows intact.
+    if (day.key > hktToday) {
+      onSelect(day.date) // still let user inspect future reading plan
+      return
+    }
+
     onSelect(day.date)
     // If already completed, uncomplete it
     if (completedDays.has(day.key)) {
@@ -150,6 +158,7 @@ export default function CustomCalendar({ plan, completedDays, selectedDate, onSe
           const refs = plan.get(key)
           const completed = completedDays.has(key)
           const isToday = key === hktToday
+          const isFuture = key > hktToday
           const col = idx % 7
           const isSat = col === 5
           const isSun = col === 6
@@ -159,6 +168,8 @@ export default function CustomCalendar({ plan, completedDays, selectedDate, onSe
           let bg = '#fff'
           if (completed) {
             bg = isToday ? '#bbf7d0' : '#bbf7d0' // green-200
+          } else if (isFuture) {
+            bg = '#f3f4f6' // gray-100 — visually muted, signals "not yet"
           } else if (isToday) {
             bg = '#fef9c3' // yellow-100
           } else if (hasPlan) {
@@ -185,7 +196,7 @@ export default function CustomCalendar({ plan, completedDays, selectedDate, onSe
                 border: 'none',
                 borderRadius: '0',
                 padding: '4px 2px',
-                cursor: hasPlan ? 'pointer' : 'default',
+                cursor: hasPlan && !isFuture ? 'pointer' : 'default',
                 minHeight: '60px',
                 display: 'flex',
                 flexDirection: 'column',
@@ -205,7 +216,7 @@ export default function CustomCalendar({ plan, completedDays, selectedDate, onSe
                 lineHeight: 1,
                 marginBottom: '4px',
                 textDecoration: completed ? 'line-through' : 'none',
-                opacity: completed ? 0.7 : 1,
+                opacity: completed ? 0.7 : (isFuture ? 0.4 : 1),
               }}>
                 {day.date.getDate()}
               </span>
@@ -220,7 +231,7 @@ export default function CustomCalendar({ plan, completedDays, selectedDate, onSe
                   fontWeight: 500,
                   wordBreak: 'break-word',
                   textDecoration: completed ? 'line-through' : 'none',
-                  opacity: completed ? 0.7 : 1,
+                  opacity: completed ? 0.7 : (isFuture ? 0.4 : 1),
                   padding: '0 2px',
                 }}>
                   {planText}
