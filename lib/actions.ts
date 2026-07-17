@@ -166,11 +166,12 @@ export async function unmarkDayComplete(
 
   console.log('[unmarkDayComplete]', { enrollment_id: enrollmentId, date_local: dateLocal, user_id: user.id })
 
-  // 1. Delete all sessions for this enrollment on this date
+  // 1. Delete ALL sessions for this user on this date, regardless of which
+  // enrollment they belong to (enrollment_id may be stale after re-enrollment).
   const { error: deleteError } = await supabase
     .from('reading_sessions')
     .delete()
-    .eq('enrollment_id', enrollmentId)
+    .eq('user_id', user.id)
     .eq('date_local', dateLocal)
 
   if (deleteError) {
