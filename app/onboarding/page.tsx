@@ -320,12 +320,30 @@ function OnboardingInner() {
   // Closed-form ceil sum drifts off by ±1 day whenever primary is short.
   // Instead, run the same planGenerator the dashboard/calendar/lesson use
   // and report its day count — guaranteed to match what's actually planned.
+  // For parallel: nt/ot per day comes from PARALLEL_TABLE
+  // For sequential: chaptersPerDay goes entirely to whichever testament is active
+  // For nt/ot (single-testament): chaptersPerDay IS the daily chapter count for that scope.
+  // (Previously this branch did Math.ceil(259 / planDays), which produced a wrong value
+  //  for OT because 929 ≠ 259 — see issue #5.)
+  const ntChapters   = scope === 'nt_ot' && ntOtOrder === 'parallel' ? (parallelInfo?.nt ?? 0) : (scope === 'nt_ot' ? chaptersPerDay : chaptersPerDay)
+  const otChapters   = scope === 'nt_ot' && ntOtOrder === 'parallel' ? (parallelInfo?.ot ?? 0) : 0
+
+  // ─── Compute planDays AFTER ntChapters/otChapters are known ──────────────
+  // Different nt_ot modes produce very different day counts, so we run the
+  // shared planGenerator rather than relying on closed-form ceil formulas
+  // that drift by ±1 day whenever one testament is short.
+  //   • nt_ot parallel:    mix NT and OT quotas every day
+  //   • nt_ot nt_then_ot:  primary reads quota-full first, secondary fills
+  //                        leftover once primary is exhausted
+  //   • nt_ot ot_then_nt:  symmetric swap
   let planDays: number
   if (scope === 'nt_ot') {
     const enrollment: EnrollmentLite = {
       scope: 'nt_ot',
       chapters_per_day: chaptersPerDay,
-      reading_order: ntOtOrder,
+      // Format parallel as "N-OT" so planGenerator's parseParallelSplit can
+      // extract the per-testament daily quota. Sequential modes pass through.
+      reading_order: ntOtOrder === 'parallel' ? `${ntChapters}-${otChapters}` : ntOtOrder,
       nt_start_book_index: ntStartBook,
       ot_start_book_index: otStartBook,
       nt_start_chapter: ntStartChapter,
@@ -341,14 +359,6 @@ function OnboardingInner() {
       : getRemainingChapters('ot', BIBLE_BOOKS, otStartBook, otStartChapter)
     planDays = Math.ceil(remaining / chaptersPerDay)
   }
-
-  // For parallel: nt/ot per day comes from PARALLEL_TABLE
-  // For sequential: chaptersPerDay goes entirely to whichever testament is active
-  // For nt/ot (single-testament): chaptersPerDay IS the daily chapter count for that scope.
-  // (Previously this branch did Math.ceil(259 / planDays), which produced a wrong value
-  //  for OT because 929 ≠ 259 — see issue #5.)
-  const ntChapters   = scope === 'nt_ot' && ntOtOrder === 'parallel' ? (parallelInfo?.nt ?? 0) : (scope === 'nt_ot' ? chaptersPerDay : chaptersPerDay)
-  const otChapters   = scope === 'nt_ot' && ntOtOrder === 'parallel' ? (parallelInfo?.ot ?? 0) : 0
 
   const completionDate = getEstimatedCompletionDate(scope, planDays, new Date(startDate + 'T00:00:00'))
 
