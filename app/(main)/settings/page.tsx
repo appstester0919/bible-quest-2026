@@ -24,7 +24,13 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(false)
   const [saved, setSaved] = useState(false)
   const [reminderTime, setReminderTime] = useState('20:00')
-  const [currentEnrollment, setCurrentEnrollment] = useState<{ id: string; scope: string; chapters_per_day: number; total_days: number; reading_order?: string | null } | null>(null)
+  const [currentEnrollment, setCurrentEnrollment] = useState<{
+    id: string; scope: string; chapters_per_day: number; total_days: number;
+    reading_order?: string | null;
+    start_book_index?: number | null; start_chapter?: number | null;
+    nt_start_book_index?: number | null; ot_start_book_index?: number | null;
+    nt_start_chapter?: number | null; ot_start_chapter?: number | null;
+  } | null>(null)
   const [completedPlans, setCompletedPlans] = useState(0)
   const [updatingPlan, setUpdatingPlan] = useState(false)
   const [confirmShow, setConfirmShow] = useState(false)
@@ -59,7 +65,7 @@ export default function SettingsPage() {
     if (!user) return
     const { data: enrollment } = await supabase
       .from('user_plan_enrollments')
-      .select('id, scope, chapters_per_day, total_days, status, reading_order')
+      .select('id, scope, chapters_per_day, total_days, status, reading_order, start_book_index, start_chapter, nt_start_book_index, ot_start_book_index, nt_start_chapter, ot_start_chapter')
       .eq('user_id', user.id)
       .eq('status', 'active')
       .maybeSingle()
