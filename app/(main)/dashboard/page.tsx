@@ -199,7 +199,8 @@ export default function DashboardPage() {
 
         // Compute today's reading href from enrollment + books (all client-side, no SSR mismatch)
         const href = computeTodayHref(error ? null : enrollmentsData, booksMeta)
-        setTodayHref(href)
+  console.log('[dashboard] computeTodayHref:', { enrollmentsData, booksLen: booksMeta.length, href })
+  setTodayHref(href)
 
         // Count today's refs for display
         if (!error && enrollmentsData && booksMeta.length > 0) {
