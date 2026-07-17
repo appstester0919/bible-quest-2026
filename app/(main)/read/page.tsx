@@ -234,8 +234,13 @@ export default function ReadPage() {
 
   const currentAudioItem = audioQueue[currentChapterIdx]
 
-  // Build today's required reading list (same plan logic as calendar)
+  // Build today's required reading list. Prefer URL-supplied refs (set by
+  // dashboard via ?today=1&refs=...) since they account for reading_order
+  // (parallel/nt_then_ot/ot_then_nt) and per-testament start positions.
+  // Fall back to enrollment+chapters_per_day replay only when no URL refs.
   const todayRequiredRefs = (() => {
+    if (autoLoadedRefs && autoLoadedRefs.length > 0) return autoLoadedRefs
+
     if (!enrollment || books.length === 0) return []
     const scopeBooks = enrollment.scope === 'nt'
       ? books.filter((_, i) => i >= 39)
@@ -260,13 +265,13 @@ export default function ReadPage() {
     if (dayOffset < 0) return []
     // Replay plan to find today's refs
     let bookIdx = 0, chapterInBook = 1
-    let current = new Date(start)
+    const current = new Date(start)
     for (let d = 0; d < dayOffset && bookIdx < scopeBooks.length; d++) {
       for (let i = 0; i < enrollment.chapters_per_day && bookIdx < scopeBooks.length; i++) {
         chapterInBook++
         if (chapterInBook > scopeBooks[bookIdx].chapters) { bookIdx++; chapterInBook = 1 }
       }
-      current = new Date(current.getTime() + 86400000)
+      current.setDate(current.getDate() + 1)
     }
     // Now collect today's chapters
     const refs: string[] = []
