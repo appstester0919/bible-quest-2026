@@ -258,6 +258,9 @@ export async function unmarkDayComplete(
 
   console.log('[unmarkDayComplete] stats updated ok')
 
+  // Revalidate dashboard so updated XP/streak reflects immediately
+  revalidatePath('/dashboard')
+
   // Also remove today's group check-ins (since user un-completed today's reading, all group check-ins for today are undone)
   try {
     const { error: grpErr } = await supabase
