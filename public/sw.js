@@ -91,10 +91,10 @@ self.addEventListener('fetch', (event) => {
 self.addEventListener('push', (event) => {
   if (!event.data) return
   let data
-  try { data = event.data.json() } catch { data = { title: '📖 Bible Quest', body: event.data.text() } }
+  try { data = event.data.json() } catch { data = { title: '📖 DuoBible', body: event.data.text() } }
 
   event.waitUntil(
-    self.registration.showNotification(data.title ?? '📖 Bible Quest', {
+    self.registration.showNotification(data.title ?? '📖 DuoBible', {
       body: data.body ?? '今日記得讀經！',
       icon: '/icons/icon-192.png',
       badge: '/icons/icon-192.png',
