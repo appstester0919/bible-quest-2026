@@ -55,6 +55,15 @@ async function getAuthUser() {
   return { supabase, user }
 }
 
+// The DB enforces group_members.display_name <= 3 chars. Long usernames (e.g.
+// 'josephinechan0814') must be truncated to a 3-char nickname before insert.
+// Fall back to '組員' when the profile display name is empty.
+async function getMemberDisplayName(supabase: Awaited<ReturnType<typeof createClient>>, userId: string): Promise<string> {
+  const { data: profile } = await supabase.from('profiles').select('display_name').eq('id', userId).single()
+  const raw = profile?.display_name?.trim() || '組員'
+  return raw.length <= 3 ? raw : raw.slice(0, 3)
+}
+
 // ─── Create group ─────────────────────────────────────────────────────────────
 export async function createGroup(name: string): Promise<{ success: boolean; groupId?: string; inviteCode?: string; error?: string }> {
   const supabase = await createClient()
@@ -64,9 +73,8 @@ export async function createGroup(name: string): Promise<{ success: boolean; gro
   const trimmed = name.trim()
   if (!trimmed || trimmed.length > 30) return { success: false, error: '群組名稱必須為 1-30 字' }
 
-  // Get display name from profile
-  const { data: profile } = await supabase.from('profiles').select('display_name').eq('id', user.id).single()
-  const displayName = profile?.display_name?.trim() || '組員'
+  // Get display name from profile (truncated to <=3 chars per DB constraint).
+  const displayName = await getMemberDisplayName(supabase, user.id)
 
   // Insert group
   const { data: group, error: groupErr } = await supabase.from('groups').insert({
@@ -116,9 +124,8 @@ export async function requestJoinGroup(inviteCode: string): Promise<{ success: b
     .eq('group_id', group.id)
   if ((memberCount ?? 0) >= 30) return { success: false, error: '群組已滿（最多30人）' }
 
-  // Get display name from profile
-  const { data: profile } = await supabase.from('profiles').select('display_name').eq('id', user.id).single()
-  const displayName = profile?.display_name?.trim() || '組員'
+  // Get display name from profile (truncated to <=3 chars per DB constraint).
+  const displayName = await getMemberDisplayName(supabase, user.id)
 
   // Insert request
   const { error } = await supabase.from('group_join_requests').insert({
