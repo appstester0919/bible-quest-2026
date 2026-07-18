@@ -288,9 +288,17 @@ export default function CalendarPage() {
         {/* Custom Mon-first Calendar */}
         <div className="card overflow-hidden">
           <CustomCalendar plan={plan} completedDays={completedDays} selectedDate={selectedDate} onSelect={handleDateClick} onComplete={handleCompleteDay} onUncomplete={handleUncompleteDay} />
-          <p className="text-xs text-muted mt-2 px-1 leading-relaxed">
-            💡 完成進度㩒日子方格，不但有經驗值，記錄會加進「總章數」，並讓群組同伴知道你今日已完成！
-          </p>
+          <div
+            className="mt-3 px-3 py-2.5 rounded-xl text-sm leading-relaxed"
+            style={{
+              backgroundColor: '#E8F8E0',
+              color: '#1F2937',
+              border: '1px solid #58CC02',
+            }}
+          >
+            <span className="font-bold text-[#2D7A01]">💡 小提示：</span>
+            完成進度㩒日子方格，不但有經驗值，記錄會加進「總章數」，並讓群組同伴知道你今日已完成！
+          </div>
         </div>
 
         {/* Selected Day Detail */}
