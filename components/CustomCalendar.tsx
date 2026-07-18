@@ -30,6 +30,22 @@ export default function CustomCalendar({ plan, completedDays, selectedDate, onSe
     return new Date(today.getFullYear(), today.getMonth(), 1)
   })
 
+  // Day-cell font size (controls plan text below the date number). Persist in
+  // localStorage so the user's preferred scale survives across sessions.
+  const [dayFontScale, setDayFontScale] = useState(() => {
+    if (typeof window === 'undefined') return 1
+    const saved = window.localStorage.getItem('bq_calendar_day_font_scale')
+    const n = saved ? Number(saved) : 1
+    return Number.isFinite(n) && n >= 0.8 && n <= 1.6 ? n : 1
+  })
+  const adjustFont = (delta: number) => {
+    setDayFontScale((s) => {
+      const next = Math.min(1.6, Math.max(0.8, +(s + delta).toFixed(2)))
+      try { window.localStorage.setItem('bq_calendar_day_font_scale', String(next)) } catch {}
+      return next
+    })
+  }
+
   const hktToday = getHKToday()
   const selectedKey = selectedDate ? toHKDateString(selectedDate) : ''
 
@@ -111,9 +127,10 @@ export default function CustomCalendar({ plan, completedDays, selectedDate, onSe
   return (
     <div style={{ width: '100%' }}>
       {/* Navigation */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 12px 8px', background: '#f8fafc', borderRadius: '12px 12px 0 0' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 8px 8px', background: '#f8fafc', borderRadius: '12px 12px 0 0', gap: 6 }}>
         <button
           onClick={prevMonth}
+          aria-label="上一月"
           style={{ minWidth: '44px', height: '44px', background: 'none', border: 'none', fontSize: '20px', fontWeight: 700, color: '#374151', cursor: 'pointer', borderRadius: '8px' }}
           onMouseEnter={(e) => (e.currentTarget.style.background = '#e5e7eb')}
           onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
@@ -121,10 +138,38 @@ export default function CustomCalendar({ plan, completedDays, selectedDate, onSe
         <span style={{ fontWeight: 700, fontSize: '16px', color: '#1F2937', flexGrow: 1, textAlign: 'center' }}>{monthLabel}</span>
         <button
           onClick={nextMonth}
+          aria-label="下一月"
           style={{ minWidth: '44px', height: '44px', background: 'none', border: 'none', fontSize: '20px', fontWeight: 700, color: '#374151', cursor: 'pointer', borderRadius: '8px' }}
           onMouseEnter={(e) => (e.currentTarget.style.background = '#e5e7eb')}
           onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
         >›</button>
+        {/* Day-cell font size controls (affects plan text inside each day tile) */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4, paddingLeft: 6, marginLeft: 4, borderLeft: '1px solid #e5e7eb' }}>
+          <button
+            onClick={() => adjustFont(-0.15)}
+            disabled={dayFontScale <= 0.8}
+            aria-label="縮小方格字體"
+            title="縮小日子方格字體"
+            style={{
+              minWidth: 36, height: 36, borderRadius: 8, border: '1px solid #d1d5db',
+              background: dayFontScale <= 0.8 ? '#f3f4f6' : '#ffffff',
+              color: dayFontScale <= 0.8 ? '#9ca3af' : '#374151',
+              fontSize: 13, fontWeight: 800, cursor: dayFontScale <= 0.8 ? 'not-allowed' : 'pointer',
+            }}
+          >A−</button>
+          <button
+            onClick={() => adjustFont(0.15)}
+            disabled={dayFontScale >= 1.6}
+            aria-label="放大方格字體"
+            title="放大日子方格字體"
+            style={{
+              minWidth: 36, height: 36, borderRadius: 8, border: '1px solid #58CC02',
+              background: dayFontScale >= 1.6 ? '#f3f4f6' : '#E8F8E0',
+              color: dayFontScale >= 1.6 ? '#9ca3af' : '#2D7A01',
+              fontSize: 13, fontWeight: 800, cursor: dayFontScale >= 1.6 ? 'not-allowed' : 'pointer',
+            }}
+          >A+</button>
+        </div>
       </div>
 
       {/* Weekday header */}
@@ -210,7 +255,7 @@ export default function CustomCalendar({ plan, completedDays, selectedDate, onSe
             >
               {/* Date number */}
               <span style={{
-                fontSize: '14px',
+                fontSize: `${Math.round(14 * dayFontScale)}px`,
                 fontWeight: 700,
                 color: completed ? '#16a34a' : dateNumColor,
                 lineHeight: 1,
@@ -224,8 +269,8 @@ export default function CustomCalendar({ plan, completedDays, selectedDate, onSe
               {/* Plan text */}
               {hasPlan && (
                 <div style={{
-                  fontSize: '9px',
-                  lineHeight: 1.1,
+                  fontSize: `${Math.max(8, Math.round(9 * dayFontScale))}px`,
+                  lineHeight: 1.15,
                   color: completed ? '#16a34a' : '#374151',
                   textAlign: 'center',
                   fontWeight: 500,
