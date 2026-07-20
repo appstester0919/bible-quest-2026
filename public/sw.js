@@ -1,6 +1,6 @@
 /* eslint-disable no-undef */
 
-const CACHE_NAME = 'bible-quest-v3'
+const CACHE_NAME = 'bible-quest-v4' // bump v3→v4: bible-data.json swapped to revised PDB source
 
 // ─── Install ──────────────────────────────────────────────────────────────────
 self.addEventListener('install', (event) => {
