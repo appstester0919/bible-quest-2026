@@ -179,6 +179,24 @@ export async function approveJoinRequest(requestId: string): Promise<{ success: 
   // Update request status
   await supabase.from('group_join_requests').update({ status: 'approved' }).eq('id', requestId)
 
+  // ─── Backfill today's check-in if user already completed reading today ─────────
+  const today = getHKTDateStr()
+  const { data: sessionToday } = await supabase
+    .from('reading_sessions')
+    .select('id')
+    .eq('user_id', req.user_id)
+    .eq('date_local', today)
+    .limit(1)
+    .maybeSingle()
+  if (sessionToday) {
+    // User already marked reading today → backfill this group with today's check-in
+    await supabase.from('group_checkins').upsert({
+      group_id: req.group_id,
+      user_id: req.user_id,
+      date_local: today,
+    }, { onConflict: 'group_id,user_id,date_local' })
+  }
+
   revalidatePath('/dashboard')
   return { success: true }
 }
