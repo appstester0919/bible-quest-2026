@@ -228,6 +228,13 @@ export default function DashboardPage() {
     // user/profile/enrollment before loading group data (they are independent).
     fetchData()
     refreshGroups()
+
+    // Poll group state every 30s so when admin approves/rejects another user's
+    // request, this user sees the updated status without a manual refresh.
+    const pollId = setInterval(() => {
+      refreshGroups()
+    }, 30_000)
+    return () => clearInterval(pollId)
   }, [router])
 
   async function refreshGroups() {
@@ -663,11 +670,24 @@ export default function DashboardPage() {
                       </div>
                     ))}
                   </div>
-                  {/* Today's completed names */}
+                  {/* Today's all-member status: show EVERY member with ✅/⏳ */}
+                  <div className="text-xs text-muted mt-1">
+                    <span className="font-bold">今日狀態：</span>
+                    {g.member_status.map((m, idx) => (
+                      <span key={m.user_id} className={idx > 0 ? 'ml-1' : ''}>
+                        {idx > 0 && '、'}
+                        <span className={m.completed_today
+                          ? 'text-[var(--color-success)] font-bold'
+                          : 'text-gray-500'
+                        }>
+                          {m.display_name}{m.completed_today ? ' ✅' : ' ⏳'}
+                        </span>
+                      </span>
+                    ))}
+                  </div>
                   {g.today_completed_names.length > 0 && (
-                    <p className="text-xs text-muted">
-                      <span className="font-bold text-[var(--color-success)]">✓ 今日已完成者：</span>
-                      {g.today_completed_names.join('、')}
+                    <p className="text-xs text-[var(--color-success)] mt-1">
+                      ✓ 已完成 ({g.today_completed_names.length}/{g.member_count})
                     </p>
                   )}
                   {/* Leave / Delete group buttons */}

@@ -26,6 +26,12 @@ export interface GroupJoinRequest {
   created_at: string
 }
 
+export interface GroupMemberStatus {
+  user_id: string
+  display_name: string
+  completed_today: boolean
+}
+
 export interface GroupWithProgress {
   id: string
   name: string
@@ -37,6 +43,9 @@ export interface GroupWithProgress {
   today_count: number         // signed-in members today
   today_total: number         // total approved members
   today_completed_names: string[]
+  /** Per-member status: all members with today's check-in flag. UI can render
+   *  "name ✅" for completed, "name ⏳" for not. */
+  member_status: GroupMemberStatus[]
   last_5_days: Array<{ date: string; rate: number }>  // 0-1 each day
 }
 
@@ -389,10 +398,18 @@ export async function getMyGroups(): Promise<{ groups: GroupWithProgress[]; erro
     const dm = checkinsByGroupDate.get(g.id) || new Map()
     const todaySet = dm.get(todayStr) || new Set()
 
-    // Today's completed names
+    // Today's completed names (kept for backward-compat with existing UI label)
     const todayCompletedNames = members
       .filter(m => todaySet.has(m.user_id))
       .map(m => m.display_name)
+
+    // Full member status: each member + whether they completed today.
+    // Allows UI to show "name ✅" / "name ⏳" so group card reflects ALL members.
+    const member_status = members.map(m => ({
+      user_id: m.user_id,
+      display_name: m.display_name,
+      completed_today: todaySet.has(m.user_id),
+    }))
 
     // Last 5 days progress — left=oldest day, right=newest (today)
     const last5 = [...dates].reverse().map(date => {
@@ -412,6 +429,7 @@ export async function getMyGroups(): Promise<{ groups: GroupWithProgress[]; erro
       today_count: todaySet.size,
       today_total: members.length,
       today_completed_names: todayCompletedNames,
+      member_status,
       last_5_days: last5,
     }
   })
