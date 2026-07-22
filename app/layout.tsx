@@ -41,6 +41,19 @@ export default function RootLayout({
       </head>
       <body>
         {children}
+        {/* Service worker registration — register immediately for PWA push support */}
+<script
+  id="register-sw"
+  dangerouslySetInnerHTML={{
+    __html: `if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').then(reg => {
+        console.log('[SW] registered, scope:', reg.scope);
+      }).catch(err =>
+        console.error('[SW] registration failed:', err)
+      );
+    }`,
+  }}
+/>
       </body>
     </html>
   );
