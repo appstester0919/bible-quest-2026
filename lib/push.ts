@@ -56,16 +56,27 @@ export async function subscribeToPush(): Promise<PushSubscriptionJSON | null> {
   const json = normalize(sub)
   saveSubscription(json)
 
-  // Sync to Supabase
+  // Sync to Supabase. We write to `web_push_subscriptions` (per-device rows).
+  // The reminder schedule columns (reminder_hour / reminder_minute / timezone /
+  // enabled_reminder) are populated from localStorage so the cron picks us up.
+  // All device rows for a user share the same reminder schedule — the settings
+  // UI writes them via upsert with the same values.
   const supabase = (await import('@/lib/supabase/client')).createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (user) {
-    await supabase.from('push_subscriptions').upsert({
+    const stored = localStorage.getItem('bq_reminder_time') || '20:00'
+    const [hour, minute] = stored.split(':').map(Number)
+    await supabase.from('web_push_subscriptions').upsert({
       user_id: user.id,
       endpoint: json.endpoint,
       p256dh: json.keys.p256dh,
       auth: json.keys.auth,
-    })
+      active: true,
+      reminder_hour: hour,
+      reminder_minute: minute,
+      timezone: 'Asia/Hong_Kong',
+      enabled_reminder: true,
+    }, { onConflict: 'user_id,endpoint' })
   }
 
   return json
@@ -87,7 +98,7 @@ export async function unsubscribeFromPush(): Promise<void> {
     const supabase = (await import('@/lib/supabase/client')).createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (user) {
-      await supabase.from('push_subscriptions').delete().eq('user_id', user.id)
+      await supabase.from('web_push_subscriptions').delete().eq('user_id', user.id)
     }
   }
 }

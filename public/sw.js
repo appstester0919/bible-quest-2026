@@ -1,6 +1,6 @@
 /* eslint-disable no-undef */
 
-const CACHE_NAME = 'bible-quest-v5' // bump v4→v5: groups member_status + 30s polling fix
+const CACHE_NAME = 'bible-quest-v6' // bump v5→v6: server-pushed reminders (uses notification.data.url + tag)
 
 // ─── Install ──────────────────────────────────────────────────────────────────
 self.addEventListener('install', (event) => {
