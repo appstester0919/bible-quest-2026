@@ -9,7 +9,7 @@ crons = ["*/15 * * * *"]
 [vars]
 # ─── Public (safe to commit) ─────────────────────────────────────────────────
 SUPABASE_URL      = "https://xybrbennsttjttxuxqoq.supabase.co"
-VAPID_PUBLIC_KEY  = "BAoIDFvUiKGXWK-AsZb8EQF0I094k0VGCLE5h8h9TsZAuD_Knod02YLb3gOcgllRdvW9PlpaFwhaaQJpUezmvOs"
+VAPID_PUBLIC_KEY  = "BD_wCISXQ8JYsx7nia9i_0I92hjv70oA0kPuyRtV0xijorV8SLJobNqPXliTJBDui9oYyQe4u1VE54xGk6Ze2LQ"
 
 # CORS — restrict to the Bible Quest web app origin.
 # Set to https://bible-quest-2026.vercel.app in production.
