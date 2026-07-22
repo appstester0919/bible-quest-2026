@@ -1,6 +1,6 @@
 /* eslint-disable no-undef */
 
-const CACHE_NAME = 'bible-quest-v6' // bump v5→v6: server-pushed reminders (uses notification.data.url + tag)
+const CACHE_NAME = 'bible-quest-v7' // bump v6→v7: unique tag per push so Android doesn't dedupe (silent replacement of a dismissed notification with the same tag)
 
 // ─── Install ──────────────────────────────────────────────────────────────────
 self.addEventListener('install', (event) => {
@@ -98,8 +98,13 @@ self.addEventListener('push', (event) => {
       body: data.body ?? '今日記得讀經！',
       icon: '/icons/icon-192.png',
       badge: '/icons/icon-192.png',
-      tag: 'bible-quest',
+      // Use a unique tag per push so Android does NOT silently dedupe.
+      // tag stays "bible-quest" if we ever want to replace — but include
+      // timestamp so each new notification creates a fresh one and triggers
+      // sound + vibration (renotify: true alone doesn't help on Android).
+      tag: `bible-quest-${Date.now()}`,
       renotify: true,
+      requireInteraction: false,
       data: { url: data.url ?? '/dashboard' },
     })
   )

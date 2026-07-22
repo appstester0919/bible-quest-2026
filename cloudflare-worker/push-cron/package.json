@@ -11,5 +11,9 @@
   },
   "devDependencies": {
     "wrangler": "^3.90.0"
+  },
+  "dependencies": {
+    "http_ece": "^1.2.1",
+    "web-push": "^3.6.7"
   }
 }

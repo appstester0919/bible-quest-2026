@@ -66,7 +66,7 @@ export async function subscribeToPush(): Promise<PushSubscriptionJSON | null> {
   if (user) {
     const stored = localStorage.getItem('bq_reminder_time') || '20:00'
     const [hour, minute] = stored.split(':').map(Number)
-    await supabase.from('web_push_subscriptions').upsert({
+    const { error: upsertError } = await supabase.from('web_push_subscriptions').upsert({
       user_id: user.id,
       endpoint: json.endpoint,
       p256dh: json.keys.p256dh,
@@ -77,13 +77,25 @@ export async function subscribeToPush(): Promise<PushSubscriptionJSON | null> {
       timezone: 'Asia/Hong_Kong',
       enabled_reminder: true,
     }, { onConflict: 'user_id,endpoint' })
+    if (upsertError) {
+      console.error('[push.ts] subscribe upsert failed:', upsertError)
+      // Don't throw — sub is created locally; surface error to caller via console
+    }
+  } else {
+    console.warn('[push.ts] no authenticated user; skipping Supabase sync')
   }
 
   return json
 }
 
 /**
- * Unsubscribe from push.
+ * Unsubscribe from push on THIS device only.
+ *
+ * Important: this only deletes the row matching the current SW push subscription's
+ * endpoint. It does NOT delete other devices the user has registered (e.g. a
+ * desktop browser + an Android phone each have their own endpoint / DB row).
+ * The previous version used `delete().eq('user_id', user.id)` which wiped
+ * every device for the user — see the fix in commit describing this.
  */
 export async function unsubscribeFromPush(): Promise<void> {
   const stored = getStoredSubscription()
@@ -98,7 +110,13 @@ export async function unsubscribeFromPush(): Promise<void> {
     const supabase = (await import('@/lib/supabase/client')).createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (user) {
-      await supabase.from('web_push_subscriptions').delete().eq('user_id', user.id)
+      // Only delete the row matching THIS device's endpoint. Multi-device
+      // users (desktop + mobile) keep their other devices' subscriptions.
+      await supabase
+        .from('web_push_subscriptions')
+        .delete()
+        .eq('user_id', user.id)
+        .eq('endpoint', stored.endpoint)
     }
   }
 }

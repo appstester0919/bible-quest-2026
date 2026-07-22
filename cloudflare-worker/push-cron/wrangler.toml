@@ -1,6 +1,10 @@
 name = "bible-quest-push-cron"
 main = "src/index.js"
 compatibility_date = "2025-01-01"
+# nodejs_compat: required for the `web-push` npm package (which depends on
+# Node's crypto.createECDH, crypto.createHmac, Buffer etc.). esbuild bundles
+# the package automatically; this flag exposes Node APIs at runtime.
+compatibility_flags = ["nodejs_compat"] 
 
 # Cron: every 15 minutes. Free tier allows up to 5 triggers per worker.
 [triggers]
@@ -9,13 +13,13 @@ crons = ["*/15 * * * *"]
 [vars]
 # ─── Public (safe to commit) ─────────────────────────────────────────────────
 SUPABASE_URL      = "https://xybrbennsttjttxuxqoq.supabase.co"
+SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh5YnJiZW5uc3R0anR0eHV4cW9xIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMyNTM5OTcsImV4cCI6MjA5ODgyOTk5N30.Q3IER7XqhseimIRn60ynuBeJTY8Iu_KCjZgWnC6zF34"
 VAPID_PUBLIC_KEY  = "BD_wCISXQ8JYsx7nia9i_0I92hjv70oA0kPuyRtV0xijorV8SLJobNqPXliTJBDui9oYyQe4u1VE54xGk6Ze2LQ"
 
-# CORS — restrict to the Bible Quest web app origin.
-# Set to https://bible-quest-2026.vercel.app in production.
-# Override per-environment via `wrangler deploy --var ALLOWED_ORIGIN:...` or
-# edit [env.production] / [env.preview] blocks below.
-ALLOWED_ORIGIN = "http://localhost:3000"
+# CORS — restricted to known origins. The browser enforces this on every
+# push request from the Vercel app, so we must allow both the production
+# Vercel domain and the local dev origin.
+ALLOWED_ORIGINS = "https://bible-quest-2026.vercel.app,http://localhost:3000"
 
 # ─── Secrets (set with `wrangler secret put` — NEVER commit) ─────────────────
 #   SUPABASE_SERVICE_ROLE_KEY   — Supabase project service_role JWT

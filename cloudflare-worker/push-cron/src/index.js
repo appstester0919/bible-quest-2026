@@ -119,6 +119,7 @@ async function handleCron(env) {
         p256dh: item.p256dh,
         auth: item.auth,
         vapidPrivateKey: env.VAPID_PRIVATE_KEY,
+        vapidPublicKey: env.VAPID_PUBLIC_KEY,
         vapidSubject: env.VAPID_SUBJECT,
         payload: basePayload,
         ttl: PUSH_TTL,
@@ -152,15 +153,119 @@ async function handleCron(env) {
   return { sent, expired, errors }
 }
 
+// ─── CORS helpers ─────────────────────────────────────────────────────────────
+// Parse the comma-separated ALLOWED_ORIGINS env var and reflect the request's
+// Origin header back if it matches any allowed origin. Falls back to the
+// single ALLOWED_ORIGIN (legacy) for backward compatibility.
+function corsHeadersFor(request, env) {
+  const requestOrigin = request.headers.get('Origin') || ''
+  const allowedList = (env.ALLOWED_ORIGINS || env.ALLOWED_ORIGIN || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+  const allowedOrigin = allowedList.includes(requestOrigin) ? requestOrigin : ''
+  const headers = {
+    'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Max-Age': '86400',
+  }
+  if (allowedOrigin) headers['Access-Control-Allow-Origin'] = allowedOrigin
+  return headers
+}
+
 // ─── HTTP handlers ───────────────────────────────────────────────────────────
 async function handleRequest(request, env) {
   const url = new URL(request.url)
+  const corsHeaders = corsHeadersFor(request, env)
+
+  // CORS preflight — let the vercel app call /trigger-push directly during dev
+  if (request.method === 'OPTIONS') {
+    return new Response(null, { status: 204, headers: corsHeaders })
+  }
 
   if (request.method === 'GET' && url.pathname === '/healthz') {
     return new Response('ok', { status: 200, headers: { 'Content-Type': 'text/plain' } })
   }
 
-  return new Response('not found', { status: 404 })
+  // Manual push trigger — bypasses the cron schedule + last_notified_at guard.
+  // Useful for testing a single device right after subscribing. Body:
+  //   { "subscription_id": "uuid" }            → push to one specific device
+  //   { } (empty)                              → push to all active devices of
+  //                                              the user identified by the
+  //                                              Authorization header (anon JWT)
+  // The response tells us if FCM accepted each push. Does NOT update
+  // last_notified_at, so it can be triggered multiple times in succession.
+  if (request.method === 'POST' && url.pathname === '/trigger-push') {
+    let payload = {}
+    try {
+      payload = await request.json()
+    } catch {
+      // empty body is fine — we'll fall back to "push all my devices"
+    }
+    // The client (Vercel app) calls this with the user's anon JWT in the
+    // Authorization header so PostgREST evaluates RLS as that user (only sees
+    // rows where auth.uid() = user_id). Forward the header unchanged.
+    const userAuth = request.headers.get('Authorization') || ''
+    if (!userAuth) {
+      return jsonResponse({ error: 'missing Authorization header (user JWT)' }, 401, corsHeaders)
+    }
+    const userRespHeaders = {
+      'apikey': env.SUPABASE_ANON_KEY || '',
+      'Authorization': userAuth,
+      'Content-Type': 'application/json',
+    }
+    const url2 = `${env.SUPABASE_URL}/rest/v1/web_push_subscriptions?active=eq.true&select=id,user_id,endpoint,p256dh,auth`
+    const qUrl = payload.subscription_id
+      ? `${url2}&id=eq.${payload.subscription_id}`
+      : url2
+    const directResp = await fetch(qUrl, { method: 'GET', headers: userRespHeaders })
+    if (!directResp.ok) {
+      const text = await directResp.text()
+      return jsonResponse({ error: `Supabase GET failed: ${directResp.status}`, detail: text }, 502, corsHeaders)
+    }
+    const subs = await directResp.json()
+    if (!subs || subs.length === 0) {
+      return jsonResponse({ error: 'no active subscriptions found for this user', subscription_id: payload.subscription_id ?? null }, 404, corsHeaders)
+    }
+    const content = REMINDER_CONTENT.daily
+    const basePayload = JSON.stringify({
+      title: content.title,
+      body: content.body,
+      url: content.url,
+      icon: content.icon,
+      badge: BADGE_DEFAULT,
+    })
+    const results = await parallelMap(subs, PUSH_PARALLEL, async (sub) => {
+      try {
+        const r = await sendNotification({
+          endpoint: sub.endpoint,
+          p256dh: sub.p256dh,
+          auth: sub.auth,
+          vapidPrivateKey: env.VAPID_PRIVATE_KEY,
+          vapidPublicKey: env.VAPID_PUBLIC_KEY,
+          vapidSubject: env.VAPID_SUBJECT || 'mailto:laikaho0919@gmail.com',
+          payload: basePayload,
+          ttl: PUSH_TTL,
+        })
+        return { subscription_id: sub.id, ok: r.ok, status: r.status, expired: r.expired, body: r.body }
+      } catch (e) {
+        return { subscription_id: sub.id, ok: false, error: e.message }
+      }
+    })
+    return jsonResponse({
+      attempted: subs.length,
+      results,
+    }, 200, corsHeaders)
+  }
+
+  return new Response('not found', { status: 404, headers: corsHeaders })
+}
+
+function jsonResponse(data, status = 200, extraHeaders = {}) {
+  return new Response(JSON.stringify(data, null, 2), {
+    status,
+    headers: { 'Content-Type': 'application/json', ...extraHeaders },
+  })
 }
 
 // ─── Worker entrypoint ───────────────────────────────────────────────────────
