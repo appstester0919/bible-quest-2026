@@ -1,0 +1,92 @@
+name: bible-quest-push-cron
+
+# Polls Vercel /api/push/cron-relay every 15 minutes to deliver daily reading
+# reminders to subscribed users.
+#
+# Why this workflow instead of a Cloudflare Worker cron trigger:
+#   - The Cloudflare Worker runtime (unenv) does not implement
+#     crypto.createECDH, so we cannot run encryption locally in the worker.
+#   - Self-rolled RFC 8291/8188 AES-GCM encryption produced ciphertext that
+#     FCM accepted (HTTP 201) but Chrome's Service Worker could not decrypt
+#     (event.data was null at the SW push handler).
+#   - GitHub Actions run on full Ubuntu + Node 20, so we can delegate the
+#     encryption to Vercel which uses the proven `web-push` npm library.
+#
+# The workflow is a thin trigger: it just POSTs to Vercel with a bearer
+# token. All real work — RPC, encryption, FCM delivery — happens in Vercel.
+#
+# ─── Required GitHub repository secrets ─────────────────────────────────────
+# Configure these under: github.com/<owner>/BibleQuest2026/settings/secrets/actions
+#
+#   CRON_RELAY_TOKEN    — A strong random token (e.g. `openssl rand -base64 32`)
+#                          Must match the VERCEL env var `CRON_RELAY_TOKEN`
+#                          of the same value. The route refuses requests with a
+#                          mismatched token.
+#   VERCEL_PUSH_URL     — Base URL of the Vercel deployment, e.g.
+#                          `https://bible-quest-2026.vercel.app` (no trailing
+#                          slash; the workflow appends `/api/push/cron-relay`).
+#
+# ─── Required Vercel env vars ───────────────────────────────────────────────
+# Configure under: vercel.com/<team>/bible-quest-2026/settings/environment-variables
+#
+#   CRON_RELAY_TOKEN        — Same value as the GH Actions secret.
+#   SUPABASE_SERVICE_ROLE_KEY — Already set; admin-bypass Supabase key.
+#   NEXT_PUBLIC_SUPABASE_URL — Already set.
+#   NEXT_PUBLIC_VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY / VAPID_SUBJECT
+#                            — Already set (used by /api/push/send today).
+#
+
+on:
+  schedule:
+    # Every 15 minutes (UTC). Matches the bucket the SQL RPC
+    # process_due_reminders uses for reminder matching (minute / 15).
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+    # Allow manual trigger from the GitHub UI for testing.
+
+jobs:
+  relay:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Trigger Vercel cron-relay
+        id: relay
+        env:
+          # Secrets must be configured under
+          # repo Settings → Secrets and variables → Actions.
+          CRON_RELAY_TOKEN: ${{ secrets.CRON_RELAY_TOKEN }}
+          VERCEL_PUSH_URL: ${{ secrets.VERCEL_PUSH_URL }}
+        run: |
+          if [ -z "$CRON_RELAY_TOKEN" ]; then
+            echo "::error::CRON_RELAY_TOKEN secret not set — push workflow will auth-fail."
+          fi
+          if [ -z "$VERCEL_PUSH_URL" ]; then
+            echo "::error::VERCEL_PUSH_URL secret not set."
+            exit 1
+          fi
+
+          echo "POST $VERCEL_PUSH_URL/api/push/cron-relay"
+          response=$(curl -sS -w "\nHTTP_STATUS:%{http_code}\n" \
+            -X POST \
+            -H "Authorization: Bearer $CRON_RELAY_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d '{"limit":200}' \
+            "$VERCEL_PUSH_URL/api/push/cron-relay")
+
+          echo "--- response ---"
+          echo "$response"
+          echo "--- /response ---"
+
+          # Surface a non-zero exit if the cron-relay returned a non-2xx
+          # status. We do this by grep-ing the HTTP_STATUS marker we
+          # appended above.
+          status=$(echo "$response" | grep -oE 'HTTP_STATUS:[0-9]+' | tail -n 1 | cut -d: -f2)
+          if [ -z "$status" ]; then
+            echo "::error::could not parse HTTP status from response"
+            exit 1
+          fi
+          if [ "$status" -lt 200 ] || [ "$status" -ge 300 ]; then
+            echo "::error::cron-relay returned HTTP $status"
+            exit 1
+          fi
+          echo "cron-relay ok HTTP $status"

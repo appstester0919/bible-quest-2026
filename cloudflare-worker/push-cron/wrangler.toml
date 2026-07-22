@@ -6,9 +6,21 @@ compatibility_date = "2025-01-01"
 # the package automatically; this flag exposes Node APIs at runtime.
 compatibility_flags = ["nodejs_compat"] 
 
-# Cron: every 15 minutes. Free tier allows up to 5 triggers per worker.
+# Cron: DISABLED 2026-07-22. The Worker cron path was abandoned after
+# extended debugging revealed that the worker runtime (unenv) does not
+# implement crypto.createECDH, and self-rolled RFC 8291 encryption
+# produced ciphertext Chrome's Service Worker could not decrypt. The cron
+# responsibility has moved to a GitHub Actions workflow:
+#   .github/workflows/cron-push.yml  — every 15 min, POSTs to
+#   app/api/push/cron-relay/route.ts  — uses web-push npm library (same
+#                                       code path as the proven /api/push/send)
+#
+# The Worker HTTP endpoints (/healthz, /trigger-push) are intentionally
+# kept deployed for debugging only — the cron trigger is what would have
+# fired the broken encryption code path every 15 min. Disabling it here
+# stops the silent noise. The `[triggers]` block below is left empty.
 [triggers]
-crons = ["*/15 * * * *"]
+crons = [] 
 
 [vars]
 # ─── Public (safe to commit) ─────────────────────────────────────────────────
