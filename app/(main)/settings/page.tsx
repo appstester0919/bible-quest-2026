@@ -50,20 +50,26 @@ export default function SettingsPage() {
 
   useEffect(() => {
     setPushPermission(getPushPermissionStatus())
-    // Check SW subscription status — fall back to localStorage which is set
-    // synchronously in lib/push.ts before the Supabase sync (which may fail).
+    // Optimistic localStorage check — run before SW promise chain so the
+    // hour+minute picker renders on first paint, even before service worker
+    // registration resolves. SW registration can take 1-2s on slow networks.
+    if (localStorage.getItem('bq_push_subscription')) {
+      setIsSubscribed(true)
+    }
+    // Then reconcile with the SW state for accuracy (e.g., user revoked
+    // permission in browser settings — localStorage stale but SW reflects truth).
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.ready
         .then((reg) => reg.pushManager.getSubscription())
         .then((sub) => {
           if (sub) {
             setIsSubscribed(true)
-          } else if (localStorage.getItem('bq_push_subscription')) {
-            // SW sub cleared but localStorage still has it — show picker anyway
-            // so the user can re-save their reminder time. They can also click
-            // "Disable" to clean up.
-            setIsSubscribed(true)
+          } else if (!localStorage.getItem('bq_push_subscription')) {
+            // SW says no subscription AND localStorage is empty — definitely not subscribed
+            setIsSubscribed(false)
           }
+          // else: localStorage had something but SW says no — keep optimistic true
+          // so the user can see the picker and click "Disable" to clean up.
         })
         .catch((err) => console.error('[push] sub check failed:', err))
     }
