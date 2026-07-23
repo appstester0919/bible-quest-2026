@@ -26,6 +26,8 @@ export async function updateIdentity(newIdentity: Identity): Promise<Result> {
   }
   try {
     const cookieStore = await cookies()
+    const allCookies = cookieStore.getAll()
+    console.log('[updateIdentity] cookies received:', allCookies.map(c => `${c.name}(${c.value.length}B)`))
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
