@@ -112,22 +112,18 @@ html {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Background lives on <body> (not <html>) because the identity selector
- * also lives on <body> via <body data-identity="...">. CSS custom
- * properties don't inherit across element scopes, so the variable
- * definition and its consumer must be on the same element. The fixed
- * background-attachment stays put. */
-body {
-  background: var(--color-background) var(--bq-bg-image, url('/bg.png')) center / cover no-repeat fixed;
-  min-height: 100vh;
-}
-
 /* ============================================================
  * IDENTITY-DRIVEN BACKGROUND
  * The <body data-identity="Uni|High|Prim"> attribute (set in
  * app/layout.tsx based on the logged-in profile) picks the
  * background. Default (no attribute) = Uni.
  * Identity source: lib/identity.ts — keep in sync.
+ *
+ * IMPORTANT ordering: the variable definitions MUST come before the
+ * body rule that consumes them, so --bq-bg-image resolves correctly.
+ * The original code had a separate body rule with `background: transparent`
+ * after this block, which clobbered the background. All body declarations
+ * are now consolidated into one block at the bottom.
  * ============================================================ */
 body[data-identity="Uni"]  { --bq-bg-image: url('/identity-bg/Uni.jpg');  }
 body[data-identity="High"] { --bq-bg-image: url('/identity-bg/High.jpg'); }
@@ -136,7 +132,7 @@ body[data-identity="Prim"] { --bq-bg-image: url('/identity-bg/Prim.jpg'); }
 body {
   min-height: 100dvh;
   overscroll-behavior: none;
-  background: transparent;
+  background: var(--color-background) var(--bq-bg-image, url('/bg.png')) center / cover no-repeat fixed;
 }
 
 .scripture-text {
