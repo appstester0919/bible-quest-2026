@@ -45,8 +45,10 @@ export default async function RootLayout({
   // If unauthenticated or identity missing/invalid, default to 'Uni' so the
   // existing 爾國臨格 background still shows.
   let userIdentity: Identity = "Uni";
+  let debugInfo = { step: "init", hasUser: false, hasProfile: false, profileIdentity: null as string | null, error: null as string | null };
   try {
     const cookieStore = await cookies();
+    debugInfo.step = "got cookies";
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -57,22 +59,29 @@ export default async function RootLayout({
         },
       },
     );
+    debugInfo.step = "created client";
     const { data: { user } } = await supabase.auth.getUser();
+    debugInfo.hasUser = !!user;
     if (user) {
+      debugInfo.step = "got user";
       // maybeSingle instead of single: don't throw on 0 rows
       const { data: profile } = await supabase
         .from("profiles")
         .select("identity")
         .eq("id", user.id)
         .maybeSingle();
+      debugInfo.hasProfile = !!profile;
+      debugInfo.profileIdentity = profile?.identity ?? null;
       if (profile?.identity && isIdentity(profile.identity)) {
         userIdentity = profile.identity;
       }
     }
   } catch (err) {
-    console.error("[layout] failed to read user identity:", err);
+    debugInfo.error = err instanceof Error ? err.message : String(err);
+    console.error("[layout] failed to read user identity:", err, "debug=", JSON.stringify(debugInfo));
     // fall through to default 'Uni'
   }
+  console.log("[layout] identity debug:", JSON.stringify(debugInfo), "-> using", userIdentity);
 
   return (
     <html lang="zh-Hant">
@@ -84,7 +93,7 @@ export default async function RootLayout({
           rel="stylesheet"
         />
       </head>
-      <body data-identity={userIdentity}>
+      <body data-identity={userIdentity} data-identity-debug={JSON.stringify(debugInfo)}>
         {children}
         {/* Service worker registration — register immediately for PWA push support */}
 <script
