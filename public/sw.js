@@ -1,6 +1,6 @@
 /* eslint-disable no-undef */
 
-const CACHE_NAME = 'bible-quest-v7' // bump v6→v7: unique tag per push so Android doesn't dedupe (silent replacement of a dismissed notification with the same tag)
+const CACHE_NAME = 'bible-quest-v8' // bump v7→v8: added vibrate + visibility:'public' + actions for Android push reliability (background/doze mode suppression workaround)
 
 // ─── Install ──────────────────────────────────────────────────────────────────
 self.addEventListener('install', (event) => {
@@ -105,7 +105,24 @@ self.addEventListener('push', (event) => {
       tag: `bible-quest-${Date.now()}`,
       renotify: true,
       requireInteraction: false,
+      // Android sometimes silently suppresses pushes that lack a vibration
+      // pattern. The 300ms-on / 200ms-off / 300ms-on triple is the standard
+      // "ping" pattern that survives doze mode and Do Not Disturb (when the
+      // user has explicitly enabled reminders). Length kept short so it's
+      // polite for frequent reminders.
+      vibrate: [300, 200, 300],
+      // Visibility 'public' means the notification body shows on lock screen
+      // even when the device is locked — required for a reminder app to be
+      // useful when the user is away from the device.
+      visibility: 'public',
+      // Android: also include 'silent: false' explicitly to override any
+      // channel-level silent default that some Android OEMs add.
+      silent: false,
       data: { url: data.url ?? '/dashboard' },
+      actions: [
+        { action: 'open', title: '📖 開啟讀經' },
+        { action: 'dismiss', title: '稍後再說' },
+      ],
     })
   )
 })

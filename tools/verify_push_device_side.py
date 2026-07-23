@@ -44,6 +44,17 @@ PWA_ORIGIN = "https://bible-quest-2026.vercel.app"
 SW_SCOPE = f"{PWA_ORIGIN}/"
 WAIT_FOR_PUSH_SECONDS = 120
 
+# Chrome 149+ rejects CDP WebSocket connections unless the origin matches
+# --remote-allow-origins. The 403 we surface below is almost always because
+# Chrome was launched without that flag. Suggested Chrome command:
+CHROME_COMMAND = (
+    "google-chrome --no-sandbox --disable-dev-shm-usage "
+    "--remote-debugging-port=9222 "
+    "--remote-debugging-address=0.0.0.0 "
+    "--remote-allow-origins=* "
+    "--user-data-dir=/tmp/chrome-debug-$(date +%s)"
+)
+
 
 def http_get_json(path: str):
     with urllib.request.urlopen(f"{CDP_URL}{path}", timeout=5) as r:
@@ -158,7 +169,18 @@ def main():
     else:
         print(f"PWA tab found: {page.get('url', '')[:80]}")
 
-    cdp = CDPClient(page["webSocketDebuggerUrl"])
+    try:
+        cdp = CDPClient(page["webSocketDebuggerUrl"])
+    except websocket.WebSocketBadStatusException as e:
+        # Chrome 149+ rejects with 403 unless --remote-allow-origins is set
+        if "403" in str(e):
+            sys.stderr.write(
+                "FAIL: Chrome rejected WebSocket connection (403).\n"
+                "      Chrome 149+ requires --remote-allow-origins for CDP.\n"
+                f"      Suggested launch command:\n        {CHROME_COMMAND}\n"
+            )
+            sys.exit(2)
+        raise
 
     # ─── 2. Enable domains ──────────────────────────────────────────────────
     cdp.send("Page.enable")
@@ -167,38 +189,76 @@ def main():
     cdp.send("PushManager.enable", {"clientTarget": "VerifyPush"})
     cdp.send("Storage.getStorageKeyForOrigin", {"origin": PWA_ORIGIN})
 
-    # ─── 3. Make sure the SW exists ─────────────────────────────────────────
+    # ─── 3. Navigate to PWA if not already there, then wait for SW ─────────
+    # First check: is current page already on PWA with Notification permission
+    # granted? If so, the SW should be registered.
     sw_resp = cdp.send("ServiceWorker.getRegistrations")
     sw_regs = sw_resp.get("result", {}).get("registrations", [])
-    print(f"Service worker registrations for this origin: {len(sw_regs)}")
+    # Also try the legacy `getEnabled` path for older Chrome targets
     if not sw_regs:
-        # Need to navigate to PWA first
+        sw_resp = cdp.send("ServiceWorker.getRegistrations", {"force": True})
+        sw_regs = sw_resp.get("result", {}).get("registrations", [])
+    print(f"Service worker registrations (initial probe): {len(sw_regs)}")
+
+    if not sw_regs:
+        # Need to navigate (or re-navigate) to PWA so the app can register SW
         print(f"Navigating to {PWA_URL} ...")
         nav = cdp.send("Page.navigate", {"url": PWA_URL})
         if nav.get("error"):
             print(f"WARN: navigate error: {nav['error']}")
-        # Wait for service worker registration event
+
+        # Wait for the page-load event so the JS can run
+        cdp.wait_event(lambda m: m == "Page.loadEventFired", timeout=15)
+        # Give the SPA a moment to register the SW
+        time.sleep(2)
+
+        # Wait for any of: SW registration updated, or timeout
         evt = cdp.wait_event(
-            lambda m: m == "ServiceWorker.workerRegistrationUpdated",
-            timeout=20,
+            lambda m: m in ("ServiceWorker.workerRegistrationUpdated",
+                            "ServiceWorker.workerVersionUpdated"),
+            timeout=10,
         )
-        if evt is None:
-            print("WARN: no ServiceWorker.workerRegistrationUpdated event within 20s; continuing")
+        if evt:
+            print(f"SW event: {evt[0]}")
         else:
-            print("SW registered; re-querying registrations ...")
-            sw_resp = cdp.send("ServiceWorker.getRegistrations")
-            sw_regs = sw_resp.get("result", {}).get("registrations", [])
-            print(f"Now have {len(sw_regs)} SW registration(s)")
+            print("WARN: no ServiceWorker.workerRegistrationUpdated within 10s")
+
+        # Re-query
+        sw_resp = cdp.send("ServiceWorker.getRegistrations")
+        sw_regs = sw_resp.get("result", {}).get("registrations", [])
+        print(f"Now have {len(sw_regs)} SW registration(s)")
     if not sw_regs:
-        sys.stderr.write("FAIL: still no service worker. Open the PWA in this tab "
-                         "and grant Notification permission, then re-run.\n")
+        # Fallback: register SW from page context via Runtime.evaluate.
+        # This is what the PWA does internally on first load.
+        print("Falling back to runtime register via navigator.serviceWorker.register('/sw.js') ...")
+        reg = cdp.send(
+            "Runtime.evaluate",
+            {
+                "expression": "(async () => { try { const r = await navigator.serviceWorker.register('/sw.js', {scope: '/'}); return {ok: true, scope: r.scope, active: !!r.active}; } catch (e) { return {ok: false, err: String(e)}; } })()",
+                "awaitPromise": True,
+                "returnByValue": True,
+            },
+        )
+        val = reg.get("result", {}).get("value") or reg.get("result", {}).get("result", {}).get("value")
+        print(f"runtime register result: {val}")
+        time.sleep(1)
+        sw_resp = cdp.send("ServiceWorker.getRegistrations")
+        sw_regs = sw_resp.get("result", {}).get("registrations", [])
+        print(f"After runtime register: {len(sw_regs)} SW registration(s)")
+    if not sw_regs:
+        sys.stderr.write(
+            "FAIL: still no service worker.\n"
+            "      Likely cause: Notification permission not granted on this Chrome profile.\n"
+            "      Open chrome://settings/content/notifications → allow bible-quest-2026.vercel.app,\n"
+            "      then visit the PWA and click 'Allow' on the permission prompt, then re-run.\n"
+        )
         cdp.close()
         sys.exit(2)
 
     sw_reg_id = sw_regs[0]["registrationId"]
     print(f"SW registrationId: {sw_reg_id}")
 
-    # ─── 4. Check Notification permission ──────────────────────────────────
+    # ─── 4. Grant Notification + PushMessaging permissions ─────────────────
     perm = cdp.send(
         "Browser.grantPermissions",
         {

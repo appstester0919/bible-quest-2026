@@ -404,6 +404,47 @@ export default function SettingsPage() {
           {/* Reminder time picker — only shown if subscribed */}
           {isSubscribed && (
             <div className="border-t border-gray-100 pt-3 mt-3">
+              {/* Send test push — verifies the full Web Push pipeline is healthy
+                  (VAPID + Vercel route + SW + FCM). Surfaces errors to the user
+                  instead of leaving them wondering why a reminder never fires. */}
+              <button
+                onClick={async () => {
+                  setLoading(true)
+                  try {
+                    const supabase = createClient()
+                    const { data: { session } } = await supabase.auth.getSession()
+                    if (!session) { alert('請先登入'); return }
+                    const resp = await fetch('/api/push/send', {
+                      method: 'POST',
+                      headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${session.access_token}`,
+                      },
+                      credentials: 'same-origin',
+                      body: JSON.stringify({}),
+                    })
+                    const json = await resp.json()
+                    interface PushResult { ok: boolean }
+                    const results: PushResult[] = Array.isArray(json.results) ? json.results : []
+                    const failed = results.filter((r: PushResult) => !r.ok)
+                    if (resp.ok && failed.length === 0) {
+                      const attempted = typeof json.attempted === 'number' ? json.attempted : results.length
+                      alert(`✅ 已發送測試推送 (${attempted} 個裝置)。檢查你的通知中心。`)
+                    } else {
+                      alert('❌ 推送失敗:\n' + JSON.stringify(json, null, 2))
+                    }
+                  } catch (e) {
+                    alert('❌ 請求失敗: ' + (e as Error).message)
+                  } finally {
+                    setLoading(false)
+                  }
+                }}
+                disabled={loading}
+                className="w-full mb-3 py-2 px-4 bg-[var(--color-background)] border border-[var(--color-primary)] text-[var(--color-primary)] rounded-lg font-medium disabled:opacity-50"
+              >
+                🔔 立即發送測試推送
+              </button>
+
               <label className="block text-sm font-medium mb-2">
                 提醒時間（香港時間）
               </label>
