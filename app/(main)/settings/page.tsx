@@ -7,6 +7,7 @@ import { subscribeToPush, unsubscribeFromPush, getPushPermissionStatus } from '@
 import { updateDisplayName } from '@/lib/groupActions'
 import { getRequiredDays } from '@/lib/bible/scope'
 import type { Scope } from '@/lib/bible/scope'
+import { ALL_IDENTITIES, IDENTITIES, DEFAULT_IDENTITY, isIdentity, type Identity } from '@/lib/identity'
 
 // Reminder time constraints — minute granularity is 15 min to avoid cron
 // running every minute (free Cloudflare plan stays within quota). Hour is
@@ -33,6 +34,13 @@ export default function SettingsPage() {
   // Default = 8pm @ 0min — matches the legacy '20:00' default and the DB default.
   const [reminderHour, setReminderHour] = useState<number>(20)
   const [reminderMinute, setReminderMinute] = useState<number>(0)
+  // Identity (Uni / High / Prim) — chosen at signup, user can change here.
+  // Triggers a hard reload after save so the new background kicks in
+  // (CSS variable is set in app/layout.tsx from the server-rendered
+  // <body data-identity="...">; client-side mutation alone won't repaint).
+  const [identity, setIdentity] = useState<Identity>(DEFAULT_IDENTITY)
+  const [identitySaving, setIdentitySaving] = useState(false)
+  const [identitySaved, setIdentitySaved] = useState(false)
   const [currentEnrollment, setCurrentEnrollment] = useState<{
     id: string; scope: string; chapters_per_day: number; total_days: number;
     reading_order?: string | null;
@@ -75,6 +83,7 @@ export default function SettingsPage() {
     }
     fetchEnrollment()
     fetchDisplayName()
+    fetchIdentity()
     fetchReminderSchedule()
   }, [])
 
@@ -109,6 +118,42 @@ export default function SettingsPage() {
     if (!user) return
     const { data } = await supabase.from('profiles').select('display_name').eq('id', user.id).maybeSingle()
     if (data?.display_name) setDisplayName(data.display_name)
+  }
+
+  async function fetchIdentity() {
+    const supabase = createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+    const { data } = await supabase.from('profiles').select('identity').eq('id', user.id).maybeSingle()
+    if (data?.identity && isIdentity(data.identity)) {
+      setIdentity(data.identity)
+    }
+  }
+
+  async function saveIdentity(newIdentity: Identity) {
+    if (newIdentity === identity) return
+    setIdentitySaving(true)
+    setIdentitySaved(false)
+    try {
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) throw new Error('not signed in')
+      const { error } = await supabase
+        .from('profiles')
+        .update({ identity: newIdentity })
+        .eq('id', user.id)
+      if (error) throw error
+      setIdentity(newIdentity)
+      setIdentitySaved(true)
+      // Hard reload so the server-rendered <body data-identity="...">
+      // updates the CSS background. router.refresh() alone won't repaint
+      // because globals.css references --bq-bg-image inline on <html>.
+      setTimeout(() => window.location.reload(), 600)
+    } catch (err) {
+      alert('更新身份失敗: ' + (err instanceof Error ? err.message : String(err)))
+    } finally {
+      setIdentitySaving(false)
+    }
   }
 
   async function fetchEnrollment() {
@@ -336,6 +381,67 @@ export default function SettingsPage() {
       </header>
 
       <main className="max-w-sm mx-auto px-4 py-6 space-y-4">
+        {/* Identity (Uni / High / Prim) — drives the background image and
+            unlocks any future identity-exclusive features. Set at signup
+            and silently editable here. */}
+        <div className="bg-white rounded-2xl p-5 shadow-sm">
+          <h2 className="text-lg font-bold text-[var(--color-primary)] mb-1">🏕️ 我的身份</h2>
+          <p className="text-sm text-[var(--color-muted)] mb-4">
+            揀選你屬於哪個營會／群組，會換背景圖配合。
+          </p>
+          <div className="grid grid-cols-1 gap-2">
+            {ALL_IDENTITIES.map((code) => {
+              const meta = IDENTITIES[code]
+              const selected = identity === code
+              return (
+                <label
+                  key={code}
+                  className={
+                    'flex items-center gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all ' +
+                    (selected
+                      ? 'border-[var(--color-success)] bg-[var(--color-success)]/5'
+                      : 'border-gray-200 hover:border-gray-300')
+                  }
+                >
+                  <input
+                    type="radio"
+                    name="identity"
+                    value={code}
+                    checked={selected}
+                    onChange={() => saveIdentity(code)}
+                    disabled={identitySaving}
+                    className="sr-only"
+                  />
+                  <span
+                    className={
+                      'flex-shrink-0 w-5 h-5 rounded-full border-2 flex items-center justify-center ' +
+                      (selected
+                        ? 'border-[var(--color-success)] bg-[var(--color-success)]'
+                        : 'border-gray-300')
+                    }
+                  >
+                    {selected && <span className="w-2 h-2 rounded-full bg-white" />}
+                  </span>
+                  <span className="flex-1 min-w-0">
+                    <span className="block text-sm font-bold text-[var(--color-primary)]">
+                      {meta.name_zh}
+                    </span>
+                    <span className="block text-xs text-[var(--color-muted)] mt-0.5">
+                      {meta.preview}
+                    </span>
+                  </span>
+                </label>
+              )
+            })}
+          </div>
+          {identitySaving && (
+            <p className="text-xs text-[var(--color-muted)] mt-2">更新中...</p>
+          )}
+          {identitySaved && !identitySaving && (
+            <p className="text-xs text-[var(--color-success)] mt-2">✓ 已更新，背景即將切換</p>
+          )}
+        </div>
+
         {/* Display Name */}
         <div className="bg-white rounded-2xl p-5 shadow-sm">
           <h2 className="text-lg font-bold text-[var(--color-primary)] mb-1">👤 顯示名稱</h2>

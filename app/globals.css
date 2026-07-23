@@ -107,11 +107,22 @@
 
 html {
   font-family: var(--font-sans);
-  background: var(--color-background) url('/bg.png') center / cover no-repeat fixed;
+  background: var(--color-background) var(--bq-bg-image, url('/bg.png')) center / cover no-repeat fixed;
   color: var(--color-primary);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
+
+/* ============================================================
+ * IDENTITY-DRIVEN BACKGROUND
+ * The <body data-identity="Uni|High|Prim"> attribute (set in
+ * app/layout.tsx based on the logged-in profile) picks the
+ * background. Default (no attribute) = Uni.
+ * Identity source: lib/identity.ts — keep in sync.
+ * ============================================================ */
+body[data-identity="Uni"]  { --bq-bg-image: url('/identity-bg/Uni.jpg');  }
+body[data-identity="High"] { --bq-bg-image: url('/identity-bg/High.jpg'); }
+body[data-identity="Prim"] { --bq-bg-image: url('/identity-bg/Prim.jpg'); }
 
 body {
   min-height: 100dvh;

@@ -1,6 +1,6 @@
 /* eslint-disable no-undef */
 
-const CACHE_NAME = 'bible-quest-v8' // bump v7→v8: added vibrate + visibility:'public' + actions for Android push reliability (background/doze mode suppression workaround)
+const CACHE_NAME = 'bible-quest-v9' // bump v8→v9: identity-driven background (Uni/High/Prim). Old `/bg.png` cache invalidates.
 
 // ─── Install ──────────────────────────────────────────────────────────────────
 self.addEventListener('install', (event) => {

@@ -1,5 +1,8 @@
 import type { Metadata, Viewport } from "next";
+import { cookies } from "next/headers";
+import { createServerClient } from "@supabase/ssr";
 import "./globals.css";
+import { isIdentity, type Identity } from "@/lib/identity";
 
 export const metadata: Metadata = {
   title: "DuoBible",
@@ -24,11 +27,43 @@ export const viewport: Viewport = {
   themeColor: "#58CC02",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // ─── Read user identity (for body[data-identity="..."] bg) ────────────────
+  // Server component: read Supabase session via cookies, look up profile.identity.
+  // If unauthenticated or identity missing/invalid, default to 'Uni' so the
+  // existing 爾國臨格 background still shows.
+  let userIdentity: Identity = "Uni";
+  try {
+    const cookieStore = await cookies();
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          getAll() { return cookieStore.getAll(); },
+          setAll() { /* no-op in root layout (RSC can't set cookies) */ },
+        },
+      },
+    );
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("identity")
+        .eq("id", user.id)
+        .single();
+      if (profile?.identity && isIdentity(profile.identity)) {
+        userIdentity = profile.identity;
+      }
+    }
+  } catch {
+    // Anonymous / network blip — fall through to default 'Uni'
+  }
+
   return (
     <html lang="zh-Hant">
       <head>
@@ -39,7 +74,7 @@ export default function RootLayout({
           rel="stylesheet"
         />
       </head>
-      <body>
+      <body data-identity={userIdentity}>
         {children}
         {/* Service worker registration — register immediately for PWA push support */}
 <script

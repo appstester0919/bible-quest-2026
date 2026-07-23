@@ -3,12 +3,17 @@
 import { useState, FormEvent } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
+import { ALL_IDENTITIES, IDENTITIES, DEFAULT_IDENTITY, isIdentity, type Identity } from '@/lib/identity'
 
 export default function SignupPage() {
   const router = useRouter()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
+  // ─── Identity picker: chosen at signup, written to profiles.identity
+  // immediately. The user can change it later in Settings, but the
+  // onboarding (reading plan) flow never re-asks for it. ─────────────────
+  const [identity, setIdentity] = useState<Identity>(DEFAULT_IDENTITY)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -26,30 +31,47 @@ export default function SignupPage() {
       return
     }
 
+    if (!isIdentity(identity)) {
+      setError('請選擇你的身份')
+      return
+    }
+
     setLoading(true)
     const supabase = createClient()
-    let result
+    let signUpError: { message: string } | null = null
     try {
-      const { error: signUpError } = await supabase.auth.signUp({
+      const { error: err } = await supabase.auth.signUp({
         email,
         password,
         options: {
           emailRedirectTo: `${window.location.origin}/dashboard`,
+          data: { identity }, // pass through to handle_new_user trigger (see migration 016)
         },
       })
-      result = signUpError
+      signUpError = err
     } catch (err) {
       setError('網絡或服務異常，請稍後再試')
       setLoading(false)
       return
     }
 
-    if (result) {
-      const msg = result?.message || ''
+    if (signUpError) {
+      const msg = signUpError?.message || ''
       setError(msg || '註冊失敗，請稍後再試')
       setLoading(false)
       return
     }
+
+    // Identity persistence is handled by the database trigger
+    // `trg_copy_signup_identity` (see supabase/migrations/20260723000000_
+    // profile_identity.sql). It reads raw_user_meta_data->>'identity' set
+    // above in the signUp call and writes it to profiles.identity. We don't
+    // belt-and-suspenders UPDATE from the client because:
+    //   - signup with email confirm = no session yet, getUser() returns null
+    //   - signup without email confirm = RLS may block UPDATE on profiles
+    //     before the row is fully written
+    // Trigger fires inside the DB transaction that creates auth.users, so
+    // it's atomic. User can override in Settings if they want a different one.
 
     router.push('/onboarding')
   }
@@ -132,6 +154,74 @@ export default function SignupPage() {
               className="w-full px-[var(--spacing-md)] py-3 rounded-[var(--radius-md)] border border-[var(--color-muted)]/30 bg-[var(--color-surface)] text-[var(--color-primary)] placeholder:text-[var(--color-muted)] focus:outline-none focus:border-[var(--color-success)] focus:ring-2 focus:ring-[var(--color-success)]/20 transition-colors"
             />
           </div>
+
+          {/* ─── Identity picker ─────────────────────────────────────────
+              Radio cards. Selected card shows a green ring + check.
+              Live preview: body[data-identity] updates immediately on select,
+              so the user sees the new background before submitting. */}
+          <fieldset>
+            <legend className="block text-sm font-bold text-[var(--color-primary)] mb-[var(--spacing-xs)]">
+              你的身份
+            </legend>
+            <p className="text-xs text-[var(--color-muted)] mb-[var(--spacing-sm)]">
+              揀選你屬於哪個營會／群組，之後可隨時喺「設定」更改。
+            </p>
+            <div className="grid grid-cols-1 gap-2">
+              {ALL_IDENTITIES.map((code) => {
+                const meta = IDENTITIES[code]
+                const selected = identity === code
+                return (
+                  <label
+                    key={code}
+                    className={
+                      'flex items-center gap-3 p-3 rounded-[var(--radius-md)] border-2 cursor-pointer transition-all ' +
+                      (selected
+                        ? 'border-[var(--color-success)] bg-[var(--color-success)]/5'
+                        : 'border-[var(--color-line)] bg-[var(--color-surface)] hover:border-[var(--color-muted)]')
+                    }
+                  >
+                    <input
+                      type="radio"
+                      name="identity"
+                      value={code}
+                      checked={selected}
+                      onChange={() => {
+                        setIdentity(code)
+                        // Live preview: reflect the picked identity on the
+                        // <body> immediately so the user sees the right
+                        // background before submitting. The server will
+                        // re-render and keep this selection.
+                        if (typeof document !== 'undefined') {
+                          document.body.setAttribute('data-identity', code)
+                        }
+                      }}
+                      className="sr-only"
+                    />
+                    <span
+                      className={
+                        'flex-shrink-0 w-5 h-5 rounded-full border-2 flex items-center justify-center ' +
+                        (selected
+                          ? 'border-[var(--color-success)] bg-[var(--color-success)]'
+                          : 'border-[var(--color-muted)]')
+                      }
+                    >
+                      {selected && (
+                        <span className="w-2 h-2 rounded-full bg-white" />
+                      )}
+                    </span>
+                    <span className="flex-1 min-w-0">
+                      <span className="block text-sm font-bold text-[var(--color-primary)]">
+                        {meta.name_zh}
+                      </span>
+                      <span className="block text-xs text-[var(--color-muted)] mt-0.5">
+                        {meta.preview}
+                      </span>
+                    </span>
+                  </label>
+                )
+              })}
+            </div>
+          </fieldset>
 
           <button
             type="submit"
