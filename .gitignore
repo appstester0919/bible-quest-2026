@@ -15,6 +15,7 @@ dist/
 .env
 .env.local
 .env*.local
+.env.production  # output of `vercel env pull`; contains sensitive env var structure even if values are masked
 
 # Logs
 *.log
@@ -28,6 +29,14 @@ npm-debug.log*
 
 # OS
 .DS_Store
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Claude Code local artifacts
+.claude/
 Thumbs.db
 
 # TypeScript
