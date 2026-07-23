@@ -45,13 +45,8 @@ export default async function RootLayout({
   // If unauthenticated or identity missing/invalid, default to 'Uni' so the
   // existing 爾國臨格 background still shows.
   let userIdentity: Identity = "Uni";
-  let debugInfo: any = { step: "init", hasUser: false, hasProfile: false, profileIdentity: null, error: null, cookieCount: 0, cookieNames: [] as string[] };
   try {
     const cookieStore = await cookies();
-    const allCookies = cookieStore.getAll();
-    debugInfo.cookieCount = allCookies.length;
-    debugInfo.cookieNames = allCookies.map((c) => c.name);
-    debugInfo.step = "got cookies";
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -62,32 +57,24 @@ export default async function RootLayout({
         },
       },
     );
-    debugInfo.step = "created client";
-    // Try getSession() first (faster, server-side, no JWT verification roundtrip)
-    // Then getUser() to verify. This is the standard SSR pattern.
-    const { data: { session } } = await supabase.auth.getSession();
+    // getSession() reads the cookie without verifying the JWT against
+    // Supabase Auth — fast enough for layout. getUser() would also work
+    // but adds a network roundtrip to verify the token.
     const { data: { user } } = await supabase.auth.getUser();
-    debugInfo.hasSession = !!session;
-    debugInfo.hasUser = !!user;
-    debugInfo.userId = user?.id ?? null;
     if (user) {
-      debugInfo.step = "got user";
       const { data: profile } = await supabase
         .from("profiles")
         .select("identity")
         .eq("id", user.id)
         .maybeSingle();
-      debugInfo.hasProfile = !!profile;
-      debugInfo.profileIdentity = profile?.identity ?? null;
       if (profile?.identity && isIdentity(profile.identity)) {
         userIdentity = profile.identity;
       }
     }
   } catch (err) {
-    debugInfo.error = err instanceof Error ? err.message : String(err);
-    console.error("[layout] failed to read user identity:", err, "debug=", JSON.stringify(debugInfo));
+    console.error("[layout] failed to read user identity:", err);
+    // fall through to default 'Uni'
   }
-  console.log("[layout] identity debug:", JSON.stringify(debugInfo), "-> using", userIdentity);
 
   return (
     <html lang="zh-Hant">
@@ -99,7 +86,7 @@ export default async function RootLayout({
           rel="stylesheet"
         />
       </head>
-      <body data-identity={userIdentity} data-identity-debug={JSON.stringify(debugInfo)}>
+      <body data-identity={userIdentity}>
         {children}
         {/* Service worker registration — register immediately for PWA push support */}
 <script

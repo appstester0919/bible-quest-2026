@@ -107,10 +107,19 @@
 
 html {
   font-family: var(--font-sans);
-  background: var(--color-background) var(--bq-bg-image, url('/bg.png')) center / cover no-repeat fixed;
   color: var(--color-primary);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* Background lives on <body> (not <html>) because the identity selector
+ * also lives on <body> via <body data-identity="...">. CSS custom
+ * properties don't inherit across element scopes, so the variable
+ * definition and its consumer must be on the same element. The fixed
+ * background-attachment stays put. */
+body {
+  background: var(--color-background) var(--bq-bg-image, url('/bg.png')) center / cover no-repeat fixed;
+  min-height: 100vh;
 }
 
 /* ============================================================
