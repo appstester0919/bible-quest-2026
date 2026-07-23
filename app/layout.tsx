@@ -27,6 +27,14 @@ export const viewport: Viewport = {
   themeColor: "#58CC02",
 };
 
+// ─── Force dynamic rendering so the server reads the latest profile.identity
+// from Supabase on every request. Without this, Next.js statically generates
+// the layout at build time and <body data-identity="Uni"> is baked in forever
+// — users who change identity in Settings see no background change.
+// Trade-off: every page render hits Supabase, but the query is a single
+// indexed SELECT on a tiny column. ─────────────────────────────────────────
+export const dynamic = "force-dynamic";
+
 export default async function RootLayout({
   children,
 }: Readonly<{
@@ -51,17 +59,19 @@ export default async function RootLayout({
     );
     const { data: { user } } = await supabase.auth.getUser();
     if (user) {
+      // maybeSingle instead of single: don't throw on 0 rows
       const { data: profile } = await supabase
         .from("profiles")
         .select("identity")
         .eq("id", user.id)
-        .single();
+        .maybeSingle();
       if (profile?.identity && isIdentity(profile.identity)) {
         userIdentity = profile.identity;
       }
     }
-  } catch {
-    // Anonymous / network blip — fall through to default 'Uni'
+  } catch (err) {
+    console.error("[layout] failed to read user identity:", err);
+    // fall through to default 'Uni'
   }
 
   return (
