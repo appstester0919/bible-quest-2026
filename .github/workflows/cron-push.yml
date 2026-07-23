@@ -37,10 +37,15 @@ name: bible-quest-push-cron
 #
 
 on:
-  schedule:
-    # Every 15 minutes (UTC). Matches the bucket the SQL RPC
-    # process_due_reminders uses for reminder matching (minute / 15).
-    - cron: '*/15 * * * *'
+  # ─── Schedule cron DISABLED 2026-07-23 ───────────────────────────────────
+  # We now use cron-job.org (free, reliable) to trigger /api/push/cron-relay
+  # every 15 minutes. GH Actions schedule was observed silently skipping ticks
+  # (last observed skip: 04:00/04:15/04:30 UTC on 2026-07-23 after a 03:45 run).
+  # cron-job.org is more reliable and free. This workflow is kept for
+  # workflow_dispatch (manual fallback) in case cron-job.org has an outage.
+  #
+  # schedule:
+  #   - cron: '*/15 * * * *'
   workflow_dispatch:
     # Allow manual trigger from the GitHub UI for testing.
 
