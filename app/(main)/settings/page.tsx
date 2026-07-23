@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { subscribeToPush, unsubscribeFromPush, getPushPermissionStatus } from '@/lib/push'
 import { updateDisplayName } from '@/lib/groupActions'
+import { updateIdentity as updateIdentityAction } from './actions'
 import { getRequiredDays } from '@/lib/bible/scope'
 import type { Scope } from '@/lib/bible/scope'
 import { ALL_IDENTITIES, IDENTITIES, DEFAULT_IDENTITY, isIdentity, type Identity } from '@/lib/identity'
@@ -135,19 +136,17 @@ export default function SettingsPage() {
     setIdentitySaving(true)
     setIdentitySaved(false)
     try {
-      const supabase = createClient()
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) throw new Error('not signed in')
-      const { error } = await supabase
-        .from('profiles')
-        .update({ identity: newIdentity })
-        .eq('id', user.id)
-      if (error) throw error
+      // Use server action — reads user from server-side session cookies
+      // (correct format), not the browser's localStorage (which can be
+      // empty depending on auth flow). This fixes the 'not signed in'
+      // failure mode.
+      const result = await updateIdentityAction(newIdentity)
+      if (!result.ok) throw new Error(result.error)
       setIdentity(newIdentity)
       setIdentitySaved(true)
       // Hard reload so the server-rendered <body data-identity="...">
       // updates the CSS background. router.refresh() alone won't repaint
-      // because globals.css references --bq-bg-image inline on <html>.
+      // because the layout cached the old identity value.
       setTimeout(() => window.location.reload(), 600)
     } catch (err) {
       alert('更新身份失敗: ' + (err instanceof Error ? err.message : String(err)))
