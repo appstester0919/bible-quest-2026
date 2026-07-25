@@ -742,9 +742,8 @@ export default function SettingsPage() {
         <div className="bg-white rounded-2xl p-5 shadow-sm">
           <h2 className="text-lg font-bold text-[var(--color-primary)] mb-3">ℹ️ 關於</h2>
           <div className="space-y-2 text-sm text-[var(--color-muted)]">
-            <p>版本：1.0.0</p>
             <p>Bible Quest 2026</p>
-            <p className="text-xs mt-2">為大專基督徒而設的讀經計劃應用</p>
+            <p className="text-xs mt-2">為青少年基督徒而設的讀經計劃應用</p>
           </div>
         </div>
       </main>

@@ -32,7 +32,7 @@ export const IDENTITIES: Record<Identity, {
     camp: '爾國臨格',
     age_group_zh: '大專生',
     bg: '/identity-bg/Uni.jpg',
-    preview: '適合大專基督徒深度讀經、彼此激勵。',
+    preview: '適合青少年基督徒深度讀經、彼此激勵。',
   },
   High: {
     code: 'High',

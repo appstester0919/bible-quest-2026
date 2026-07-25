@@ -6,7 +6,7 @@ import { isIdentity, type Identity } from "@/lib/identity";
 
 export const metadata: Metadata = {
   title: "DuoBible",
-  description: "每日讀經，養成習慣。為大專基督徒而設的讀經計劃應用。",
+  description: "每日讀經，養成習慣。為青少年基督徒而設的讀經計劃應用。",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
