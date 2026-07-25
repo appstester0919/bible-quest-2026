@@ -61,8 +61,11 @@ interface GlobalStats {
 }
 
 function getHKTDate(): string {
-  return new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Hong_Kong' }))
-    .toISOString().split('T')[0]
+  // en-CA + HKT gives YYYY-MM-DD directly without a UTC round-trip.
+  // The previous en-US + toISOString() pattern returned YESTERDAY's date when
+  // the browser was in HKT and the local instant was between 00:00 and 08:00
+  // (client-side round-trip parsed the date string in browser-local TZ, not HKT).
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Hong_Kong' })
 }
 
 function getScopeLabel(scope: string) {

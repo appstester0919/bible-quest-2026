@@ -136,9 +136,10 @@ export default function ReadPage() {
 
       // Today session
       if (enrollmentData && sessionsData) {
-        const now = new Date()
-        const hkt = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Hong_Kong' }))
-        const dateLocal = hkt.toISOString().split('T')[0]
+        // en-CA + HKT gives YYYY-MM-DD directly without a UTC round-trip.
+        // The previous en-US + toISOString() pattern returned YESTERDAY's date
+        // when the browser was in HKT between 00:00 and 08:00.
+        const dateLocal = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Hong_Kong' })
         setTodaySession((sessions ?? []).find((s: ReadingSession) => s.date_local === dateLocal) ?? null)
       }
 
@@ -413,8 +414,6 @@ export default function ReadPage() {
       // Sync group check-ins AFTER inserts
       await checkInAllMyGroups(today)
       celebrate({ type: 'burst', particleCount: Math.min(insertedCount * 30, 180) })
-      const now = new Date()
-      const hkt = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Hong_Kong' }))
       setTodaySession({ id: 'new', enrollment_id: enrollment.id, chapter_ref: refs[0], date_local: today })
 
       // Refresh local stats so XP/level/streak reflect the batch write
