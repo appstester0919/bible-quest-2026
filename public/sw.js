@@ -1,6 +1,6 @@
 /* eslint-disable no-undef */
 
-const CACHE_NAME = 'bible-quest-v9' // bump v8→v9: identity-driven background (Uni/High/Prim). Old `/bg.png` cache invalidates.
+const CACHE_NAME = 'bible-quest-v10' // bump v9→v10: Job 3 audio regen (v2 text fix, removed duplicated v3 content). Stale mp3 caches invalidated.
 
 // ─── Install ──────────────────────────────────────────────────────────────────
 self.addEventListener('install', (event) => {
