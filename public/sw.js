@@ -1,6 +1,6 @@
 /* eslint-disable no-undef */
 
-const CACHE_NAME = 'bible-quest-v10' // bump v9→v10: Job 3 audio regen (v2 text fix, removed duplicated v3 content). Stale mp3 caches invalidated.
+const CACHE_NAME = 'bible-quest-v11' // bump v10→v11: 詩119.mp3 split-regen (Edge TTS 10-min cap workaround, upper v1-88 + lower v89-176 concat → 18.65 min). Stale truncated 詩119 caches invalidated.
 
 // ─── Install ──────────────────────────────────────────────────────────────────
 self.addEventListener('install', (event) => {
