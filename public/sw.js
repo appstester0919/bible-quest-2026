@@ -1,6 +1,6 @@
 /* eslint-disable no-undef */
 
-const CACHE_NAME = 'bible-quest-v11' // bump v10→v11: 詩119.mp3 split-regen (Edge TTS 10-min cap workaround, upper v1-88 + lower v89-176 concat → 18.65 min). Stale truncated 詩119 caches invalidated.
+const CACHE_NAME = 'bible-quest-v12' // bump v11→v12: split-regen 8 chapters hit Edge TTS 10-min cap (利13 士9 撒上17 民7 耶51 路1 路9 王上1). All had mp3 truncated to exact 600s; restored 70s-790s of missing audio per chapter. Recipe: midpoint verse split (e.g. v1-30 + v31-59) + ffmpeg -c copy concat; same voice as v2 generation (odd=F, even=M).
 
 // ─── Install ──────────────────────────────────────────────────────────────────
 self.addEventListener('install', (event) => {
