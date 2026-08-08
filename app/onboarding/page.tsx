@@ -19,8 +19,16 @@ import {
 import { createClient } from '@/lib/supabase/client'
 
 // ─── Bible book metadata (issue #6: start position picker) ────────────────
-import { BIBLE_BOOKS, NT_BOOKS, OT_BOOKS, type BibleBook } from '@/lib/bible/books'
-import { generateReadingPlan, type EnrollmentLite } from '@/lib/bible/planGenerator'
+import {
+  BIBLE_BOOKS,
+  NT_BOOKS,
+  OT_BOOKS,
+  type BibleBook,
+} from '@/lib/bible/books'
+import {
+  generateReadingPlan,
+  type EnrollmentLite,
+} from '@/lib/bible/planGenerator'
 
 /**
  * Picker UI: a single row of 2 buttons (book + chapter).
@@ -46,7 +54,9 @@ function BookModal({
       <div className="relative z-10 w-full max-w-md bg-white rounded-t-3xl sm:rounded-2xl max-h-[85vh] flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--color-muted)]/10">
-          <span className="font-bold text-[var(--color-primary)]">選擇書卷</span>
+          <span className="font-bold text-[var(--color-primary)]">
+            選擇書卷
+          </span>
           <button
             type="button"
             onClick={onClose}
@@ -62,7 +72,10 @@ function BookModal({
               <button
                 key={b.index}
                 type="button"
-                onClick={() => { onSelect(b.index); onClose() }}
+                onClick={() => {
+                  onSelect(b.index)
+                  onClose()
+                }}
                 className={`py-2 px-1 rounded-xl text-sm font-bold text-center transition-all ${
                   b.index === selectedBookIdx
                     ? 'bg-[var(--color-success)] text-white shadow-[var(--shadow-button)]'
@@ -70,7 +83,9 @@ function BookModal({
                 }`}
               >
                 <div className="text-base leading-tight">{b.abbr}</div>
-                <div className="text-[10px] font-normal opacity-70 leading-tight mt-0.5">{b.chapters}章</div>
+                <div className="text-[10px] font-normal opacity-70 leading-tight mt-0.5">
+                  {b.chapters}章
+                </div>
               </button>
             ))}
           </div>
@@ -113,20 +128,25 @@ function ChapterModal({
             className="grid gap-1.5"
             style={{ gridTemplateColumns: `repeat(${cols}, 1fr)` }}
           >
-            {Array.from({ length: book.chapters }, (_, i) => i + 1).map((ch) => (
-              <button
-                key={ch}
-                type="button"
-                onClick={() => { onSelect(ch); onClose() }}
-                className={`py-2 rounded-xl text-sm font-bold text-center transition-all ${
-                  ch === selectedChapter
-                    ? 'bg-[var(--color-success)] text-white shadow-[var(--shadow-button)]'
-                    : 'bg-[var(--color-background)] text-[var(--color-primary)] hover:bg-[var(--color-success)]/10'
-                }`}
-              >
-                {ch}
-              </button>
-            ))}
+            {Array.from({ length: book.chapters }, (_, i) => i + 1).map(
+              (ch) => (
+                <button
+                  key={ch}
+                  type="button"
+                  onClick={() => {
+                    onSelect(ch)
+                    onClose()
+                  }}
+                  className={`py-2 rounded-xl text-sm font-bold text-center transition-all ${
+                    ch === selectedChapter
+                      ? 'bg-[var(--color-success)] text-white shadow-[var(--shadow-button)]'
+                      : 'bg-[var(--color-background)] text-[var(--color-primary)] hover:bg-[var(--color-success)]/10'
+                  }`}
+                >
+                  {ch}
+                </button>
+              ),
+            )}
           </div>
         </div>
       </div>
@@ -161,16 +181,24 @@ function StartPositionRow({
       <div className="grid grid-cols-[1fr_auto] gap-2">
         <button
           type="button"
-          onClick={() => { setBookOpen(true); setChapterOpen(false) }}
+          onClick={() => {
+            setBookOpen(true)
+            setChapterOpen(false)
+          }}
           className="py-2 px-3 rounded-xl font-bold text-sm border-2 border-[var(--color-muted)]/20 bg-white text-[var(--color-primary)] text-left flex items-center gap-2"
         >
           <span className="text-base">📖</span>
           <span className="font-bold">{selectedBook.abbr}</span>
-          <span className="text-xs text-[var(--color-muted)] font-normal ml-auto">{selectedBook.chapters}章</span>
+          <span className="text-xs text-[var(--color-muted)] font-normal ml-auto">
+            {selectedBook.chapters}章
+          </span>
         </button>
         <button
           type="button"
-          onClick={() => { setChapterOpen(true); setBookOpen(false) }}
+          onClick={() => {
+            setChapterOpen(true)
+            setBookOpen(false)
+          }}
           className="py-2 px-3 rounded-xl font-bold text-sm border-2 border-[var(--color-muted)]/20 bg-white text-[var(--color-primary)] min-w-[5rem]"
         >
           {selectedChapter}章
@@ -203,9 +231,9 @@ function StartPositionRow({
 }
 
 const SCOPES: { id: Scope; label: string; desc: string }[] = [
-  { id: 'nt',     label: '新約',         desc: '259 章聖經' },
-  { id: 'ot',     label: '舊約',         desc: '929 章聖經' },
-  { id: 'nt_ot',  label: '新約 + 舊約',  desc: '1188 章聖經' },
+  { id: 'nt', label: '新約', desc: '260 章聖經' },
+  { id: 'ot', label: '舊約', desc: '929 章聖經' },
+  { id: 'nt_ot', label: '新約 + 舊約', desc: '1189 章聖經' },
 ]
 
 function getMinDate(): string {
@@ -242,7 +270,13 @@ type OldEnrollment = {
 
 export default function OnboardingPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen flex items-center justify-center text-[var(--color-muted)]">載入中...</div>}>
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center text-[var(--color-muted)]">
+          載入中...
+        </div>
+      }
+    >
       <OnboardingInner />
     </Suspense>
   )
@@ -253,33 +287,40 @@ function OnboardingInner() {
   const searchParams = useSearchParams()
   const isRedesign = searchParams.get('mode') === 'redesign'
 
-  const [scope, setScope]         = useState<Scope>('nt')
+  const [scope, setScope] = useState<Scope>('nt')
   const [chaptersPerDay, setChapters] = useState(7)
   const [ntOtOrder, setNtOtOrder] = useState<NtOtOrder>('parallel')
-  const [startDate, setStartDate]  = useState(getToday())
-  const [loading, setLoading]     = useState(false)
-  const [error, setError]         = useState('')
+  const [startDate, setStartDate] = useState(getToday())
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
 
   // Start position state (issue #6)
   // Defaults: NT 馬太福音 1 章 (idx 39), OT 創世記 1 章 (idx 0)
-  const [ntStartBook, setNtStartBook]     = useState(39)
+  const [ntStartBook, setNtStartBook] = useState(39)
   const [ntStartChapter, setNtStartChapter] = useState(1)
-  const [otStartBook, setOtStartBook]     = useState(0)
+  const [otStartBook, setOtStartBook] = useState(0)
   const [otStartChapter, setOtStartChapter] = useState(1)
 
   const [oldEnrollment, setOldEnrollment] = useState<OldEnrollment | null>(null)
   const [keepProgress, setKeepProgress] = useState(false)
-  const [oldProgress, setOldProgress]   = useState<{ read: number; total: number } | null>(null)
+  const [oldProgress, setOldProgress] = useState<{
+    read: number
+    total: number
+  } | null>(null)
 
   useEffect(() => {
     if (!isRedesign) return
     ;(async () => {
       const supabase = createClient()
-      const { data: { user } } = await supabase.auth.getUser()
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
       if (!user) return
       const { data: enrollment } = await supabase
         .from('user_plan_enrollments')
-        .select('id, scope, chapters_per_day, total_days, started_at, reading_order')
+        .select(
+          'id, scope, chapters_per_day, total_days, started_at, reading_order',
+        )
         .eq('user_id', user.id)
         .eq('status', 'active')
         .maybeSingle()
@@ -298,17 +339,27 @@ function OnboardingInner() {
           .from('reading_sessions')
           .select('*', { count: 'exact', head: true })
           .eq('enrollment_id', enrollment.id)
-        setOldProgress({ read: count ?? 0, total: getRequiredDays(enrollment.scope as Scope, enrollment.chapters_per_day) * enrollment.chapters_per_day })
+        setOldProgress({
+          read: count ?? 0,
+          total:
+            getRequiredDays(
+              enrollment.scope as Scope,
+              enrollment.chapters_per_day,
+            ) * enrollment.chapters_per_day,
+        })
       }
     })()
   }, [isRedesign])
 
   const dailyOptions = DAILY_CHAPTER_OPTIONS[scope]
-  const daysTable    = DAYS_TABLE[scope]
+  const daysTable = DAYS_TABLE[scope]
   const requiredDays = getRequiredDays(scope, chaptersPerDay)
 
   // nt_ot: 3 reading orders
-  const parallelInfo = scope === 'nt_ot' && ntOtOrder === 'parallel' ? PARALLEL_TABLE[chaptersPerDay] : null
+  const parallelInfo =
+    scope === 'nt_ot' && ntOtOrder === 'parallel'
+      ? PARALLEL_TABLE[chaptersPerDay]
+      : null
 
   // Plan days = exactly what planGenerator will produce. We can't summarize
   // nt_ot sequential modes with a closed-form formula because each day may
@@ -323,10 +374,16 @@ function OnboardingInner() {
   // For parallel: nt/ot per day comes from PARALLEL_TABLE
   // For sequential: chaptersPerDay goes entirely to whichever testament is active
   // For nt/ot (single-testament): chaptersPerDay IS the daily chapter count for that scope.
-  // (Previously this branch did Math.ceil(259 / planDays), which produced a wrong value
-  //  for OT because 929 ≠ 259 — see issue #5.)
-  const ntChapters   = scope === 'nt_ot' && ntOtOrder === 'parallel' ? (parallelInfo?.nt ?? 0) : (scope === 'nt_ot' ? chaptersPerDay : chaptersPerDay)
-  const otChapters   = scope === 'nt_ot' && ntOtOrder === 'parallel' ? (parallelInfo?.ot ?? 0) : 0
+  // (Previously this branch did Math.ceil(260 / planDays), which produced a wrong value
+  //  for OT because 929 ≠ 260 — see issue #5.)
+  const ntChapters =
+    scope === 'nt_ot' && ntOtOrder === 'parallel'
+      ? (parallelInfo?.nt ?? 0)
+      : scope === 'nt_ot'
+        ? chaptersPerDay
+        : chaptersPerDay
+  const otChapters =
+    scope === 'nt_ot' && ntOtOrder === 'parallel' ? (parallelInfo?.ot ?? 0) : 0
 
   // ─── Compute planDays AFTER ntChapters/otChapters are known ──────────────
   // Different nt_ot modes produce very different day counts, so we run the
@@ -343,7 +400,8 @@ function OnboardingInner() {
       chapters_per_day: chaptersPerDay,
       // Format parallel as "N-OT" so planGenerator's parseParallelSplit can
       // extract the per-testament daily quota. Sequential modes pass through.
-      reading_order: ntOtOrder === 'parallel' ? `${ntChapters}-${otChapters}` : ntOtOrder,
+      reading_order:
+        ntOtOrder === 'parallel' ? `${ntChapters}-${otChapters}` : ntOtOrder,
       nt_start_book_index: ntStartBook,
       ot_start_book_index: otStartBook,
       nt_start_chapter: ntStartChapter,
@@ -354,13 +412,18 @@ function OnboardingInner() {
     planDays = plan.size
   } else {
     // Single-testament (nt or ot): recalc from remaining chapter count
-    const remaining = scope === 'nt'
-      ? getRemainingChapters('nt', BIBLE_BOOKS, ntStartBook, ntStartChapter)
-      : getRemainingChapters('ot', BIBLE_BOOKS, otStartBook, otStartChapter)
+    const remaining =
+      scope === 'nt'
+        ? getRemainingChapters('nt', BIBLE_BOOKS, ntStartBook, ntStartChapter)
+        : getRemainingChapters('ot', BIBLE_BOOKS, otStartBook, otStartChapter)
     planDays = Math.ceil(remaining / chaptersPerDay)
   }
 
-  const completionDate = getEstimatedCompletionDate(scope, planDays, new Date(startDate + 'T00:00:00'))
+  const completionDate = getEstimatedCompletionDate(
+    scope,
+    planDays,
+    new Date(startDate + 'T00:00:00'),
+  )
 
   function handleScopeChange(s: Scope) {
     setScope(s)
@@ -403,7 +466,7 @@ function OnboardingInner() {
       // Trust the UI's computed total daily chapters. For nt_ot parallel this is
       // ntChapters + otChapters (e.g. 2+5=7); for sequential and single-testament
       // modes it equals the chaptersPerDay the user picked (e.g. OT 3 章 → 3).
-      // Server must NOT recalculate via Math.ceil(259/totalDays) — that formula
+      // Server must NOT recalculate via Math.ceil(260/totalDays) — that formula
       // only makes sense for NT and silently corrupts OT plans (issue #5).
       fd.append('chapters_per_day', String(ntChapters + otChapters))
       // Issue #6: start position
@@ -413,7 +476,8 @@ function OnboardingInner() {
       fd.append('ot_start_chapter', String(otStartChapter))
       if (scope === 'nt_ot') {
         // Parallel: "N-OT" format. Sequential: 'nt_then_ot' / 'ot_then_nt'
-        const ro = ntOtOrder === 'parallel' ? `${ntChapters}-${otChapters}` : ntOtOrder
+        const ro =
+          ntOtOrder === 'parallel' ? `${ntChapters}-${otChapters}` : ntOtOrder
         fd.append('reading_order', ro)
       }
       const result = await completeOnboarding(fd)
@@ -429,7 +493,9 @@ function OnboardingInner() {
   return (
     <main className="min-h-screen flex flex-col bg-[var(--color-background)]">
       <div className="bg-white px-4 py-3 flex items-center gap-3 shadow-sm">
-        <a href="/dashboard" className="text-2xl text-[var(--color-muted)]">←</a>
+        <a href="/dashboard" className="text-2xl text-[var(--color-muted)]">
+          ←
+        </a>
         <h1 className="text-xl font-bold text-[var(--color-primary)]">
           {isRedesign ? '重新設計計劃' : '建立讀經計劃'}
         </h1>
@@ -437,15 +503,32 @@ function OnboardingInner() {
 
       <div className="flex-1 flex flex-col justify-center px-4 py-6">
         <div className="max-w-sm mx-auto w-full space-y-5">
-
           {isRedesign && oldEnrollment && (
             <div className="bg-amber-50 border-2 border-amber-200 rounded-2xl p-4 space-y-2">
-              <div className="text-sm font-bold text-amber-900">📌 當前計劃</div>
+              <div className="text-sm font-bold text-amber-900">
+                📌 當前計劃
+              </div>
               <div className="text-xs text-amber-800 space-y-0.5">
-                <div>範圍：{oldEnrollment.scope === 'nt' ? '新約' : oldEnrollment.scope === 'ot' ? '舊約' : '新舊約'}</div>
-                <div>每日 {oldEnrollment.chapters_per_day} 章 · 共 {getRequiredDays(oldEnrollment.scope, oldEnrollment.chapters_per_day)} 天</div>
+                <div>
+                  範圍：
+                  {oldEnrollment.scope === 'nt'
+                    ? '新約'
+                    : oldEnrollment.scope === 'ot'
+                      ? '舊約'
+                      : '新舊約'}
+                </div>
+                <div>
+                  每日 {oldEnrollment.chapters_per_day} 章 · 共{' '}
+                  {getRequiredDays(
+                    oldEnrollment.scope,
+                    oldEnrollment.chapters_per_day,
+                  )}{' '}
+                  天
+                </div>
                 {oldProgress && (
-                  <div>已完成 {oldProgress.read} 章 / {oldProgress.total} 章</div>
+                  <div>
+                    已完成 {oldProgress.read} 章 / {oldProgress.total} 章
+                  </div>
                 )}
               </div>
               <label className="flex items-start gap-2 mt-3 pt-3 border-t border-amber-200 cursor-pointer">
@@ -603,29 +686,52 @@ function OnboardingInner() {
                 <div className="grid grid-cols-2 gap-2">
                   {/* NT summary */}
                   <div className="bg-[var(--color-background)] rounded-xl p-3 space-y-1">
-                    <div className="text-xs text-[var(--color-muted)]">新約</div>
+                    <div className="text-xs text-[var(--color-muted)]">
+                      新約
+                    </div>
                     <div className="font-bold text-[var(--color-primary)]">
-                      {NT_BOOKS.find((b) => b.index === ntStartBook)?.abbr ?? '太'}
-                      {' '}
+                      {NT_BOOKS.find((b) => b.index === ntStartBook)?.abbr ??
+                        '太'}{' '}
                       第{ntStartChapter}章起
                     </div>
                     <div className="text-xs text-[var(--color-muted)]">
-                      剩 {getRemainingChapters('nt', BIBLE_BOOKS, ntStartBook, ntStartChapter)} 章
+                      剩{' '}
+                      {getRemainingChapters(
+                        'nt',
+                        BIBLE_BOOKS,
+                        ntStartBook,
+                        ntStartChapter,
+                      )}{' '}
+                      章
                     </div>
                     <div className="text-sm font-bold text-[var(--color-primary)]">
-                      {ntChapters} 章/天 · {ntOtOrder === 'parallel' ? '並行' : ntOtOrder === 'nt_then_ot' ? '先新後舊' : '先舊後新'}
+                      {ntChapters} 章/天 ·{' '}
+                      {ntOtOrder === 'parallel'
+                        ? '並行'
+                        : ntOtOrder === 'nt_then_ot'
+                          ? '先新後舊'
+                          : '先舊後新'}
                     </div>
                   </div>
                   {/* OT summary */}
                   <div className="bg-[var(--color-background)] rounded-xl p-3 space-y-1">
-                    <div className="text-xs text-[var(--color-muted)]">舊約</div>
+                    <div className="text-xs text-[var(--color-muted)]">
+                      舊約
+                    </div>
                     <div className="font-bold text-[var(--color-primary)]">
-                      {OT_BOOKS.find((b) => b.index === otStartBook)?.abbr ?? '創'}
-                      {' '}
+                      {OT_BOOKS.find((b) => b.index === otStartBook)?.abbr ??
+                        '創'}{' '}
                       第{otStartChapter}章起
                     </div>
                     <div className="text-xs text-[var(--color-muted)]">
-                      剩 {getRemainingChapters('ot', BIBLE_BOOKS, otStartBook, otStartChapter)} 章
+                      剩{' '}
+                      {getRemainingChapters(
+                        'ot',
+                        BIBLE_BOOKS,
+                        otStartBook,
+                        otStartChapter,
+                      )}{' '}
+                      章
                     </div>
                     <div className="text-sm font-bold text-[var(--color-primary)]">
                       {otChapters} 章/天
@@ -641,7 +747,8 @@ function OnboardingInner() {
                 </div>
                 <div className="font-bold text-[var(--color-primary)]">
                   {(scope === 'nt' ? NT_BOOKS : OT_BOOKS).find(
-                    (b) => b.index === (scope === 'nt' ? ntStartBook : otStartBook)
+                    (b) =>
+                      b.index === (scope === 'nt' ? ntStartBook : otStartBook),
                   )?.abbr ?? '創'}
                   {' 第'}
                   {scope === 'nt' ? ntStartChapter : otStartChapter}
@@ -650,8 +757,18 @@ function OnboardingInner() {
                 <div className="text-xs text-[var(--color-muted)]">
                   剩{' '}
                   {scope === 'nt'
-                    ? getRemainingChapters('nt', BIBLE_BOOKS, ntStartBook, ntStartChapter)
-                    : getRemainingChapters('ot', BIBLE_BOOKS, otStartBook, otStartChapter)}
+                    ? getRemainingChapters(
+                        'nt',
+                        BIBLE_BOOKS,
+                        ntStartBook,
+                        ntStartChapter,
+                      )
+                    : getRemainingChapters(
+                        'ot',
+                        BIBLE_BOOKS,
+                        otStartBook,
+                        otStartChapter,
+                      )}
                   章 · {chaptersPerDay} 章/天
                 </div>
               </div>
@@ -660,21 +777,35 @@ function OnboardingInner() {
             <div className="pt-3 border-t border-[var(--color-muted)]/10 space-y-1.5">
               <div className="flex justify-between text-sm">
                 <span className="text-[var(--color-muted)]">每日章數</span>
-                <span className="font-bold text-[var(--color-primary)]">{chaptersPerDay} 章</span>
+                <span className="font-bold text-[var(--color-primary)]">
+                  {chaptersPerDay} 章
+                </span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-[var(--color-muted)]">總天數</span>
-                <span className="font-bold text-[var(--color-primary)]">{planDays} 天</span>
+                <span className="font-bold text-[var(--color-primary)]">
+                  {planDays} 天
+                </span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-[var(--color-muted)]">開始日期</span>
                 <span className="font-bold text-[var(--color-primary)]">
-                  {new Date(startDate + 'T00:00:00').toLocaleDateString('zh-Hant', { timeZone: 'Asia/Hong_Kong', year: 'numeric', month: 'long', day: 'numeric' })}
+                  {new Date(startDate + 'T00:00:00').toLocaleDateString(
+                    'zh-Hant',
+                    {
+                      timeZone: 'Asia/Hong_Kong',
+                      year: 'numeric',
+                      month: 'long',
+                      day: 'numeric',
+                    },
+                  )}
                 </span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-[var(--color-muted)]">預計完成</span>
-                <span className="font-bold text-[var(--color-success)]">{formatDate(completionDate)}</span>
+                <span className="font-bold text-[var(--color-success)]">
+                  {formatDate(completionDate)}
+                </span>
               </div>
             </div>
           </div>
@@ -692,7 +823,6 @@ function OnboardingInner() {
           >
             {loading ? '建立中...' : isRedesign ? '確認重新設計' : '開始讀經！'}
           </button>
-
         </div>
       </div>
     </main>

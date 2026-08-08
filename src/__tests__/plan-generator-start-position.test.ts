@@ -5,7 +5,7 @@ import { generateReadingPlan } from '../../lib/bible/planGenerator'
 // Load the same shape of book data the app uses (OT first, NT second).
 // planGenerator expects BookMeta with { name, abbr, index, chapters }
 const bibleData = JSON.parse(
-  readFileSync('public/bible-data.json', 'utf-8')
+  readFileSync('public/bible-data.json', 'utf-8'),
 ) as { books: { a: string; n: string; c: number }[] }
 const books = bibleData.books.map((b, i) => ({
   name: b.n,
@@ -31,7 +31,7 @@ describe('generateReadingPlan — issue #6 start position', () => {
           started_at: startDate,
           // No start position → falls back to defaults (太 1)
         },
-        books
+        books,
       )
       const days = firstNDays(plan, 2)
       expect(days[0]).toEqual(['馬太福音 1', '馬太福音 2', '馬太福音 3'])
@@ -47,7 +47,7 @@ describe('generateReadingPlan — issue #6 start position', () => {
           nt_start_book_index: 42, // 約翰福音
           start_chapter: 1,
         },
-        books
+        books,
       )
       const days = firstNDays(plan, 2)
       expect(days[0]).toEqual(['約翰福音 1', '約翰福音 2', '約翰福音 3'])
@@ -63,7 +63,7 @@ describe('generateReadingPlan — issue #6 start position', () => {
           nt_start_book_index: 39,
           start_chapter: 5,
         },
-        books
+        books,
       )
       const days = firstNDays(plan, 1)
       expect(days[0]).toEqual(['馬太福音 5', '馬太福音 6', '馬太福音 7'])
@@ -75,10 +75,10 @@ describe('generateReadingPlan — issue #6 start position', () => {
           scope: 'nt',
           chapters_per_day: 1,
           started_at: startDate,
-          nt_start_book_index: 64,
+          nt_start_book_index: 65,
           start_chapter: 22,
         },
-        books
+        books,
       )
       // Plan should have exactly 1 day with '啟示錄 22'
       expect(plan.size).toBe(1)
@@ -92,10 +92,10 @@ describe('generateReadingPlan — issue #6 start position', () => {
           scope: 'nt',
           chapters_per_day: 2,
           started_at: startDate,
-          nt_start_book_index: 64,
+          nt_start_book_index: 65,
           start_chapter: 21,
         },
-        books
+        books,
       )
       const days = firstNDays(plan, 1)
       expect(days[0]).toEqual(['啟示錄 21', '啟示錄 22'])
@@ -107,7 +107,7 @@ describe('generateReadingPlan — issue #6 start position', () => {
     it('default (start = 創 1) still works (backwards compat)', () => {
       const plan = generateReadingPlan(
         { scope: 'ot', chapters_per_day: 3, started_at: startDate },
-        books
+        books,
       )
       const days = firstNDays(plan, 2)
       expect(days[0]).toEqual(['創世記 1', '創世記 2', '創世記 3'])
@@ -123,7 +123,7 @@ describe('generateReadingPlan — issue #6 start position', () => {
           ot_start_book_index: 1, // 出埃及記
           start_chapter: 30,
         },
-        books
+        books,
       )
       const days = firstNDays(plan, 3)
       expect(days[0]).toEqual(['出埃及記 30', '出埃及記 31', '出埃及記 32'])
@@ -140,7 +140,7 @@ describe('generateReadingPlan — issue #6 start position', () => {
           ot_start_book_index: 1,
           start_chapter: 39,
         },
-        books
+        books,
       )
       const days = firstNDays(plan, 2)
       expect(days[0]).toEqual(['出埃及記 39', '出埃及記 40', '利未記 1'])
@@ -156,7 +156,7 @@ describe('generateReadingPlan — issue #6 start position', () => {
           ot_start_book_index: 38, // 瑪拉基
           start_chapter: 1,
         },
-        books
+        books,
       )
       // Day 1: 瑪 1, 2, 3; Day 2: 瑪 4 only
       const days = firstNDays(plan, 2)
@@ -175,7 +175,7 @@ describe('generateReadingPlan — issue #6 start position', () => {
           reading_order: '2-1', // 2 NT + 1 OT
           started_at: startDate,
         },
-        books
+        books,
       )
       const days = firstNDays(plan, 2)
       expect(days[0]).toEqual(['馬太福音 1', '馬太福音 2', '創世記 1'])
@@ -195,7 +195,7 @@ describe('generateReadingPlan — issue #6 start position', () => {
           // Note: planGenerator currently uses a single start_chapter
           // for both NT and OT in parallel mode (limitation of v0.3).
         },
-        books
+        books,
       )
       // Day 1: 約 5, 6 + 出 5
       const days = firstNDays(plan, 1)
@@ -214,13 +214,21 @@ describe('generateReadingPlan — issue #6 start position', () => {
           reading_order: 'nt_then_ot',
           started_at: startDate,
         },
-        books
+        books,
       )
       // First day: 10 NT chapters (太 1-10)
       const days = firstNDays(plan, 1)
       expect(days[0]).toEqual([
-        '馬太福音 1', '馬太福音 2', '馬太福音 3', '馬太福音 4', '馬太福音 5',
-        '馬太福音 6', '馬太福音 7', '馬太福音 8', '馬太福音 9', '馬太福音 10',
+        '馬太福音 1',
+        '馬太福音 2',
+        '馬太福音 3',
+        '馬太福音 4',
+        '馬太福音 5',
+        '馬太福音 6',
+        '馬太福音 7',
+        '馬太福音 8',
+        '馬太福音 9',
+        '馬太福音 10',
       ])
     })
   })
@@ -235,7 +243,7 @@ describe('generateReadingPlan — issue #6 start position', () => {
           start_book_index: 42,
           start_chapter: 1,
         },
-        books
+        books,
       )
       const days = firstNDays(plan, 1)
       expect(days[0]).toEqual(['約翰福音 1', '約翰福音 2'])
@@ -250,7 +258,7 @@ describe('generateReadingPlan — issue #6 start position', () => {
           start_book_index: 1,
           start_chapter: 30,
         },
-        books
+        books,
       )
       const days = firstNDays(plan, 1)
       expect(days[0]).toEqual(['出埃及記 30', '出埃及記 31'])
@@ -261,7 +269,7 @@ describe('generateReadingPlan — issue #6 start position', () => {
     it('NT plan with no start fields → defaults to 太 1', () => {
       const plan = generateReadingPlan(
         { scope: 'nt', chapters_per_day: 2, started_at: startDate },
-        books
+        books,
       )
       const days = firstNDays(plan, 1)
       expect(days[0]).toEqual(['馬太福音 1', '馬太福音 2'])
@@ -270,7 +278,7 @@ describe('generateReadingPlan — issue #6 start position', () => {
     it('OT plan with no start fields → defaults to 創 1', () => {
       const plan = generateReadingPlan(
         { scope: 'ot', chapters_per_day: 2, started_at: startDate },
-        books
+        books,
       )
       const days = firstNDays(plan, 1)
       expect(days[0]).toEqual(['創世記 1', '創世記 2'])
@@ -295,7 +303,7 @@ describe('generateReadingPlan — issue #6 start position', () => {
           ot_start_book_index: 18, // 詩篇
           ot_start_chapter: 110,
         },
-        books
+        books,
       )
       const days = firstNDays(plan, 2)
       // Day 1: NT 太 1, 2 + OT 詩篇 110
@@ -319,7 +327,7 @@ describe('generateReadingPlan — issue #6 start position', () => {
           // Only legacy start_chapter (no per-testament)
           start_chapter: 110,
         },
-        books
+        books,
       )
       const days = firstNDays(plan, 1)
       // NT side clamped to 帖前 1
@@ -342,10 +350,16 @@ describe('generateReadingPlan — issue #6 start position', () => {
           nt_start_book_index: 42, // 約翰福音
           nt_start_chapter: 5,
         },
-        books
+        books,
       )
       const days = firstNDays(plan, 1)
-      expect(days[0]).toEqual(['約翰福音 5', '約翰福音 6', '約翰福音 7', '約翰福音 8', '約翰福音 9'])
+      expect(days[0]).toEqual([
+        '約翰福音 5',
+        '約翰福音 6',
+        '約翰福音 7',
+        '約翰福音 8',
+        '約翰福音 9',
+      ])
     })
 
     it('nt_then_ot: legacy start_chapter=54 is clamped to NT start book chapters', () => {
@@ -360,10 +374,10 @@ describe('generateReadingPlan — issue #6 start position', () => {
           reading_order: 'nt_then_ot',
           started_at: startDate,
           nt_start_book_index: 52, // 帖後 (3 chapters)
-          ot_start_book_index: 0,  // 創世記
-          start_chapter: 54,        // legacy single column, exceeds 帖後 chapters
+          ot_start_book_index: 0, // 創世記
+          start_chapter: 54, // legacy single column, exceeds 帖後 chapters
         },
-        books
+        books,
       )
       const days = firstNDays(plan, 1)
       // NT side clamped from 54 to 1 (帖後 only has 3 ch, so 54 > 3 → 1)
@@ -380,7 +394,7 @@ describe('generateReadingPlan — issue #6 start position', () => {
           ot_start_book_index: 18, // 詩篇
           ot_start_chapter: 100,
         },
-        books
+        books,
       )
       const days = firstNDays(plan, 1)
       expect(days[0]).toEqual(['詩篇 100', '詩篇 101', '詩篇 102'])
@@ -404,18 +418,21 @@ describe('generateReadingPlan — issue #6 start position', () => {
           nt_start_book_index: 62, // 約貳 (1 chapter) — matches user's "NT 從門開始"
           nt_start_chapter: 1,
         },
-        books
+        books,
       )
       const days = firstNDays(plan, 50)
       // Find the first day with NT refs (after OT runs out). Use NT-only
       // regex to avoid matching OT 書名 like 約書亞記.
-      const ntRegex = /^(馬太|馬可|路加|約翰|使徒|羅馬|哥林多|加拉太|以弗所|腓立比|歌羅西|帖撒羅尼迦|提摩太|提多|腓利門|希伯來|雅各|彼得|約翰|猶大|啟示錄)/
+      const ntRegex =
+        /^(馬太|馬可|路加|約翰|使徒|羅馬|哥林多|加拉太|以弗所|腓立比|歌羅西|帖撒羅尼迦|提摩太|提多|腓利門|希伯來|雅各|彼得|約翰|猶大|啟示錄)/
       const firstNtDay = days.find((d) => d.some((r) => ntRegex.test(r)))
       expect(firstNtDay).toBeDefined()
       const firstNtRef = firstNtDay!.find((r) => ntRegex.test(r))!
       expect(firstNtRef).toBe('約翰二書 1')
       // Plan should never start NT at the legacy default (太/可/加/約翰福音)
-      const legacyNtRefs = days.flat().filter((r) => /^(馬太|馬可|路加|約翰福音)/.test(r))
+      const legacyNtRefs = days
+        .flat()
+        .filter((r) => /^(馬太|馬可|路加|約翰福音)/.test(r))
       expect(legacyNtRefs).toEqual([])
     })
   })

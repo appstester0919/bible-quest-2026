@@ -18,13 +18,30 @@ export type RedesignPlanInput = {
   otStartChapter: number
 }
 
-export async function redesignPlan(input: RedesignPlanInput): Promise<{ error?: string; newEnrollmentId?: string }> {
+export async function redesignPlan(
+  input: RedesignPlanInput,
+): Promise<{ error?: string; newEnrollmentId?: string }> {
   try {
     const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
     if (!user) return { error: '請先登入' }
 
-    const { scope, totalDays, startDate, ntChapters, otChapters, ntOtOrder, keepProgress, oldEnrollmentId, ntStartBook, ntStartChapter, otStartBook, otStartChapter } = input
+    const {
+      scope,
+      totalDays,
+      startDate,
+      ntChapters,
+      otChapters,
+      ntOtOrder,
+      keepProgress,
+      oldEnrollmentId,
+      ntStartBook,
+      ntStartChapter,
+      otStartBook,
+      otStartChapter,
+    } = input
 
     // 1. Read old enrollment to determine effective start_date
     const { data: oldEnrollment, error: oldErr } = await supabase
@@ -65,7 +82,8 @@ export async function redesignPlan(input: RedesignPlanInput): Promise<{ error?: 
     let readingOrder: string | null = null
     if (scope === 'nt_ot') {
       // Parallel: "N-OT" format. Sequential: 'nt_then_ot' / 'ot_then_nt'
-      readingOrder = ntOtOrder === 'parallel' ? `${ntChapters}-${otChapters}` : ntOtOrder
+      readingOrder =
+        ntOtOrder === 'parallel' ? `${ntChapters}-${otChapters}` : ntOtOrder
     }
 
     const { data: newEnrollment, error: insertErr } = await supabase
@@ -100,7 +118,11 @@ export async function redesignPlan(input: RedesignPlanInput): Promise<{ error?: 
       return { error: `建立新計劃失敗: ${insertErr.message}` }
     }
 
-    console.log('[redesignPlan] success:', { oldId: oldEnrollmentId, newId: newEnrollment.id, keepProgress })
+    console.log('[redesignPlan] success:', {
+      oldId: oldEnrollmentId,
+      newId: newEnrollment.id,
+      keepProgress,
+    })
     return { newEnrollmentId: newEnrollment.id }
   } catch (err) {
     console.error('[redesignPlan] fatal:', err)
@@ -108,10 +130,14 @@ export async function redesignPlan(input: RedesignPlanInput): Promise<{ error?: 
   }
 }
 
-export async function completeOnboarding(formData: FormData): Promise<{ error?: string }> {
+export async function completeOnboarding(
+  formData: FormData,
+): Promise<{ error?: string }> {
   try {
     const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
 
     if (!user) {
       return { error: '請先登入' }
@@ -123,8 +149,8 @@ export async function completeOnboarding(formData: FormData): Promise<{ error?: 
 
     // Trust the client-supplied chapters_per_day. For nt_ot this is the sum of
     // NT + OT per day; for nt/ot it's the chapters/day the user picked.
-    // (Previously this branch did `Math.ceil(259 / totalDays)` for both NT and OT,
-    //  which silently produced wrong values for OT since 929 ≠ 259 — see issue #5.)
+    // (Previously this branch did `Math.ceil(260 / totalDays)` for both NT and OT,
+    //  which silently produced wrong values for OT since 929 ≠ 260 — see issue #5.)
     let readingOrder: string | null = null
     if (scope === 'nt_ot') {
       // readingOrder format: "N-OT" e.g. "2-5" → nt=2, ot=5 (parallel),
@@ -134,13 +160,20 @@ export async function completeOnboarding(formData: FormData): Promise<{ error?: 
     }
 
     // chapters_per_day = the value the client pre-computed and verified on submit.
-    const chaptersPerDay = parseInt(formData.get('chapters_per_day') as string, 10)
+    const chaptersPerDay = parseInt(
+      formData.get('chapters_per_day') as string,
+      10,
+    )
 
     // Issue #6: per-testament start position
-    const ntStartBook = parseInt(formData.get('nt_start_book') as string, 10) || 39
-    const ntStartChapter = parseInt(formData.get('nt_start_chapter') as string, 10) || 1
-    const otStartBook = parseInt(formData.get('ot_start_book') as string, 10) || 0
-    const otStartChapter = parseInt(formData.get('ot_start_chapter') as string, 10) || 1
+    const ntStartBook =
+      parseInt(formData.get('nt_start_book') as string, 10) || 39
+    const ntStartChapter =
+      parseInt(formData.get('nt_start_chapter') as string, 10) || 1
+    const otStartBook =
+      parseInt(formData.get('ot_start_book') as string, 10) || 0
+    const otStartChapter =
+      parseInt(formData.get('ot_start_chapter') as string, 10) || 1
 
     // For DB: derive the single-column start_book_index from the relevant
     // per-testament field (migration 010 column). For nt_ot, NT start wins
@@ -164,8 +197,15 @@ export async function completeOnboarding(formData: FormData): Promise<{ error?: 
     // computation). The server trusts the client value and writes it to DB.
 
     console.log('[onboarding] insert', {
-      user_id: user.id, scope, totalDays, chaptersPerDay, readingOrder,
-      ntStartBook, ntStartChapter, otStartBook, otStartChapter,
+      user_id: user.id,
+      scope,
+      totalDays,
+      chaptersPerDay,
+      readingOrder,
+      ntStartBook,
+      ntStartChapter,
+      otStartBook,
+      otStartChapter,
     })
 
     // Mark any existing active enrollments as 'abandoned' before creating
@@ -178,7 +218,10 @@ export async function completeOnboarding(formData: FormData): Promise<{ error?: 
       .eq('status', 'active')
 
     if (archiveError) {
-      console.error('[onboarding] archive previous active failed:', archiveError)
+      console.error(
+        '[onboarding] archive previous active failed:',
+        archiveError,
+      )
       // Continue — even if archive fails we still try to insert new row
     }
 
@@ -201,7 +244,9 @@ export async function completeOnboarding(formData: FormData): Promise<{ error?: 
         nt_start_chapter: ntStartChapter,
         ot_start_chapter: otStartChapter,
         status: 'active',
-        started_at: startDate ? new Date(startDate + 'T00:00:00').toISOString() : new Date().toISOString(),
+        started_at: startDate
+          ? new Date(startDate + 'T00:00:00').toISOString()
+          : new Date().toISOString(),
       })
       .select()
       .single()

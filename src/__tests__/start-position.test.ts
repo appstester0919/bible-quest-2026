@@ -10,7 +10,7 @@ import {
 
 // Load the same shape of book data the app uses (OT first, NT second)
 const bibleData = JSON.parse(
-  readFileSync('public/bible-data.json', 'utf-8')
+  readFileSync('public/bible-data.json', 'utf-8'),
 ) as { books: { a: string; n: string; c: number }[] }
 const books = bibleData.books.map((b, i) => ({
   index: i,
@@ -20,7 +20,9 @@ const books = bibleData.books.map((b, i) => ({
 describe('getRemainingChapters — issue #6 start position helper', () => {
   describe('OT scope (start_book_index 0..38)', () => {
     it('start = 創世記 1章 → 929 (full OT)', () => {
-      expect(getRemainingChapters('ot', books, OT_FIRST_BOOK_INDEX, 1)).toBe(929)
+      expect(getRemainingChapters('ot', books, OT_FIRST_BOOK_INDEX, 1)).toBe(
+        929,
+      )
     })
 
     it('start = 創世記 50章 (last chapter of 創) → 879', () => {
@@ -64,18 +66,20 @@ describe('getRemainingChapters — issue #6 start position helper', () => {
     })
   })
 
-  describe('NT scope (start_book_index 39..64)', () => {
-    it('start = 馬太 1章 → 259 (full NT)', () => {
-      expect(getRemainingChapters('nt', books, NT_FIRST_BOOK_INDEX, 1)).toBe(259)
+  describe('NT scope (start_book_index 39..65)', () => {
+    it('start = 馬太 1章 → 260 (full NT)', () => {
+      expect(getRemainingChapters('nt', books, NT_FIRST_BOOK_INDEX, 1)).toBe(
+        260,
+      )
     })
 
-    it('start = 馬太 28章 (last chapter of 太) → 232', () => {
-      expect(getRemainingChapters('nt', books, 39, 28)).toBe(259 - 27)
+    it('start = 馬太 28章 (last chapter of 太) → 233', () => {
+      expect(getRemainingChapters('nt', books, 39, 28)).toBe(260 - 27)
     })
 
-    it('start = 約翰福音 1章 → 191', () => {
-      // 太(28) + 可(16) + 路(24) = 68; 259 - 68 = 191
-      expect(getRemainingChapters('nt', books, 42, 1)).toBe(191)
+    it('start = 約翰福音 1章 → 192', () => {
+      // 太(28) + 可(16) + 路(24) = 68; 260 - 68 = 192
+      expect(getRemainingChapters('nt', books, 42, 1)).toBe(192)
     })
 
     it('start = 啟示錄 1章 → 22', () => {
@@ -83,33 +87,33 @@ describe('getRemainingChapters — issue #6 start position helper', () => {
     })
 
     it('start = 啟示錄 22章 (last chapter) → 1', () => {
-      expect(getRemainingChapters('nt', books, 64, 22)).toBe(1)
+      expect(getRemainingChapters('nt', books, 65, 22)).toBe(1)
     })
   })
 
   describe('bounds checking', () => {
     it('throws when NT startBookIndex is < 39 (out of NT range)', () => {
       expect(() => getRemainingChapters('nt', books, 0, 1)).toThrow(
-        /out of range for scope 'nt'/
+        /out of range for scope 'nt'/,
       )
     })
 
     it('throws when OT startBookIndex is >= 39 (out of OT range)', () => {
       expect(() => getRemainingChapters('ot', books, 39, 1)).toThrow(
-        /out of range for scope 'ot'/
+        /out of range for scope 'ot'/,
       )
     })
 
     it('throws when startChapter < 1', () => {
       expect(() => getRemainingChapters('nt', books, 39, 0)).toThrow(
-        /startChapter must be >= 1/
+        /startChapter must be >= 1/,
       )
     })
 
     it('throws when startChapter exceeds start book chapter count', () => {
       // 創世記 has 50 chapters; asking for chapter 51 should throw
       expect(() => getRemainingChapters('ot', books, 0, 51)).toThrow(
-        /exceeds start book/
+        /exceeds start book/,
       )
     })
   })

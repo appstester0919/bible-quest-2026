@@ -19,9 +19,9 @@ import {
 } from './scope'
 
 export type BookMeta = {
-  name: string          // e.g. "創世記"
-  abbr: string          // e.g. "創"
-  /** 0-based canonical index (創 = 0, …, 瑪 = 38, 太 = 39, …, 啓 = 64) */
+  name: string // e.g. "創世記"
+  abbr: string // e.g. "創"
+  /** 0-based canonical index (創 = 0, …, 瑪 = 38, 太 = 39, …, 啓 = 65) */
   index: number
   chapters: number
 }
@@ -29,7 +29,7 @@ export type BookMeta = {
 export type EnrollmentLite = {
   scope: 'nt' | 'ot' | 'nt_ot'
   chapters_per_day: number
-  reading_order?: string | null  // for nt_ot: "2-5" / "nt_then_ot" / "ot_then_nt"
+  reading_order?: string | null // for nt_ot: "2-5" / "nt_then_ot" / "ot_then_nt"
   started_at?: string | null
   /** 0-based NT book index (39=馬太 to 64=啟示錄) where NT reading starts.
    *  Defaults to 39 (馬太) when not provided. */
@@ -75,7 +75,7 @@ function advanceDate(date: Date, days: number): Date {
  */
 function clampChapter(
   chapter: number | undefined,
-  bookChapters: number
+  bookChapters: number,
 ): number {
   if (!chapter || chapter < 1) return 1
   if (chapter > bookChapters) return 1
@@ -86,7 +86,9 @@ function clampChapter(
  * Parse reading_order for parallel mode → { nt, ot } chapters per day.
  * Returns null if not parallel / not parseable.
  */
-function parseParallelSplit(readingOrder: string | null): { nt: number; ot: number } | null {
+function parseParallelSplit(
+  readingOrder: string | null,
+): { nt: number; ot: number } | null {
   if (!readingOrder) return null
   const m = readingOrder.match(/^(\d+)-(\d+)$/)
   if (!m) return null
@@ -97,13 +99,13 @@ function parseParallelSplit(readingOrder: string | null): { nt: number; ot: numb
  * Generate the full reading plan map: date_string → chapter refs.
  *
  * @param enrollment  - the active plan enrollment
- * @param books       - full bible book list (65 books, OT first)
+ * @param books       - full bible book list (66 books, OT first)
  * @param maxDays     - cap to prevent infinite loops (default 400)
  */
 export function generateReadingPlan(
   enrollment: EnrollmentLite,
   books: BookMeta[],
-  maxDays = 400
+  maxDays = 400,
 ): Map<string, string[]> {
   const plan = new Map<string, string[]>()
 
@@ -114,19 +116,21 @@ export function generateReadingPlan(
 
   // ── Mode 1 & 2: linear single-testament ─────────────────────────────────
   if (enrollment.scope === 'nt' || enrollment.scope === 'ot') {
-    const scopeBooks = enrollment.scope === 'nt'
-      ? books.filter((b) => b.index >= 39)
-      : books.filter((b) => b.index < 39)
+    const scopeBooks =
+      enrollment.scope === 'nt'
+        ? books.filter((b) => b.index >= 39)
+        : books.filter((b) => b.index < 39)
 
     // Resolve start position: per-testament column takes precedence, then
     // start_book_index (single column from migration 010), then default.
-    const startBook = enrollment.scope === 'nt'
-      ? (enrollment.nt_start_book_index
-          ?? enrollment.start_book_index
-          ?? DEFAULT_NT_START_BOOK)
-      : (enrollment.ot_start_book_index
-          ?? enrollment.start_book_index
-          ?? DEFAULT_OT_START_BOOK)
+    const startBook =
+      enrollment.scope === 'nt'
+        ? (enrollment.nt_start_book_index ??
+          enrollment.start_book_index ??
+          DEFAULT_NT_START_BOOK)
+        : (enrollment.ot_start_book_index ??
+          enrollment.start_book_index ??
+          DEFAULT_OT_START_BOOK)
     const startChapter = enrollment.start_chapter ?? DEFAULT_START_CHAPTER
 
     // Find the array index in scopeBooks that corresponds to startBook
@@ -142,7 +146,11 @@ export function generateReadingPlan(
 
     for (let day = 0; day < maxDays && bookIdx < scopeBooks.length; day++) {
       const refs: string[] = []
-      for (let i = 0; i < enrollment.chapters_per_day && bookIdx < scopeBooks.length; i++) {
+      for (
+        let i = 0;
+        i < enrollment.chapters_per_day && bookIdx < scopeBooks.length;
+        i++
+      ) {
         const book = scopeBooks[bookIdx]
         refs.push(`${book.name} ${chapterInBook}`)
         chapterInBook++
@@ -175,12 +183,14 @@ export function generateReadingPlan(
     // Issue #6: each testament starts at its own user-chosen position.
     // Remaining counts are derived from the start position so the plan
     // doesn't over-read past the end of the relevant testament.
-    const ntStartBook = enrollment.nt_start_book_index
-      ?? enrollment.start_book_index
-      ?? DEFAULT_NT_START_BOOK
-    const otStartBook = enrollment.ot_start_book_index
-      ?? enrollment.start_book_index
-      ?? DEFAULT_OT_START_BOOK
+    const ntStartBook =
+      enrollment.nt_start_book_index ??
+      enrollment.start_book_index ??
+      DEFAULT_NT_START_BOOK
+    const otStartBook =
+      enrollment.ot_start_book_index ??
+      enrollment.start_book_index ??
+      DEFAULT_OT_START_BOOK
     // Per-testament start chapter takes precedence. For backwards compat with
     // enrollments written before migration 013 (single start_chapter column),
     // fall back to start_chapter and clamp to the start book's chapter count.
@@ -188,32 +198,42 @@ export function generateReadingPlan(
     const otStartBookMeta = books.find((b) => b.index === otStartBook)
     const ntStartChapter = clampChapter(
       enrollment.nt_start_chapter ?? enrollment.start_chapter,
-      ntStartBookMeta?.chapters ?? 999
+      ntStartBookMeta?.chapters ?? 999,
     )
     const otStartChapter = clampChapter(
       enrollment.ot_start_chapter ?? enrollment.start_chapter,
-      otStartBookMeta?.chapters ?? 999
+      otStartBookMeta?.chapters ?? 999,
     )
 
     // Compute initial remaining chapter counts. The books[] passed to
-    // getRemainingChapters is the full 65-book list; the helper handles
+    // getRemainingChapters is the full 66-book list; the helper handles
     // per-testament scoping internally.
-    const ntInitialRemaining = ntStartBook >= NT_FIRST_BOOK_INDEX
-      ? getRemainingChapters('nt', books, ntStartBook, ntStartChapter)
-      : 259
-    const otInitialRemaining = otStartBook <= OT_FIRST_BOOK_INDEX + 38
-      ? getRemainingChapters('ot', books, otStartBook, otStartChapter)
-      : 929
+    const ntInitialRemaining =
+      ntStartBook >= NT_FIRST_BOOK_INDEX
+        ? getRemainingChapters('nt', books, ntStartBook, ntStartChapter)
+        : 260
+    const otInitialRemaining =
+      otStartBook <= OT_FIRST_BOOK_INDEX + 38
+        ? getRemainingChapters('ot', books, otStartBook, otStartChapter)
+        : 929
 
     let ntBookArrIdx = ntBooks.findIndex((b) => b.index === ntStartBook)
     let otBookArrIdx = otBooks.findIndex((b) => b.index === otStartBook)
     if (ntBookArrIdx < 0) ntBookArrIdx = 0
     if (otBookArrIdx < 0) otBookArrIdx = 0
 
-    let ntBookIdx = ntBookArrIdx, ntChapter = ntStartChapter, ntRemaining = ntInitialRemaining
-    let otBookIdx = otBookArrIdx, otChapter = otStartChapter, otRemaining = otInitialRemaining
+    let ntBookIdx = ntBookArrIdx,
+      ntChapter = ntStartChapter,
+      ntRemaining = ntInitialRemaining
+    let otBookIdx = otBookArrIdx,
+      otChapter = otStartChapter,
+      otRemaining = otInitialRemaining
 
-    for (let day = 0; day < maxDays && (ntRemaining > 0 || otRemaining > 0); day++) {
+    for (
+      let day = 0;
+      day < maxDays && (ntRemaining > 0 || otRemaining > 0);
+      day++
+    ) {
       const refs: string[] = []
       let ntQuota = split.nt
       let otQuota = split.ot
@@ -295,42 +315,53 @@ export function generateReadingPlan(
     //   Day 1-43: 6 NT chapters
     //   Day 44:   NT has 260/260 done by chapter 2 → fill remaining 4 from OT
     //   Day 45+:  all 6 chapters from OT
-    const primary   = order === 'nt_then_ot' ? ntBooks : otBooks
+    const primary = order === 'nt_then_ot' ? ntBooks : otBooks
     const secondary = order === 'nt_then_ot' ? otBooks : ntBooks
-    const primaryTotal   = order === 'nt_then_ot' ? 259 : 929
-    const secondaryTotal = order === 'nt_then_ot' ? 929 : 259
+    const primaryTotal = order === 'nt_then_ot' ? 260 : 929
+    const secondaryTotal = order === 'nt_then_ot' ? 929 : 260
 
     // Issue #6: primary testament starts at its user-chosen position;
     // secondary now ALSO honors its user-chosen start position (per
     // user request 2026-07-16: even though OT is only read AFTER primary is
     // done, the user wants OT to start at their picked book, not head of OT).
-    const primaryStartBook = order === 'nt_then_ot'
-      ? (enrollment.nt_start_book_index ?? enrollment.start_book_index ?? DEFAULT_NT_START_BOOK)
-      : (enrollment.ot_start_book_index ?? enrollment.start_book_index ?? DEFAULT_OT_START_BOOK)
-    const secondaryStartBook = order === 'nt_then_ot'
-      ? (enrollment.ot_start_book_index ?? DEFAULT_OT_START_BOOK)
-      : (enrollment.nt_start_book_index ?? DEFAULT_NT_START_BOOK)
+    const primaryStartBook =
+      order === 'nt_then_ot'
+        ? (enrollment.nt_start_book_index ??
+          enrollment.start_book_index ??
+          DEFAULT_NT_START_BOOK)
+        : (enrollment.ot_start_book_index ??
+          enrollment.start_book_index ??
+          DEFAULT_OT_START_BOOK)
+    const secondaryStartBook =
+      order === 'nt_then_ot'
+        ? (enrollment.ot_start_book_index ?? DEFAULT_OT_START_BOOK)
+        : (enrollment.nt_start_book_index ?? DEFAULT_NT_START_BOOK)
     // Per-testament start chapter takes precedence. Fall back to start_chapter (REBUILD_TRIGGER_TEST)
     // for legacy rows and clamp to [1, bookChapters] to avoid throwing when
     // the legacy value exceeds the start book's chapter count.
     const primaryStartBookMeta = books.find((b) => b.index === primaryStartBook)
-    const secondaryStartBookMeta = books.find((b) => b.index === secondaryStartBook)
+    const secondaryStartBookMeta = books.find(
+      (b) => b.index === secondaryStartBook,
+    )
     const primaryStartChapter = clampChapter(
       order === 'nt_then_ot'
         ? (enrollment.nt_start_chapter ?? enrollment.start_chapter)
         : (enrollment.ot_start_chapter ?? enrollment.start_chapter),
-      primaryStartBookMeta?.chapters ?? 999
+      primaryStartBookMeta?.chapters ?? 999,
     )
     const secondaryStartChapter = clampChapter(
       order === 'nt_then_ot'
         ? enrollment.ot_start_chapter
         : enrollment.nt_start_chapter,
-      secondaryStartBookMeta?.chapters ?? 999
+      secondaryStartBookMeta?.chapters ?? 999,
     )
 
     const primaryScope: 'nt' | 'ot' = order === 'nt_then_ot' ? 'nt' : 'ot'
     const primaryInitialRemaining = getRemainingChapters(
-      primaryScope, books, primaryStartBook, primaryStartChapter
+      primaryScope,
+      books,
+      primaryStartBook,
+      primaryStartChapter,
     )
     // Secondary remaining counts only from its user-picked start, so the plan
     // doesn't re-read already-completed primary chapters later in OT.
@@ -338,18 +369,28 @@ export function generateReadingPlan(
       order === 'nt_then_ot' ? 'ot' : 'nt',
       books,
       secondaryStartBook,
-      secondaryStartChapter
+      secondaryStartChapter,
     )
 
     let priBookArrIdx = primary.findIndex((b) => b.index === primaryStartBook)
     if (priBookArrIdx < 0) priBookArrIdx = 0
-    let secBookArrIdx = secondary.findIndex((b) => b.index === secondaryStartBook)
+    let secBookArrIdx = secondary.findIndex(
+      (b) => b.index === secondaryStartBook,
+    )
     if (secBookArrIdx < 0) secBookArrIdx = 0
 
-    let priBookIdx = priBookArrIdx, priChapter = primaryStartChapter, priRemaining = primaryInitialRemaining
-    let secBookIdx = secBookArrIdx, secChapter = secondaryStartChapter, secRemaining = secondaryInitialRemaining
+    let priBookIdx = priBookArrIdx,
+      priChapter = primaryStartChapter,
+      priRemaining = primaryInitialRemaining
+    let secBookIdx = secBookArrIdx,
+      secChapter = secondaryStartChapter,
+      secRemaining = secondaryInitialRemaining
 
-    for (let day = 0; day < maxDays && (priRemaining > 0 || secRemaining > 0); day++) {
+    for (
+      let day = 0;
+      day < maxDays && (priRemaining > 0 || secRemaining > 0);
+      day++
+    ) {
       const refs: string[] = []
       let quota = enrollment.chapters_per_day
 
@@ -399,7 +440,11 @@ export function generateReadingPlan(
   let chapterInBook = startChapter
   for (let day = 0; day < maxDays && bookIdx < scopeBooks.length; day++) {
     const refs: string[] = []
-    for (let i = 0; i < enrollment.chapters_per_day && bookIdx < scopeBooks.length; i++) {
+    for (
+      let i = 0;
+      i < enrollment.chapters_per_day && bookIdx < scopeBooks.length;
+      i++
+    ) {
       const book = scopeBooks[bookIdx]
       refs.push(`${book.name} ${chapterInBook}`)
       chapterInBook++
