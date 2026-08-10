@@ -1,6 +1,6 @@
 /* eslint-disable no-undef */
 
-const CACHE_NAME = 'bible-quest-v12' // bump v11→v12: split-regen 8 chapters hit Edge TTS 10-min cap (利13 士9 撒上17 民7 耶51 路1 路9 王上1). All had mp3 truncated to exact 600s; restored 70s-790s of missing audio per chapter. Recipe: midpoint verse split (e.g. v1-30 + v31-59) + ffmpeg -c copy concat; same voice as v2 generation (odd=F, even=M).
+const CACHE_NAME = 'bible-quest-v13' // bump v12→v13: TTS regen 98 chapters with archaic CUV char substitution (櫺繙鬮捫 → 靈翻鳩悶). bible-data.json untouched. See tools/tts_char_substitutions.py. Recipe: same voice as v2 generation (odd=F, even=M).
 
 // ─── Install ──────────────────────────────────────────────────────────────────
 self.addEventListener('install', (event) => {

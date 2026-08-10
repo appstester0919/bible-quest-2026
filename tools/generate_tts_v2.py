@@ -15,6 +15,11 @@ import json
 import time
 import sys
 from datetime import datetime
+from pathlib import Path
+# TTS-only homophone substitution for archaic CUV chars (櫺繙鬮捫 → 靈翻鳩悶)
+# bible-data.json stays untouched — this only affects the text passed to edge_tts
+sys.path.insert(0, str(Path(__file__).parent))
+from tts_char_substitutions import tts_text, contains_affected_chars
 
 VOICE_FEMALE = "zh-HK-HiuGaaiNeural"
 VOICE_MALE = "zh-HK-WanLungNeural"
@@ -49,7 +54,10 @@ def _probe_duration(path: str) -> float:
 
 async def _save_and_verify(text: str, voice: str, output_path: str) -> tuple[bool, float, int]:
     """Save Edge TTS audio, then verify duration matches expected. Returns (ok, duration, size)."""
-    comm = edge_tts.Communicate(text, voice)
+    # Apply TTS-only homophone substitution so archaic CUV chars are pronounced correctly
+    # (櫺繙鬮捫 → 靈翻鳩悶). bible-data.json is unchanged; only the text passed to TTS is modified.
+    tts_input = tts_text(text)
+    comm = edge_tts.Communicate(tts_input, voice)
     await comm.save(output_path)
     d = _probe_duration(output_path)
     size = os.path.getsize(output_path) if os.path.exists(output_path) else 0

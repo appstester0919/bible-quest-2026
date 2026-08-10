@@ -27,6 +27,11 @@ import os
 import sys
 from pathlib import Path
 
+# TTS-only homophone substitution for archaic CUV chars (櫺繙鬮捫 → 靈翻鳩悶)
+# bible-data.json stays untouched — this only affects the text passed to edge_tts
+sys.path.insert(0, str(Path(__file__).parent))
+from tts_char_substitutions import tts_text
+
 RECIPES_PATH = "/home/appstester0919/split_recipes.json"
 TEMP_DIR = "/tmp"
 
@@ -49,7 +54,9 @@ def probe_duration(path: str) -> float:
 
 async def gen_half(text: str, path: str, voice: str, label: str):
     print(f"  [{label}] Edge TTS ({voice}) → {path}", flush=True)
-    comm = edge_tts.Communicate(text, voice)
+    # Apply TTS-only homophone substitution (櫺繙鬮捫 → 靈翻鳩悶)
+    tts_input = tts_text(text)
+    comm = edge_tts.Communicate(tts_input, voice)
     await comm.save(path)
     size_kb = os.path.getsize(path) / 1024
     d = probe_duration(path)

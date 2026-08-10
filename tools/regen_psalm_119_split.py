@@ -16,6 +16,13 @@ import edge_tts
 import subprocess
 import json
 import os
+import sys
+from pathlib import Path
+
+# TTS-only homophone substitution for archaic CUV chars (櫺繙鬮捫 → 靈翻鳩悶)
+# bible-data.json stays untouched — this only affects the text passed to edge_tts
+sys.path.insert(0, str(Path(__file__).parent))
+from tts_char_substitutions import tts_text
 
 VOICE = "zh-HK-HiuGaaiNeural"
 BIBLE_DATA = "/mnt/d/AI/BibleQuest2026/public/bible-data.json"
@@ -44,7 +51,9 @@ def load_halves():
 
 async def gen(text: str, path: str, label: str):
     print(f"  [{label}] Sending to Edge TTS ({VOICE})...")
-    comm = edge_tts.Communicate(text, VOICE)
+    # Apply TTS-only homophone substitution (櫺繙鬮捫 → 靈翻鳩悶)
+    tts_input = tts_text(text)
+    comm = edge_tts.Communicate(tts_input, VOICE)
     await comm.save(path)
     size_kb = os.path.getsize(path) / 1024
     print(f"  [{label}] OK → {path}  ({size_kb:.0f} KB)")
