@@ -1,6 +1,6 @@
 /* eslint-disable no-undef */
 
-const CACHE_NAME = 'bible-quest-v13' // bump v12→v13: TTS regen 98 chapters with archaic CUV char substitution (櫺繙鬮捫 → 靈翻鳩悶). bible-data.json untouched. See tools/tts_char_substitutions.py. Recipe: same voice as v2 generation (odd=F, even=M).
+const CACHE_NAME = 'bible-quest-v14' // bump v13→v14: re-regen 98 chapters with explicit sub verification (STT-confirmed subbed 4/4 sample). v13 deployed 08-11 04:58 but mp3 content was unsubstituted (silent 捫/鬮/繙/櫺 chars). v14 re-ran regen with sub_check log per chapter. bible-data.json untouched.
 
 // ─── Install ──────────────────────────────────────────────────────────────────
 self.addEventListener('install', (event) => {
