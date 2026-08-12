@@ -8,6 +8,8 @@ zh-HK voices (HiuGaaiNeural, WanLungNeural) cannot pronounce correctly:
   - 繙 (fān, "translate/turn over") → SILENT / garbled
   - 鬮 (jiū, "lot/cast lots") → SILENT / garbled
   - 捫 (mén, "touch/feel") → SILENT / garbled
+  - 輜 (zī, "baggage/supplies") → SILENT in 輜重 / 輜重車 context
+  - 驕 (jiāo, "arrogance") → misread (gài instead of jiāo) in 驕傲 context
 
 We do NOT modify public/bible-data.json — that would double file size and slow
 down Bible reading load time. Instead, this module provides a substitution that
@@ -16,31 +18,42 @@ is applied ONLY at TTS generation time.
 USER-FACING DISPLAY: keeps original CUV characters (correct for reading).
 TTS PRONUNCIATION: uses substituted homophones (correct for audio).
 
-USER-PROVIDED MAPPING (verified by sample MP3 tests 2026-08-10):
+USER-PROVIDED MAPPING:
   櫺 → 靈 (líng)  — "window lattice" → "spirit/lattice"; sounds natural in window context
   繙 → 翻 (fān)   — "translate" → "turn over"; standard Chinese word
   鬮 → 鳩 (jiū)   — "cast lots" → "dove/pigeon"; sounds match Cantonese + Mandarin
   捫 → 悶 (mèn)   — "touch" → "stuffy/depressed"; sounds match Cantonese + Mandarin
+  輜 → 資 (zī)    — "baggage" → "resources"; homophone, user accepted 2026-08-12
+  驕 → 嬌 (jiāo)  — "arrogance" → "delicate"; homophone, user suggested 2026-08-12
 
-Confirmed via 16 sample MP3 tests:
-  /tmp/tts_chars_test/{char}_HiuGaaiNeural.mp3 (original, F voice)
-  /tmp/tts_chars_test/{char}_WanLungNeural.mp3 (original, M voice)
-  /tmp/tts_chars_test/{char}_sub_HiuGaaiNeural.mp3 (subbed, F voice)
-  /tmp/tts_chars_test/{char}_sub_WanLungNeural.mp3 (subbed, M voice)
+Confirmed via sample MP3 tests on the existing 4 mappings (2026-08-10).
+New 2 mappings (輜, 驕) added 2026-08-12 per user direction.
 
-AFFECTED VERSES: 212 verses across 30+ books.
+AFFECTED VERSES: ~220 verses across 30+ books (212 from original 4 + 6 輜 + 75 驕).
   Books affected: 創/利/民/申/書士撒上撒下王上王下代上代下拉尼伯詩箴歌賽耶結但珥摩俄彌鴻番太可路約徒林前來
 
 REGENERATION SCOPE: any chapter containing affected chars needs regen.
-Use `regen_split_chapters.py` or `generate_tts_v2.py` after wiring this module in.
+Use `regen_tts_affected_chapters.py` after wiring this module in.
 """
 
 # Substitution map (display_char → tts_char)
+#
+# REVERTED 2026-08-11: 捫 sub is REQUIRED because Edge TTS REJECTS 捫 entirely.
+# Empirical evidence: `edge_tts.Communicate('捫', 'zh-HK-WanLungNeural')` raises
+# `NoAudioReceived: No audio was received`. The HK voices cannot process 捫 as
+# input at all (not just SILENT). 124/125 occurrences are 亞捫人 (Ammonites
+# proper noun) and 1/125 is 捫心自問 (verb). Substituting to 悶 produces
+# "亞悶人" which is semantically wrong but at least audible. The user accepted
+# this tradeoff (2026-08-11 verification: "終於順利聽到缺失的字音"). See
+# references/tts-char-substitution-2026-08-10.md for full audit + reverting
+# story.
 TTS_CHAR_MAP: dict[str, str] = {
     '櫺': '靈',  # líng
     '繙': '翻',  # fān
     '鬮': '鳩',  # jiū
     '捫': '悶',  # mèn
+    '輜': '資',  # zī — added 2026-08-12 per user direction
+    '驕': '嬌',  # jiāo — added 2026-08-12 per user direction
 }
 
 # Frozen snapshot for safety (prevents accidental mutation)

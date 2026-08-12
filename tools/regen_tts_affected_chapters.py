@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Regenerate TTS audio for chapters containing archaic CUV chars that Edge TTS
-zh-HK voices cannot pronounce correctly (櫺繙鬮捫 → 靈翻鳩悶).
+zh-HK voices cannot pronounce correctly (櫺繙鬮捫 → 靈翻鳩悶 + 輜→資 + 驕→嬌).
 
 This is a one-shot script that:
   1. Identifies chapters containing affected chars (using tts_char_substitutions)
@@ -10,18 +10,24 @@ This is a one-shot script that:
 
 Why a separate script (not just generate_tts_v2.py):
   - generate_tts_v2.py skips chapters in .tts_gen_log.json (1189 already done)
-  - We need to FORCE regen of 98 specific chapters
+  - We need to FORCE regen of specific chapters
   - This script does exactly that — does NOT touch the rest of the bible
 
 bible-data.json is NEVER modified by this script. Only audio files are regenerated.
 
-User mapping (verified 2026-08-10):
+User mapping (initial 4 verified 2026-08-10, +2 added 2026-08-12):
   櫺 → 靈 (líng) — "window lattice" → "spirit/lattice"
   繙 → 翻 (fān)  — "translate" → "turn over"
   鬮 → 鳩 (jiū)  — "cast lots" → "dove/pigeon"
   捫 → 悶 (mèn)  — "touch" → "stuffy/depressed"
+  輜 → 資 (zī)   — "baggage" → "resources"
+  驕 → 嬌 (jiāo) — "arrogance" → "delicate"
 
-98 chapters across 35 books affected.
+98 chapters across 35 books affected (original 4-char regen, 2026-08-11).
+62 additional chapters affected (new 2-char regen, 2026-08-12):
+  - 30 F (odd chapter, zh-HK-HiuGaaiNeural)
+  - 32 M (even chapter, zh-HK-WanLungNeural)
+  - Includes 番 2 (捫+驕) and 撒上 17 (輜+驕) which need both mappings applied
 """
 import asyncio
 import edge_tts
@@ -70,7 +76,8 @@ async def save_and_verify(text: str, voice: str, output_path: str) -> tuple[bool
 
 
 def find_affected_chapters() -> list[tuple[str, int]]:
-    """Scan bible-data.json for chapters containing affected chars."""
+    """Scan bible-data.json for chapters containing any TTS-affected char.
+    v3 (2026-08-12): now includes 輜 and 驕. Chapter count = 159 (was 98)."""
     with open(BIBLE_DATA, "r", encoding="utf-8") as f:
         data = json.load(f)
 
@@ -79,6 +86,23 @@ def find_affected_chapters() -> list[tuple[str, int]]:
         for ch_num, verses in data["data"][abbr].items():
             chapter_text = "".join(v[1] for v in verses)
             if any(c in chapter_text for c in TTS_CHAR_MAP):
+                affected.append((abbr, int(ch_num)))
+    return affected
+
+
+def find_new_only_chapters(new_chars: set[str]) -> list[tuple[str, int]]:
+    """Scan bible-data.json for chapters containing ONLY new chars (not old 4).
+    v3 (2026-08-12): only regen chapters with new 2 chars; leave previous 98 untouched.
+    """
+    old_chars = set(TTS_CHAR_MAP) - new_chars
+    with open(BIBLE_DATA, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    affected = []
+    for abbr in data["data"]:
+        for ch_num, verses in data["data"][abbr].items():
+            chapter_text = "".join(v[1] for v in verses)
+            if any(c in chapter_text for c in new_chars):
                 affected.append((abbr, int(ch_num)))
     return affected
 
@@ -116,9 +140,19 @@ async def regenerate_one(abbr: str, chapter: int, verses: list) -> dict:
 
 
 async def main():
-    affected = find_affected_chapters()
+    import sys
+    # CLI: --new-only restricts to chapters with only the new 2 chars
+    new_only = '--new-only' in sys.argv
+    NEW_CHARS = {'輜', '驕'}
+    if new_only:
+        affected = find_new_only_chapters(NEW_CHARS)
+        scope = f"new-only (chapters containing {NEW_CHARS}, not in previous 98 batch)"
+    else:
+        affected = find_affected_chapters()
+        scope = "all 6 affected chars"
     print(f"[REGEN TTS — affected chapters]")
-    print(f"  Mapping: 櫺→靈, 繙→翻, 鬮→鳩, 捫→悶")
+    print(f"  Scope: {scope}")
+    print(f"  Mapping: 櫺→靈, 繙→翻, 鬮→鳩, 捫→悶, 輜→資, 驕→嬌")
     print(f"  Affected chapters: {len(affected)}")
     print(f"  Output: {BASE_DIR}")
     print(f"  Source bible data: {BIBLE_DATA} (UNTOUCHED)")
