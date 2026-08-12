@@ -1,6 +1,6 @@
 /* eslint-disable no-undef */
 
-const CACHE_NAME = 'bible-quest-v14' // bump v13→v14: re-regen 98 chapters with explicit sub verification (STT-confirmed subbed 4/4 sample). v13 deployed 08-11 04:58 but mp3 content was unsubstituted (silent 捫/鬮/繙/櫺 chars). v14 re-ran regen with sub_check log per chapter. bible-data.json untouched.
+const CACHE_NAME = 'bible-quest-v15' // bump v14→v15: 2 new char substitutions (輜→資, 驕→嬌) + regen 62 chapters + split-regen 撒上17 (was 600s silent-trunc → 678.5s full) + 詩119 split-regen confirmed (1119.1s). bible-data.json untouched. 6 char mappings total: 櫺繙鬮捫輜驕 → 靈翻鳩悶資嬌. All 6 mapping audio verify-pass via human-ear Telegram MEDIA clips.
 
 // ─── Install ──────────────────────────────────────────────────────────────────
 self.addEventListener('install', (event) => {
