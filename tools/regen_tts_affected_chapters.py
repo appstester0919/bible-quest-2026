@@ -141,18 +141,18 @@ async def regenerate_one(abbr: str, chapter: int, verses: list) -> dict:
 
 async def main():
     import sys
-    # CLI: --new-only restricts to chapters with only the new 2 chars
+    # CLI: --new-only restricts to chapters with only the new 6 chars (2026-08-14 round 3)
     new_only = '--new-only' in sys.argv
-    NEW_CHARS = {'輜', '驕'}
+    NEW_CHARS = {'軛', '縋', '讒', '貲', '賙', '單'}  # round 3 additions 2026-08-14
     if new_only:
         affected = find_new_only_chapters(NEW_CHARS)
-        scope = f"new-only (chapters containing {NEW_CHARS}, not in previous 98 batch)"
+        scope = f"new-only (chapters containing {NEW_CHARS}, not in previous 159 batch)"
     else:
         affected = find_affected_chapters()
-        scope = "all 6 affected chars"
+        scope = "all 12 affected chars"
     print(f"[REGEN TTS — affected chapters]")
     print(f"  Scope: {scope}")
-    print(f"  Mapping: 櫺→靈, 繙→翻, 鬮→鳩, 捫→悶, 輜→資, 驕→嬌")
+    print(f"  Mapping: 櫺→靈, 繙→翻, 鬮→鳩, 捫→悶, 輜→資, 驕→嬌, 軛→厄, 縋→墜, 讒→慚, 貲→資, 賙→周, 單→丹")
     print(f"  Affected chapters: {len(affected)}")
     print(f"  Output: {BASE_DIR}")
     print(f"  Source bible data: {BIBLE_DATA} (UNTOUCHED)")

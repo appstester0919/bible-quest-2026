@@ -1,6 +1,6 @@
 /* eslint-disable no-undef */
 
-const CACHE_NAME = 'bible-quest-v15' // bump v14→v15: 2 new char substitutions (輜→資, 驕→嬌) + regen 62 chapters + split-regen 撒上17 (was 600s silent-trunc → 678.5s full) + 詩119 split-regen confirmed (1119.1s). bible-data.json untouched. 6 char mappings total: 櫺繙鬮捫輜驕 → 靈翻鳩悶資嬌. All 6 mapping audio verify-pass via human-ear Telegram MEDIA clips.
+const CACHE_NAME = 'bible-quest-v16' // bump v15→v16: 6 new char substitutions (軛→厄, 縋→墜, 讒→慚, 貲→資, 賙→周, 單→丹) + regen 148 chapters. bible-data.json untouched. 12 char mappings total: 櫺繙鬮捫輜驕軛縋讒貲賙單 → 靈翻鳩悶資嬌厄墜慚資周丹. All 12 mappings audio verify-pass via human-ear Telegram MEDIA clips. 0 silent-truncation, max dur 589.6s.
 
 // ─── Install ──────────────────────────────────────────────────────────────────
 self.addEventListener('install', (event) => {

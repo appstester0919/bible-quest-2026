@@ -10,6 +10,13 @@ zh-HK voices (HiuGaaiNeural, WanLungNeural) cannot pronounce correctly:
   - 捫 (mén, "touch/feel") → SILENT / garbled
   - 輜 (zī, "baggage/supplies") → SILENT in 輜重 / 輜重車 context
   - 驕 (jiāo, "arrogance") → misread (gài instead of jiāo) in 驕傲 context
+  - 軛 (è, "yoke") → SILENT in 軛 / 重軛 / 鐵軛 context (52x, 20 books)
+  - 縋 (zhuì, "descend by rope") → SILENT in 縋下 / 縋下去 context (10x, 7 books)
+  - 讒 (chán, "slander") → SILENT in 讒言 / 讒謗 / 讒毀 context (18x, 11 books)
+  - 貲 (zī, "donation/wealth") → SILENT in 捐貲 context (2x, 林後 only)
+  - 賙 (zhōu, "relieve poor") → SILENT in 賙濟 context (19x, 10 books)
+  - 單 (dān/shàn/chán, "single/proper name") → misread as 善 (shàn) by zh-HK
+    voices. User chose blanket → 丹 (199x, 29 books) to avoid the misread entirely.
 
 We do NOT modify public/bible-data.json — that would double file size and slow
 down Bible reading load time. Instead, this module provides a substitution that
@@ -25,12 +32,23 @@ USER-PROVIDED MAPPING:
   捫 → 悶 (mèn)   — "touch" → "stuffy/depressed"; sounds match Cantonese + Mandarin
   輜 → 資 (zī)    — "baggage" → "resources"; homophone, user accepted 2026-08-12
   驕 → 嬌 (jiāo)  — "arrogance" → "delicate"; homophone, user suggested 2026-08-12
+  軛 → 厄 (è)     — "yoke" → "hardship/strait"; homophone, user accepted 2026-08-14
+  縋 → 墜 (zhuì)  — "descend by rope" → "fall/drop"; exact semantic match
+  讒 → 慚 (cán)   — "slander" → "ashamed"; user accepts semantic shift, audible ok
+  貲 → 資 (zī)    — reuse existing 資 mapping (Cantonese match)
+  賙 → 周 (zhōu)  — "relieve poor" → "周濟" is a real word; user accepted 2026-08-14
+  單 → 丹 (dān)   — blanket sub to avoid zh-HK TTS misreading as 善 (shàn);
+    affects 199 verses across 29 books (most are 單獨/單單/單靠 semantic shift)
 
 Confirmed via sample MP3 tests on the existing 4 mappings (2026-08-10).
 New 2 mappings (輜, 驕) added 2026-08-12 per user direction.
+New 6 mappings (軛, 縋, 讒, 貲, 賙, 單) added 2026-08-14 per user Cantonese ear
+verification — original chars all SILENT in zh-HK voices (單 additionally misreads
+as 善). User directed semantic-shift accept to avoid silent/misread output.
 
-AFFECTED VERSES: ~220 verses across 30+ books (212 from original 4 + 6 輜 + 75 驕).
-  Books affected: 創/利/民/申/書士撒上撒下王上王下代上代下拉尼伯詩箴歌賽耶結但珥摩俄彌鴻番太可路約徒林前來
+AFFECTED VERSES: ~520 verses across 40+ books (212 from original 4 + 6 輜 + 75 驕
+  + 52 軛 + 10 縋 + 18 讒 + 2 貲 + 19 賙 + 199 單).
+  Books affected: 創/利/民/申/書士撒上撒下王上王下代上代下拉尼伯詩箴歌賽耶結但珥摩俄彌鴻番太可路約徒林前林後來/plus new: 哀/傳/出/亞/何/加/多/提前/提後/斯/士/耶/珥/摩
 
 REGENERATION SCOPE: any chapter containing affected chars needs regen.
 Use `regen_tts_affected_chapters.py` after wiring this module in.
@@ -54,6 +72,12 @@ TTS_CHAR_MAP: dict[str, str] = {
     '捫': '悶',  # mèn
     '輜': '資',  # zī — added 2026-08-12 per user direction
     '驕': '嬌',  # jiāo — added 2026-08-12 per user direction
+    '軛': '厄',  # è — added 2026-08-14 per user Cantonese ear verify
+    '縋': '墜',  # zhuì — added 2026-08-14 per user Cantonese ear verify
+    '讒': '慚',  # cán — added 2026-08-14 per user Cantonese ear verify
+    '貲': '資',  # zī — added 2026-08-14 per user Cantonese ear verify
+    '賙': '周',  # zhōu — added 2026-08-14 per user Cantonese ear verify
+    '單': '丹',  # dān — added 2026-08-14 per user Cantonese ear verify (blanket)
 }
 
 # Frozen snapshot for safety (prevents accidental mutation)
