@@ -712,10 +712,14 @@ export async function getIncompleteGroupMembersToday(): Promise<{
     .eq('date_local', today)
   const completedToday = new Set((todayCheckins || []).map(c => c.user_id))
 
-  // Belt-and-suspenders: also check reading_sessions with grace window
+  // Belt-and-suspenders: also check reading_sessions with a wide grace window
   // (covers the case where markDayCompleteBatch was called but the group
-  // checkin hasn't been rolled up yet)
-  const graceStart = new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString()
+  // checkin hasn't been rolled up yet, AND the 2026-08-13 CityBUs HKT
+  // midnight bug where late-night checkins write date_local=next day).
+  // Window: 14h ago → 4h from now. Centered around "did this user read
+  // sometime in the last 14 hours?" — covers HKT 23:00 yesterday through
+  // HKT 04:00 today even when sender queries at HKT noon.
+  const graceStart = new Date(Date.now() - 14 * 60 * 60 * 1000).toISOString()
   const graceEnd = new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString()
   const { data: recentSessions } = await supabase
     .from('reading_sessions')
