@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { subscribeToPush, unsubscribeFromPush, getPushPermissionStatus } from '@/lib/push'
 import { updateDisplayName } from '@/lib/groupActions'
-import { updateIdentity as updateIdentityAction } from './actions'
+import { updateIdentity as updateIdentityAction, updateReceiveNudges as updateReceiveNudgesAction } from './actions'
 import { getRequiredDays } from '@/lib/bible/scope'
 import type { Scope } from '@/lib/bible/scope'
 import { ALL_IDENTITIES, IDENTITIES, DEFAULT_IDENTITY, isIdentity, type Identity } from '@/lib/identity'
@@ -56,6 +56,10 @@ export default function SettingsPage() {
   const [displayName, setDisplayName] = useState('')
   const [savingName, setSavingName] = useState(false)
   const [nameSaved, setNameSaved] = useState(false)
+  // Receive nudges toggle — controls whether other group members can send
+  // reading reminders to this user. Default ON matches DB schema default.
+  const [receiveNudges, setReceiveNudges] = useState(true)
+  const [receiveNudgesSaving, setReceiveNudgesSaving] = useState(false)
 
   useEffect(() => {
     setPushPermission(getPushPermissionStatus())
@@ -85,8 +89,26 @@ export default function SettingsPage() {
     fetchEnrollment()
     fetchDisplayName()
     fetchIdentity()
+    fetchReceiveNudges()
     fetchReminderSchedule()
   }, [])
+
+  async function fetchReceiveNudges() {
+    // Read the user's current receive_nudges preference from their profile.
+    // DB default is true, so if the row is missing we treat it as true.
+    const supabase = createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+    const { data } = await supabase
+      .from('profiles')
+      .select('receive_nudges')
+      .eq('id', user.id)
+      .maybeSingle()
+    // Explicitly check for false so we only flip on a real value, not a missing column.
+    if (data && typeof data.receive_nudges === 'boolean') {
+      setReceiveNudges(data.receive_nudges)
+    }
+  }
 
   async function fetchReminderSchedule() {
     // Hydrate the hour/minute dropdowns from the user's most recent active
@@ -372,6 +394,24 @@ export default function SettingsPage() {
     }
   }
 
+  async function handleToggleReceiveNudges(newValue: boolean) {
+    if (newValue === receiveNudges) return
+    // Optimistic update — flip immediately so the toggle feels snappy,
+    // revert on error so the UI doesn't lie about persisted state.
+    const previous = receiveNudges
+    setReceiveNudges(newValue)
+    setReceiveNudgesSaving(true)
+    try {
+      const result = await updateReceiveNudgesAction(newValue)
+      if (!result.ok) throw new Error(result.error)
+    } catch (err) {
+      setReceiveNudges(previous)
+      alert('更新提醒設定失敗: ' + (err instanceof Error ? err.message : String(err)))
+    } finally {
+      setReceiveNudgesSaving(false)
+    }
+  }
+
   return (
     <div className="min-h-screen bg-[var(--color-background)]">
       <header className="bg-white px-4 py-3 flex items-center gap-3 shadow-sm">
@@ -464,6 +504,61 @@ export default function SettingsPage() {
               {savingName ? '...' : nameSaved ? '✓' : '保存'}
             </button>
           </div>
+        </div>
+
+        {/* Receive Nudges — controls whether group members can send reading
+            reminders to this user. Server-side filter lives in sendNudge()
+            (lib/groupActions.ts) which drops recipients with receive_nudges=false
+            BEFORE the sender's quota is deducted. UI toggles here are the
+            user's preference layer. */}
+        <div className="bg-white rounded-2xl p-5 shadow-sm">
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex-1 min-w-0">
+              <h2 className="text-lg font-bold text-[var(--color-primary)] mb-1">
+                📣 接收組員提醒
+              </h2>
+              <p className="text-sm text-[var(--color-muted)]">
+                關咗之後，其他組員將無法向你發送讀經提醒
+              </p>
+            </div>
+            <label
+              className={
+                'relative inline-flex items-center cursor-pointer flex-shrink-0 mt-1 ' +
+                (receiveNudgesSaving ? 'opacity-60 pointer-events-none' : '')
+              }
+            >
+              <input
+                type="checkbox"
+                checked={receiveNudges}
+                onChange={(e) => handleToggleReceiveNudges(e.target.checked)}
+                disabled={receiveNudgesSaving}
+                aria-label="接收組員提醒"
+                className="sr-only peer"
+              />
+              {/* Track */}
+              <span
+                className={
+                  'w-11 h-6 rounded-full transition-colors ' +
+                  (receiveNudges
+                    ? 'bg-[var(--color-success)]'
+                    : 'bg-gray-300')
+                }
+              />
+              {/* Thumb */}
+              <span
+                className={
+                  'absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ' +
+                  (receiveNudges ? 'translate-x-5' : 'translate-x-0')
+                }
+              />
+            </label>
+          </div>
+          <p className="text-xs text-[var(--color-muted)] mt-3">
+            當前狀態：
+            <span className={'font-bold ml-1 ' + (receiveNudges ? 'text-[var(--color-success)]' : 'text-[var(--color-muted)]')}>
+              {receiveNudges ? '已啟用（接收提醒）' : '已關閉（拒收提醒）'}
+            </span>
+          </p>
         </div>
 
         {/* Push Notifications — daily reminder via Web Push */}
