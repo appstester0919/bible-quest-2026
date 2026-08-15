@@ -20,6 +20,7 @@ import {
   type GroupWithProgress,
   type PendingRequestInfo,
 } from '@/lib/groupActions'
+import { NudgeButton } from '@/components/NudgeButton'
 
 interface Profile {
   id: string
@@ -556,6 +557,11 @@ export default function DashboardPage() {
                 + 建立
               </button>
             </div>
+          </div>
+
+          {/* NudgeButton — self-hides unless user completed today + has group quota + has membership */}
+          <div className="mb-3">
+            <NudgeButton />
           </div>
 
           {/* Admin pending requests */}
