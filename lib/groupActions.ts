@@ -836,7 +836,19 @@ export async function sendNudge(
   }
 
   // ── Fire push via /api/push/nudge (Best-effort, parallel) ─────────────────
-  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || ''
+  // v0.5.2 (2026-08-15): Node22 fetch requires absolute URL. Empty baseUrl
+  // (NEXT_PUBLIC_BASE_URL unset in Vercel) made fetch('/api/push/nudge') throw
+  // "Failed to parse URL from /api/push/nudge" — every nudge appeared
+  // push_delivered=false. Fallback chain:
+  //   1. NEXT_PUBLIC_BASE_URL (operator override)
+  //   2. VERCEL_PROJECT_PRODUCTION_URL (auto-set by Vercel)
+  //   3. Hardcoded production hostname (last resort)
+  const baseUrl =
+    process.env.NEXT_PUBLIC_BASE_URL ||
+    (process.env.VERCEL_PROJECT_PRODUCTION_URL
+      ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+      : '') ||
+    'https://biblequest2026.vercel.app'
   const cronToken = process.env.CRON_RELAY_TOKEN
   let delivered = 0
 
