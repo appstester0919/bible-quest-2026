@@ -624,12 +624,17 @@ export default function SettingsPage() {
                       body: JSON.stringify({}),
                     })
                     const json = await resp.json()
-                    interface PushResult { ok: boolean }
+                    interface PushResult { ok: boolean; expired?: boolean; status?: number }
                     const results: PushResult[] = Array.isArray(json.results) ? json.results : []
-                    const failed = results.filter((r: PushResult) => !r.ok)
-                    if (resp.ok && failed.length === 0) {
+                    const okCount = results.filter(r => r.ok).length
+                    const expiredCount = results.filter(r => !r.ok && r.expired).length
+                    const failedCount = results.filter(r => !r.ok && !r.expired).length
+                    if (resp.ok && okCount > 0 && failedCount === 0) {
                       const attempted = typeof json.attempted === 'number' ? json.attempted : results.length
-                      alert(`✅ 已發送測試推送 (${attempted} 個裝置)。檢查你的通知中心。`)
+                      const tail = expiredCount > 0 ? `\n(${expiredCount} 個已過期裝置已自動清理)` : ''
+                      alert(`✅ 已發送測試推送 (${okCount}/${attempted} 個裝置)。檢查你的通知中心。${tail}`)
+                    } else if (resp.ok && okCount === 0 && failedCount === 0 && expiredCount > 0) {
+                      alert(`⚠️ 所有裝置都已過期，已自動清理。請重新訂閱通知。`)
                     } else {
                       alert('❌ 推送失敗:\n' + JSON.stringify(json, null, 2))
                     }
