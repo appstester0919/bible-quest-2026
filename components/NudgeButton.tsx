@@ -41,44 +41,30 @@ export function NudgeButton() {
         return
       }
 
+      // Check if user completed today's reading using HKT date_local.
+      // Uses date_local (not created_at) to match markDayCompleteBatch's insert
+      // date, which is the HKT calendar day — timezone-safe, no grace window
+      // edge cases.
+      // ── Parallel reads for: today's reading, quota, membership, profile ──────────
       const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Hong_Kong' })
-      const graceStart = new Date(Date.now() - 14 * 60 * 60 * 1000).toISOString()
-
-      // Run all 4 reads in parallel — they're independent.
-      const [sessionsResult, nudgesResult, membershipsResult, profileResult] = await Promise.all([
-        supabase
-          .from('reading_sessions')
-          .select('id')
-          .eq('user_id', user.id)
-          .gte('created_at', graceStart)
-          .limit(1)
-          .maybeSingle(),
-        supabase
-          .from('group_nudges')
-          .select('id')
-          .eq('sender_id', user.id)
-          .eq('nudge_date_local', today)
-          .limit(1)
-          .maybeSingle(),
-        supabase
-          .from('group_members')
-          .select('group_id')
-          .eq('user_id', user.id)
-          .limit(1)
-          .maybeSingle(),
-        supabase
-          .from('profiles')
-          .select('display_name')
-          .eq('id', user.id)
-          .maybeSingle(),
+      const [
+        { data: todaySession },
+        { data: nudgeRow },
+        { data: memberRow },
+        { data: profile },
+      ] = await Promise.all([
+        supabase.from('reading_sessions').select('id').eq('user_id', user.id).eq('date_local', today).limit(1).maybeSingle(),
+        supabase.from('group_nudges').select('id').eq('sender_id', user.id).eq('nudge_date_local', today).limit(1).maybeSingle(),
+        supabase.from('group_members').select('group_id').eq('user_id', user.id).limit(1).maybeSingle(),
+        supabase.from('profiles').select('display_name').eq('id', user.id).maybeSingle(),
       ])
 
-      setHasCompletedToday(!!sessionsResult.data)
-      setQuotaUsed(!!nudgesResult.data)
-      setHasMembership(!!membershipsResult.data)
+      setHasCompletedToday(!!todaySession)
+      setQuotaUsed(!!nudgeRow)
+      setHasMembership(!!memberRow)
 
       // Sender name: profile.display_name, fallback to email-prefix, fallback to '組員'.
-      const raw = profileResult.data?.display_name?.trim()
+      const raw = profile?.display_name?.trim()
       if (raw) {
         setSenderName(raw.length <= 3 ? raw : raw.slice(0, 3))
       } else {
