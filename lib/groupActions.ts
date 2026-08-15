@@ -604,3 +604,263 @@ export async function renameGroup(groupId: string, newName: string): Promise<{ s
   revalidatePath('/dashboard')
   return { success: true }
 }
+
+// ─── Group nudge (Duolingo Friend Streak pattern) ────────────────────────────
+// v0.3 (2026-08-15). Server actions for the "nudge member who hasn't completed
+// today's reading" feature. Spec: ~/.hermes/plans/bible-quest-2026-group-nudge-2026-08-15.md
+
+/** Recipient shape accepted by sendNudge(). Trimmed at the UI boundary. */
+interface NudgeRecipient {
+  user_id: string
+  display_name: string
+  group_id: string
+}
+
+/** Return shape for sendNudge. */
+interface SendNudgeResult {
+  ok: boolean
+  delivered?: number      // count of push notifications that returned 2xx
+  error?: string
+  conflictedIds?: string[] // recipients the sender already nudged today
+}
+
+/**
+ * Internal: has the sender already sent a nudge today (cross-group, 1/day)?
+ * Returns the set of recipient_ids the sender has already nudged today.
+ */
+async function checkSenderQuota(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  senderId: string,
+  dateLocal: string
+): Promise<Set<string>> {
+  const { data } = await supabase
+    .from('group_nudges')
+    .select('recipient_id')
+    .eq('sender_id', senderId)
+    .eq('nudge_date_local', dateLocal)
+  return new Set((data || []).map(r => r.recipient_id))
+}
+
+/**
+ * Internal: filter out recipients the sender has already nudged today.
+ * Cross-receiver dedup: if ANY recipient already on the sent list, the sender
+ * is blocked entirely (sender's 1/day quota is enforced upstream — see spec).
+ * Returns the list of recipient_ids that would conflict.
+ */
+async function checkRecipientsQuota(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  senderId: string,
+  recipientIds: string[],
+  dateLocal: string
+): Promise<string[]> {
+  if (recipientIds.length === 0) return []
+  const { data } = await supabase
+    .from('group_nudges')
+    .select('recipient_id')
+    .eq('sender_id', senderId)
+    .eq('nudge_date_local', dateLocal)
+    .in('recipient_id', recipientIds)
+  return (data || []).map(r => r.recipient_id)
+}
+
+/**
+ * Get all members across sender's groups who have NOT completed today's reading
+ * (HKT ±4h grace window via reading_sessions.created_at, to avoid the 2026-08-13
+ * HKT-midnight bug where a late-night checkin was bucketed as next-day).
+ *
+ * Dedupe by user_id across groups (a user in multiple groups with the sender
+ * appears once; group_id is the first membership found).
+ */
+export async function getIncompleteGroupMembersToday(): Promise<{
+  members: NudgeRecipient[]
+  error?: string
+}> {
+  const { supabase, user } = await getAuthUser()
+  if (!user) return { members: [], error: 'Not authenticated' }
+
+  // 1. Sender's groups
+  const { data: memberships, error: mErr } = await supabase
+    .from('group_members')
+    .select('group_id')
+    .eq('user_id', user.id)
+  if (mErr) return { members: [], error: mErr.message }
+  if (!memberships || memberships.length === 0) return { members: [] }
+
+  const groupIds = memberships.map(m => m.group_id)
+
+  // 2. All members of those groups except self
+  const { data: allMembers, error: amErr } = await supabase
+    .from('group_members')
+    .select('group_id, user_id, display_name')
+    .in('group_id', groupIds)
+    .neq('user_id', user.id)
+  if (amErr) return { members: [], error: amErr.message }
+  if (!allMembers || allMembers.length === 0) return { members: [] }
+
+  // 3. Members who completed today's reading — use the group's local date
+  //    PLUS a ±4h grace window on reading_sessions.created_at. The grace
+  //    window catches late-night checkins around the HKT midnight boundary
+  //    that would otherwise be bucketed into the next day.
+  const today = getHKTDateStr()
+
+  const otherUserIds = [...new Set(allMembers.map(m => m.user_id))]
+  const { data: todayCheckins } = await supabase
+    .from('group_checkins')
+    .select('user_id')
+    .in('user_id', otherUserIds)
+    .in('group_id', groupIds)
+    .eq('date_local', today)
+  const completedToday = new Set((todayCheckins || []).map(c => c.user_id))
+
+  // Belt-and-suspenders: also check reading_sessions with grace window
+  // (covers the case where markDayCompleteBatch was called but the group
+  // checkin hasn't been rolled up yet)
+  const graceStart = new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString()
+  const graceEnd = new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString()
+  const { data: recentSessions } = await supabase
+    .from('reading_sessions')
+    .select('user_id')
+    .in('user_id', otherUserIds)
+    .gte('created_at', graceStart)
+    .lte('created_at', graceEnd)
+  const recentUserIds = new Set((recentSessions || []).map(s => s.user_id))
+
+  // 4. Filter & dedupe by user_id (cross-group aggregation). group_id = first
+  //    membership found for that user.
+  const seen = new Map<string, NudgeRecipient>()
+  for (const m of allMembers) {
+    if (seen.has(m.user_id)) continue
+    if (completedToday.has(m.user_id)) continue
+    if (recentUserIds.has(m.user_id)) continue
+    seen.set(m.user_id, {
+      user_id: m.user_id,
+      display_name: m.display_name,
+      group_id: m.group_id,
+    })
+  }
+
+  return { members: [...seen.values()] }
+}
+
+/**
+ * Send a nudge to up to 5 recipients. Server-side authority for:
+ *   - sender 1/day quota (cross-group)
+ *   - receiver 1/day per (sender, recipient, date)
+ *   - receive_nudges=false filter (BEFORE insert, sender quota not deducted)
+ *   - audit (insert group_nudges row)
+ *   - push fire-and-forget via /api/push/nudge POST
+ *
+ * The caller (UI) has already filled [SENDER_NAME] in `messageBody` via
+ * fillNudgeSenderName() — we do NOT touch the body here.
+ */
+export async function sendNudge(
+  recipients: NudgeRecipient[],
+  messageBody: string
+): Promise<SendNudgeResult> {
+  const { supabase, user } = await getAuthUser()
+  if (!user) return { ok: false, error: 'Not authenticated' }
+
+  // ── Validation ─────────────────────────────────────────────────────────────
+  if (!recipients || recipients.length === 0) {
+    return { ok: false, error: 'no_recipients' }
+  }
+  if (recipients.length > 5) {
+    return { ok: false, error: 'too_many_recipients' }
+  }
+  if (!messageBody || !messageBody.trim()) {
+    return { ok: false, error: 'empty_message' }
+  }
+
+  const today = getHKTDateStr()
+  const trimmedBody = messageBody.trim()
+
+  // ── Sender quota: cross-group 1/day ───────────────────────────────────────
+  // Per spec: sender side blocks if ANY recipient already nudged today.
+  const alreadySent = await checkSenderQuota(supabase, user.id, today)
+  if (alreadySent.size > 0) {
+    return { ok: false, error: 'sender_quota_used' }
+  }
+
+  // ── Receiver quota: 1/day per (sender, recipient, date) ───────────────────
+  const recipientIds = [...new Set(recipients.map(r => r.user_id))]
+  const conflictedIds = await checkRecipientsQuota(supabase, user.id, recipientIds, today)
+  if (conflictedIds.length > 0) {
+    return { ok: false, error: 'recipient_quota_used', conflictedIds }
+  }
+
+  // ── Filter out receive_nudges=false BEFORE insert (no sender quota cost) ──
+  const { data: profiles, error: pErr } = await supabase
+    .from('profiles')
+    .select('id, receive_nudges')
+    .in('id', recipientIds)
+  if (pErr) return { ok: false, error: pErr.message }
+  const disabled = new Set(
+    (profiles || []).filter(p => p.receive_nudges === false).map(p => p.id)
+  )
+  const enabledRecipients = recipients.filter(r => !disabled.has(r.user_id))
+  if (enabledRecipients.length === 0) {
+    return { ok: true, delivered: 0, error: 'all_recipients_disabled' }
+  }
+
+  // ── Insert group_nudges rows (one per enabled recipient) ───────────────────
+  const rows = enabledRecipients.map(r => ({
+    sender_id: user.id,
+    recipient_id: r.user_id,
+    group_id: r.group_id,
+    custom_message: trimmedBody,
+    message_template: null,
+    nudge_date_local: today,
+    push_delivered: false,
+  }))
+  const { data: inserted, error: insErr } = await supabase
+    .from('group_nudges')
+    .insert(rows)
+    .select('id, recipient_id, group_id')
+  if (insErr) return { ok: false, error: insErr.message }
+  if (!inserted || inserted.length === 0) {
+    return { ok: true, delivered: 0 }
+  }
+
+  // ── Fire push via /api/push/nudge (Best-effort, parallel) ─────────────────
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || ''
+  const cronToken = process.env.CRON_RELAY_TOKEN
+  let delivered = 0
+
+  if (cronToken) {
+    const pushPromises = inserted.map(async (row) => {
+      try {
+        const res = await fetch(`${baseUrl}/api/push/nudge`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${cronToken}`,
+          },
+          body: JSON.stringify({
+            nudge_id: row.id,
+            recipient_id: row.recipient_id,
+            group_id: row.group_id,
+            body: trimmedBody,
+          }),
+        })
+        if (res.ok) {
+          await supabase
+            .from('group_nudges')
+            .update({ push_delivered: true })
+            .eq('id', row.id)
+          return true
+        }
+        console.warn('[sendNudge] push failed for', row.id, res.status, await res.text().catch(() => ''))
+        return false
+      } catch (e) {
+        console.error('[sendNudge] push threw for', row.id, e instanceof Error ? e.message : String(e))
+        return false
+      }
+    })
+    const results = await Promise.all(pushPromises)
+    delivered = results.filter(Boolean).length
+  } else {
+    console.warn('[sendNudge] CRON_RELAY_TOKEN not set; skipping push fan-out (rows persisted for audit)')
+  }
+
+  return { ok: true, delivered }
+}
