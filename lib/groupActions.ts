@@ -840,10 +840,7 @@ export async function sendNudge(
           }),
         })
         if (res.ok) {
-          await supabase
-            .from('group_nudges')
-            .update({ push_delivered: true })
-            .eq('id', row.id)
+          // push_delivered=true is already set by /api/push/nudge (service-role client)
           return true
         }
         console.warn('[sendNudge] push failed for', row.id, res.status, await res.text().catch(() => ''))
