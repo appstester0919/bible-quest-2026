@@ -702,37 +702,20 @@ export async function getIncompleteGroupMembersToday(): Promise<{
   if (amErr) return { members: [], error: amErr.message }
   if (!allMembers || allMembers.length === 0) return { members: [] }
 
-  // 3. Members who completed today's reading — use the group's local date
-  //    PLUS a ±4h grace window on reading_sessions.created_at. The grace
-  //    window catches late-night checkins around the HKT midnight boundary
-  //    that would otherwise be bucketed into the next day.
+  // 3. Members who completed today's reading — check reading_sessions.date_local
+  //    matching HKT today. This is the authoritative source populated by
+  //    markDayCompleteBatch. The CityBUs HKT-midnight edge case (2026-08-13)
+  //    is handled by using date_local (set by markDayCompleteBatch at insert
+  //    time using HKT date logic), which is deterministic and timezone-safe.
   const today = getHKTDateStr()
 
   const otherUserIds = [...new Set(allMembers.map(m => m.user_id))]
-  const { data: todayCheckins } = await supabase
-    .from('group_checkins')
-    .select('user_id')
-    .in('user_id', otherUserIds)
-    .in('group_id', groupIds)
-    .eq('date_local', today)
-  const completedToday = new Set((todayCheckins || []).map(c => c.user_id))
-
-  // Belt-and-suspenders: also check reading_sessions with a wide grace window
-  // (covers the case where markDayCompleteBatch was called but the group
-  // checkin hasn't been rolled up yet, AND the 2026-08-13 CityBUs HKT
-  // midnight bug where late-night checkins write date_local=next day).
-  // Window: 14h ago → 4h from now. Centered around "did this user read
-  // sometime in the last 14 hours?" — covers HKT 23:00 yesterday through
-  // HKT 04:00 today even when sender queries at HKT noon.
-  const graceStart = new Date(Date.now() - 14 * 60 * 60 * 1000).toISOString()
-  const graceEnd = new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString()
-  const { data: recentSessions } = await supabase
+  const { data: todaySessions } = await supabase
     .from('reading_sessions')
     .select('user_id')
     .in('user_id', otherUserIds)
-    .gte('created_at', graceStart)
-    .lte('created_at', graceEnd)
-  const recentUserIds = new Set((recentSessions || []).map(s => s.user_id))
+    .eq('date_local', today)
+  const completedToday = new Set((todaySessions || []).map(s => s.user_id))
 
   // 4. Filter & dedupe by user_id (cross-group aggregation). group_id = first
   //    membership found for that user.
@@ -740,7 +723,6 @@ export async function getIncompleteGroupMembersToday(): Promise<{
   for (const m of allMembers) {
     if (seen.has(m.user_id)) continue
     if (completedToday.has(m.user_id)) continue
-    if (recentUserIds.has(m.user_id)) continue
     seen.set(m.user_id, {
       user_id: m.user_id,
       display_name: m.display_name,
