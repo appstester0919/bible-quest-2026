@@ -710,12 +710,29 @@ export async function getIncompleteGroupMembersToday(): Promise<{
   const today = getHKTDateStr()
 
   const otherUserIds = [...new Set(allMembers.map(m => m.user_id))]
-  const { data: todaySessions } = await supabase
-    .from('reading_sessions')
-    .select('user_id')
-    .in('user_id', otherUserIds)
-    .eq('date_local', today)
-  const completedToday = new Set((todaySessions || []).map(s => s.user_id))
+
+  // v0.5.1 (2026-08-15): union both sources so markLessonComplete users (no
+  // explicit group_checkin write) still show as completed. Before: relied on
+  // reading_sessions RLS only, which filtered cross-member reads for non-admin
+  // senders — completedToday came back empty and every member looked nudgeable.
+  // reading_sessions SELECT RLS is now relaxed in migration
+  // 20260816000001_reading_sessions_select_for_members.sql.
+  const [{ data: todaySessions }, { data: todayCheckins }] = await Promise.all([
+    supabase
+      .from('reading_sessions')
+      .select('user_id')
+      .in('user_id', otherUserIds)
+      .eq('date_local', today),
+    supabase
+      .from('group_checkins')
+      .select('user_id')
+      .in('user_id', otherUserIds)
+      .eq('date_local', today),
+  ])
+  const completedToday = new Set([
+    ...((todaySessions || []).map(s => s.user_id)),
+    ...((todayCheckins || []).map(c => c.user_id)),
+  ])
 
   // 4. Filter & dedupe by user_id (cross-group aggregation). group_id = first
   //    membership found for that user.
