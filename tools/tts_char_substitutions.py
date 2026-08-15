@@ -17,6 +17,9 @@ zh-HK voices (HiuGaaiNeural, WanLungNeural) cannot pronounce correctly:
   - 賙 (zhōu, "relieve poor") → SILENT in 賙濟 context (19x, 10 books)
   - 單 (dān/shàn/chán, "single/proper name") → misread as 善 (shàn) by zh-HK
     voices. User chose blanket → 丹 (199x, 29 books) to avoid the misread entirely.
+  - 搆 (gòu, "reach/attain") → SILENT in 搆到 context (4x, 賽/林後)
+  - 誆 (kuāng, "deceive") → SILENT in 誆哄 context (4x, 士/撒下/王上)
+  - 柺 (guǎi, "crutch/cane") → SILENT in 柺杖/架柺 context (5x, 創/撒下/亞/太/可)
 
 We do NOT modify public/bible-data.json — that would double file size and slow
 down Bible reading load time. Instead, this module provides a substitution that
@@ -39,16 +42,24 @@ USER-PROVIDED MAPPING:
   賙 → 周 (zhōu)  — "relieve poor" → "周濟" is a real word; user accepted 2026-08-14
   單 → 丹 (dān)   — blanket sub to avoid zh-HK TTS misreading as 善 (shàn);
     affects 199 verses across 29 books (most are 單獨/單單/單靠 semantic shift)
+  搆 → 夠 (gòu)   — "reach" → "enough"; user accepted semantic shift 2026-08-16
+  誆 → 康 (kāng)  — "deceive" → "healthy/well"; semantic shift per user direction 2026-08-16
+  柺 → 拐 (guǎi)  — traditional → simplified of same word; zero semantic loss 2026-08-16
+  邑 → 泣 (qì)    — "city/town" → "cry"; semantic shift per user direction 2026-08-16
+  珥 → 耳 (ěr)    — proper-noun placeholder → "ear"; semantic shift per user direction 2026-08-16
 
 Confirmed via sample MP3 tests on the existing 4 mappings (2026-08-10).
 New 2 mappings (輜, 驕) added 2026-08-12 per user direction.
 New 6 mappings (軛, 縋, 讒, 貲, 賙, 單) added 2026-08-14 per user Cantonese ear
 verification — original chars all SILENT in zh-HK voices (單 additionally misreads
 as 善). User directed semantic-shift accept to avoid silent/misread output.
+New 3 mappings (搆, 誆, 柺) added 2026-08-16 per user Cantonese ear verification —
+all 3 chars SILENT in zh-HK voices. 搆→夠 and 誆→框 are semantic shifts; 柺→拐 is
+traditional-to-simplified of the same word.
 
-AFFECTED VERSES: ~520 verses across 40+ books (212 from original 4 + 6 輜 + 75 驕
-  + 52 軛 + 10 縋 + 18 讒 + 2 貲 + 19 賙 + 199 單).
-  Books affected: 創/利/民/申/書士撒上撒下王上王下代上代下拉尼伯詩箴歌賽耶結但珥摩俄彌鴻番太可路約徒林前林後來/plus new: 哀/傳/出/亞/何/加/多/提前/提後/斯/士/耶/珥/摩
+AFFECTED VERSES: ~534 verses across 40+ books (212 original 4 + 6 輜 + 75 驕 + 52
+  軛 + 10 縋 + 18 讒 + 2 貲 + 19 賙 + 199 單 + 4 搆 + 4 誆 + 5 柺).
+  Books affected: 創/利/民/申/書士撒上撒下王上王下代上代下拉尼伯詩箴歌賽耶結但珥摩俄彌鴻番太可路約徒林前林後來/plus new: 哀/傳/出/亞/何/加/多/提前/提後/斯/士/耶/珥/摩/plus 2026-08-16: 撒下1/賽10/林後10/士14/士16/王上13
 
 REGENERATION SCOPE: any chapter containing affected chars needs regen.
 Use `regen_tts_affected_chapters.py` after wiring this module in.
@@ -78,10 +89,38 @@ TTS_CHAR_MAP: dict[str, str] = {
     '貲': '資',  # zī — added 2026-08-14 per user Cantonese ear verify
     '賙': '周',  # zhōu — added 2026-08-14 per user Cantonese ear verify
     '單': '丹',  # dān — added 2026-08-14 per user Cantonese ear verify (blanket)
+    '搆': '夠',  # gòu — added 2026-08-16 per user Cantonese ear verify
+    '誆': '康',  # kāng — added 2026-08-16 per user Cantonese ear verify
+    '柺': '拐',  # guǎi — added 2026-08-16 per user Cantonese ear verify
+    '邑': '泣',  # qì — added 2026-08-16 per user Cantonese ear verify
+    '珥': '耳',  # ěr — added 2026-08-16 per user Cantonese ear verify
 }
 
 # Frozen snapshot for safety (prevents accidental mutation)
 _FROZEN_MAP = frozenset(TTS_CHAR_MAP.items())
+
+
+# Verse-specific punctuation fixes (apply BEFORE char substitution)
+# These are typos in bible-data.json that affect TTS prosody. The display text
+# stays unchanged — only TTS rendering is corrected by injecting a comma where
+# the human reader would naturally pause.
+#
+# Format: (substring_marker, TTS_insertion_after_marker, optional_verse_ref)
+# We use substring_marker so we don't need verse context — a substring that is
+# uniquely identifying for the typo, and only matches in the typo'd verse.
+#
+# 2026-08-16: 撒下 1:23 raw = '掃羅和約拿單活時相悅相愛，死時也不分離他們比鷹更快，比獅子還強。'
+# Should be: '掃羅和約拿單活時相悅相愛，死時也不分離。他們比鷹更快，比獅子還強。'
+# (missing 。 after '也不分離'). Edge TTS reads '也不分離他們' as a single flowing
+# phrase without pause — distorts the parallel structure '相悅相愛/也不分離'.
+TTS_PUNCTUATION_FIXES: list[tuple[str, str, str]] = [
+    # (substring_marker, TTS_replacement, source_ref)
+    (
+        '死時也不分離他們',
+        '死時也不分離。他們',
+        '撒下 1:23 (CUV typo: missing 。 + comma before 他們)',
+    ),
+]
 
 
 def tts_text(display_text: str) -> str:
@@ -92,13 +131,20 @@ def tts_text(display_text: str) -> str:
     edge_tts.Communicate; the original `display_text` is what users see on
     /read page and what bible-data.json holds.
 
-    This is a simple 1:1 character substitution (no nesting logic, no
-    context-aware selection). Same approach as the 7/20 CJK vertical→horizontal
-    quote fix (commit 981dd61).
+    Pipeline:
+      1. Apply verse-specific punctuation fixes (e.g. 撒下 1:23)
+      2. Apply char substitution map (TTS_CHAR_MAP)
+
+    Step 1 must run before step 2 because punctuation fixes may insert
+    punctuation that's later passed to edge_tts unchanged (punctuation is
+    not in TTS_CHAR_MAP so order doesn't matter for that, but conceptually
+    fixes precede substitution).
     """
     if not display_text:
         return display_text
     result = display_text
+    for marker, replacement, _ref in TTS_PUNCTUATION_FIXES:
+        result = result.replace(marker, replacement)
     for old, new in _FROZEN_MAP:
         result = result.replace(old, new)
     return result
