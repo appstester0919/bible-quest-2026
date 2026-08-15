@@ -99,10 +99,19 @@ export function NudgeDialog({ members, senderName, onClose }: NudgeDialogProps) 
     setSuccessMsg(null)
     try {
       const result = await sendNudge(selectedMembers, body)
-      if (result.ok) {
-        const n = result.delivered ?? selectedMembers.length
-        setSuccessMsg(`✅ 已發送 ${n} 個提醒`)
-        setTimeout(() => onClose(), 1500)
+      if (result.ok && result.error === 'all_recipients_disabled') {
+        // Edge case: every selected member has receive_nudges=false.
+        // Server returns ok=true so sender's quota is NOT charged.
+        setErrorMsg(mapErrorToMessage('all_recipients_disabled'))
+      } else if (result.ok) {
+        // Show enqueued count (= inserted rows), not delivered (= push 2xx),
+        // so the user sees the true number of nudges that were recorded.
+        const n = result.enqueued ?? selectedMembers.length
+        const disabledHint = result.disabled_skipped
+          ? `（${result.disabled_skipped} 位已關提醒，已略過）`
+          : ''
+        setSuccessMsg(`✅ 已發送 ${n} 個提醒${disabledHint}`)
+        setTimeout(() => onClose(), 1800)
       } else {
         setErrorMsg(mapErrorToMessage(result.error))
       }

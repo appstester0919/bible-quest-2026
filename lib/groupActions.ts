@@ -619,7 +619,12 @@ interface NudgeRecipient {
 /** Return shape for sendNudge. */
 interface SendNudgeResult {
   ok: boolean
-  delivered?: number      // count of push notifications that returned 2xx
+  /** Number of push notifications that returned 2xx (0 if push infra unavailable). */
+  delivered?: number
+  /** Number of rows actually inserted into group_nudges (= how many recipients got the nudge row). */
+  enqueued?: number
+  /** Number of recipients skipped because receive_nudges=false (NOT counted toward sender quota). */
+  disabled_skipped?: number
   error?: string
   conflictedIds?: string[] // recipients the sender already nudged today
 }
@@ -803,7 +808,13 @@ export async function sendNudge(
   )
   const enabledRecipients = recipients.filter(r => !disabled.has(r.user_id))
   if (enabledRecipients.length === 0) {
-    return { ok: true, delivered: 0, error: 'all_recipients_disabled' }
+    return {
+      ok: true,
+      delivered: 0,
+      enqueued: 0,
+      disabled_skipped: recipientIds.length,
+      error: 'all_recipients_disabled',
+    }
   }
 
   // ── Insert group_nudges rows (one per enabled recipient) ───────────────────
@@ -822,7 +833,7 @@ export async function sendNudge(
     .select('id, recipient_id, group_id')
   if (insErr) return { ok: false, error: insErr.message }
   if (!inserted || inserted.length === 0) {
-    return { ok: true, delivered: 0 }
+    return { ok: true, delivered: 0, enqueued: 0, disabled_skipped: 0 }
   }
 
   // ── Fire push via /api/push/nudge (Best-effort, parallel) ─────────────────
@@ -866,5 +877,10 @@ export async function sendNudge(
     console.warn('[sendNudge] CRON_RELAY_TOKEN not set; skipping push fan-out (rows persisted for audit)')
   }
 
-  return { ok: true, delivered }
+  return {
+    ok: true,
+    delivered,
+    enqueued: inserted.length,
+    disabled_skipped: disabled.size,
+  }
 }
