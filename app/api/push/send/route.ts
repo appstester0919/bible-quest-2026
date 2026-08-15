@@ -23,6 +23,7 @@ import { createClient } from '@supabase/supabase-js'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
+import { createClient as createServiceClient } from '@supabase/supabase-js'
 
 // ─── Configure web-push with our VAPID keys (only used at request time) ────
 function configureWebPush() {
@@ -116,12 +117,28 @@ export async function POST(req: NextRequest) {
         const statusCode = e?.statusCode ?? 0
         const body = e?.body ?? ''
         const headers = e?.headers ?? {}
+        const expired = statusCode === 404 || statusCode === 410
         console.error('[push/send] failed for', sub.id, 'status=', statusCode, 'body=', String(body).slice(0, 500), 'endpoint_tail=', sub.endpoint.slice(-30))
+
+        // Deactivate expired subs (service-role bypasses RLS) so they don't appear in future loads
+        if (expired) {
+          try {
+            const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+            const key = process.env.SUPABASE_SERVICE_ROLE_KEY
+            if (url && key) {
+              const admin = createServiceClient(url, key, { auth: { persistSession: false } })
+              await admin.from('web_push_subscriptions').update({ active: false }).eq('id', sub.id)
+            }
+          } catch (deactErr) {
+            console.warn('[push/send] deactivate failed:', sub.id, deactErr)
+          }
+        }
+
         return {
           subscription_id: sub.id,
           ok: false,
           status: statusCode,
-          expired: statusCode === 404 || statusCode === 410,
+          expired,
           error: e?.message ?? String(e),
           body: String(body).slice(0, 300),
         }
