@@ -64,14 +64,23 @@ def probe_duration(path: str) -> float:
 
 
 async def save_and_verify(text: str, voice: str, output_path: str) -> tuple[bool, float, int]:
-    """Save TTS audio (with homophone substitution applied) and verify duration."""
+    """Save TTS audio (with homophone substitution applied) and verify duration.
+
+    Triggers silent-truncation fail in TWO cases:
+      1. duration < expected × MIN_DURATION_RATIO  (text too short for chars)
+      2. duration >= 595s  (Edge TTS hard 600s cap, always truncated past this)
+
+    Case 2 is independent of expected — 4 historical chapters (士 9, 撒上 17,
+    民 7, 耶 51, 2026-08-16) had expected ≤ 600s so MIN_DURATION_RATIO passed
+    at ratio=1.37 but the audio was actually truncated at 600s.
+    """
     tts_input = tts_text(text)
     comm = edge_tts.Communicate(tts_input, voice)
     await comm.save(output_path)
     d = probe_duration(output_path)
     size = os.path.getsize(output_path) if os.path.exists(output_path) else 0
     expected = len(text) / CHARS_PER_SEC_CONSERVATIVE
-    ok = d >= expected * MIN_DURATION_RATIO
+    ok = d >= expected * MIN_DURATION_RATIO and d < 595.0
     return ok, d, size
 
 
@@ -129,12 +138,9 @@ async def regenerate_one(abbr: str, chapter: int, verses: list) -> dict:
             # MIN_DURATION_RATIO check would PASS at ratio=143% but the mp3 is
             # actually truncated.
             expected = len(text) / CHARS_PER_SEC_CONSERVATIVE
-            if 599.5 <= duration <= 600.5 and expected > 600:
-                last_err = (
-                    f"silent truncation at 600s, expected {expected:.0f}s — "
-                    f"will split-regen"
-                )
-                break  # exit retry loop, fall to split-regen
+            # (Hard-cap check moved into save_and_verify — if duration >= 595s,
+            # ok=False is returned, so we never reach the success-return on
+            # line 122 and fall through to split-regen here.)
             last_err = (
                 f"silent truncation: expected ≥{expected:.1f}s, "
                 f"got {duration:.1f}s ({duration*CHARS_PER_SEC_CONSERVATIVE/len(text)*100:.0f}%)"
