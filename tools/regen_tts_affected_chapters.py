@@ -40,7 +40,7 @@ from datetime import datetime
 
 # TTS-only homophone substitution (櫺繙鬮捫 → 靈翻鳩悶)
 sys.path.insert(0, str(Path(__file__).parent))
-from tts_char_substitutions import tts_text, TTS_CHAR_MAP
+from tts_char_substitutions import tts_text, TTS_CHAR_MAP, TTS_PUNCTUATION_FIXES
 
 VOICE_FEMALE = "zh-HK-HiuGaaiNeural"
 VOICE_MALE = "zh-HK-WanLungNeural"
@@ -114,6 +114,7 @@ async def regenerate_one(abbr: str, chapter: int, verses: list) -> dict:
         output_path = os.path.join(BASE_DIR, abbr, f"{abbr}{chapter}.mp3")
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
+        # Try single-pass regen with retry
         last_err = None
         for attempt in range(MAX_RETRIES_PER_CHAPTER):
             ok, duration, size = await save_and_verify(text, voice, output_path)
@@ -123,17 +124,79 @@ async def regenerate_one(abbr: str, chapter: int, verses: list) -> dict:
                     "duration": duration, "voice": voice, "status": "ok",
                     "attempts": attempt + 1,
                 }
+            # Silent-truncation detector (v4 2026-08-16): if exactly 600s and
+            # expected > 600, fall through to split-regen path. The standard
+            # MIN_DURATION_RATIO check would PASS at ratio=143% but the mp3 is
+            # actually truncated.
+            expected = len(text) / CHARS_PER_SEC_CONSERVATIVE
+            if 599.5 <= duration <= 600.5 and expected > 600:
+                last_err = (
+                    f"silent truncation at 600s, expected {expected:.0f}s — "
+                    f"will split-regen"
+                )
+                break  # exit retry loop, fall to split-regen
             last_err = (
-                f"silent truncation: expected ≥{len(text)/CHARS_PER_SEC_CONSERVATIVE:.1f}s, "
+                f"silent truncation: expected ≥{expected:.1f}s, "
                 f"got {duration:.1f}s ({duration*CHARS_PER_SEC_CONSERVATIVE/len(text)*100:.0f}%)"
             )
             if attempt < MAX_RETRIES_PER_CHAPTER - 1:
                 await asyncio.sleep(2)
 
+        # ─── Split-regen path (v4 2026-08-16) ───────────────────────────
+        # Find verse-boundary midpoint. TTS input limit is 600s = ~2900 chars
+        # at 4.83 cps. Aim for 50/50 split at verse nearest midpoint.
+        total_chars = len(text)
+        split_target = total_chars // 2
+        cumulative = 0
+        split_idx = len(verses) // 2  # start with verse midpoint
+        for i, v in enumerate(verses):
+            cumulative += len(v[1])
+            if cumulative >= split_target:
+                split_idx = i + 1
+                break
+        if split_idx == 0 or split_idx == len(verses):
+            # edge case — single very long verse, split at char midpoint
+            split_idx = len(verses) // 2
+
+        upper_text = "".join(v[1] for v in verses[:split_idx])
+        lower_text = "".join(v[1] for v in verses[split_idx:])
+
+        upper_ok, upper_dur, _ = await save_and_verify(upper_text, voice, "/tmp/_split_upper.mp3")
+        lower_ok, lower_dur, _ = await save_and_verify(lower_text, voice, "/tmp/_split_lower.mp3")
+
+        if not (upper_ok and lower_ok):
+            return {
+                "book": abbr, "chapter": chapter,
+                "error": f"split-regen also failed (upper={upper_dur:.1f}s, lower={lower_dur:.1f}s)",
+                "status": "fail",
+                "attempts": MAX_RETRIES_PER_CHAPTER,
+            }
+
+        # ffmpeg concat with -c copy (no re-encode)
+        concat_list = "/tmp/_concat_list.txt"
+        with open(concat_list, "w") as f:
+            f.write(f"file '/tmp/_split_upper.mp3'\nfile '/tmp/_split_lower.mp3'\n")
+        r = subprocess.run(
+            ["ffmpeg", "-y", "-f", "concat", "-safe", "0",
+             "-i", concat_list, "-c", "copy", output_path],
+            capture_output=True, text=True, timeout=60,
+        )
+        if r.returncode != 0:
+            return {
+                "book": abbr, "chapter": chapter,
+                "error": f"ffmpeg concat failed: {r.stderr[:200]}",
+                "status": "fail",
+                "attempts": MAX_RETRIES_PER_CHAPTER,
+            }
+
+        size = os.path.getsize(output_path)
+        total_dur = upper_dur + lower_dur
         return {
-            "book": abbr, "chapter": chapter,
-            "error": last_err, "status": "fail",
+            "book": abbr, "chapter": chapter, "size": size,
+            "duration": total_dur, "voice": voice, "status": "ok-split",
             "attempts": MAX_RETRIES_PER_CHAPTER,
+            "upper_dur": upper_dur, "lower_dur": lower_dur,
+            "split_at_verse": split_idx,
         }
     except Exception as e:
         return {"book": abbr, "chapter": chapter, "error": str(e), "status": "fail"}
@@ -141,21 +204,37 @@ async def regenerate_one(abbr: str, chapter: int, verses: list) -> dict:
 
 async def main():
     import sys
-    # CLI: --new-only restricts to chapters with only the new 6 chars (2026-08-14 round 3)
+    # CLI: --new-only restricts to chapters with only the new chars
+    #   round 3 (2026-08-14): 軛, 縋, 讒, 貲, 賙, 單
+    #   round 4 (2026-08-16): 搆, 誆, 柺, 邑, 珥
+    # default regen = all 17 chars (covers everything, including chapters
+    # previously regen'd by rounds 1-3 — idempotent re-gen is safe).
     new_only = '--new-only' in sys.argv
-    NEW_CHARS = {'軛', '縋', '讒', '貲', '賙', '單'}  # round 3 additions 2026-08-14
-    if new_only:
-        affected = find_new_only_chapters(NEW_CHARS)
-        scope = f"new-only (chapters containing {NEW_CHARS}, not in previous 159 batch)"
+    round4_only = '--round4-only' in sys.argv
+    NEW_CHARS_ROUND3 = {'軛', '縋', '讒', '貲', '賙', '單'}
+    NEW_CHARS_ROUND4 = {'搆', '誆', '柺', '邑', '珥'}
+    if round4_only:
+        # Round 4 scope: chapters containing any round-4 char (regardless of
+        # round 1-3 chars present). Round 1-3 chapters that don't have any
+        # round-4 chars are skipped (already regen'd in earlier rounds).
+        affected = find_new_only_chapters(NEW_CHARS_ROUND4)
+        scope = f"round-4-only ({len(NEW_CHARS_ROUND4)} new chars: {NEW_CHARS_ROUND4})"
+    elif new_only:
+        # union of both rounds
+        new_chars = NEW_CHARS_ROUND3 | NEW_CHARS_ROUND4
+        affected = find_new_only_chapters(new_chars)
+        scope = f"new-only (chapters containing {new_chars}, not in previous 159 batch)"
     else:
         affected = find_affected_chapters()
-        scope = "all 12 affected chars"
+        scope = f"all 17 affected chars ({len(TTS_CHAR_MAP)} mappings)"
     print(f"[REGEN TTS — affected chapters]")
     print(f"  Scope: {scope}")
-    print(f"  Mapping: 櫺→靈, 繙→翻, 鬮→鳩, 捫→悶, 輜→資, 驕→嬌, 軛→厄, 縋→墜, 讒→慚, 貲→資, 賙→周, 單→丹")
+    mapping_str = ", ".join(f"{old}→{new}" for old, new in TTS_CHAR_MAP.items())
+    print(f"  Mapping: {mapping_str}")
     print(f"  Affected chapters: {len(affected)}")
     print(f"  Output: {BASE_DIR}")
     print(f"  Source bible data: {BIBLE_DATA} (UNTOUCHED)")
+    print(f"  Punctuation fixes: {len(TTS_PUNCTUATION_FIXES)} (applied at TTS time)")
     print()
 
     with open(BIBLE_DATA, "r", encoding="utf-8") as f:
