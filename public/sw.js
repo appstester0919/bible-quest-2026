@@ -1,6 +1,6 @@
 /* eslint-disable no-undef */
 
-const CACHE_NAME = 'bible-quest-v16' // bump v15→v16: 6 new char substitutions (軛→厄, 縋→墜, 讒→慚, 貲→資, 賙→周, 單→丹) + regen 148 chapters. bible-data.json untouched. 12 char mappings total: 櫺繙鬮捫輜驕軛縋讒貲賙單 → 靈翻鳩悶資嬌厄墜慚資周丹. All 12 mappings audio verify-pass via human-ear Telegram MEDIA clips. 0 silent-truncation, max dur 589.6s.
+const CACHE_NAME = 'bible-quest-v17' // bump v16→v17: 595s hard-cap detector in regen_tts_affected_chapters.py + 4 split-regen chapters (士 9, 撒上 17, 民 7, 耶 51) that previously hit Edge TTS 600s silent cap without triggering MIN_DURATION_RATIO fail. Total: 17 TTS_CHAR_MAP entries (搆誆柺邑珥 added). bible-data.json untouched.
 
 // ─── Install ──────────────────────────────────────────────────────────────────
 self.addEventListener('install', (event) => {
