@@ -46,9 +46,36 @@ VOICE_FEMALE = "zh-HK-HiuGaaiNeural"
 VOICE_MALE = "zh-HK-WanLungNeural"
 BASE_DIR = "/mnt/d/AI/BibleQuest2026/public/audio"
 BIBLE_DATA = "/mnt/d/AI/BibleQuest2026/public/bible-data.json"
-CHARS_PER_SEC_CONSERVATIVE = 4.83
+# Voice-specific cps (chars/sec). Measured 2026-08-21 by user observation
+# that voices pace CJK text differently — unified 4.83 was biased to the
+# Male voice and ~30% too fast for Female. Using these constants in
+# silent-truncation gating ('expected' duration) keeps the detector
+# conservative: the slower the voice, the bigger `expected`, the
+# earlier silent-cap is detected (false-pass risk goes DOWN, not up).
+#
+# Empirical range across 16 most-recent regenerated chapters:
+#   F (HiuGaai, odd ch):  mean=3.36 cps, range=[3.29, 3.45]
+#   M (WanLung, even ch): mean=4.70 cps, range=[4.39, 5.09]
+F_CPS = 3.36   # zh-HK-HiuGaaiNeural
+M_CPS = 4.70   # zh-HK-WanLungNeural
+# Legacy alias (conservative default = slower voice). Kept for any
+# call site that still imports the single constant.
+CHARS_PER_SEC_CONSERVATIVE = F_CPS  # slowest voice = longest expected
+
 MIN_DURATION_RATIO = 0.90
 MAX_RETRIES_PER_CHAPTER = 2
+
+
+def cps_for_chapter(chapter: int) -> float:
+    """Return chars/sec for the voice assigned to this chapter parity.
+    Odd chapter = F (HiuGaai), even chapter = M (WanLung)."""
+    return F_CPS if chapter % 2 == 1 else M_CPS
+
+
+def cps_for_voice(voice: str) -> float:
+    """Voice-name key for cps lookup. Mirrors the parity rule but accepts
+    voice strings directly (used by save_and_verify)."""
+    return F_CPS if voice == VOICE_FEMALE else M_CPS
 
 
 def probe_duration(path: str) -> float:
@@ -79,7 +106,9 @@ async def save_and_verify(text: str, voice: str, output_path: str) -> tuple[bool
     await comm.save(output_path)
     d = probe_duration(output_path)
     size = os.path.getsize(output_path) if os.path.exists(output_path) else 0
-    expected = len(text) / CHARS_PER_SEC_CONSERVATIVE
+    # Voice-specific cps (parity matches the voice assignment rule).
+    cps = cps_for_voice(voice)
+    expected = len(text) / cps
     ok = d >= expected * MIN_DURATION_RATIO and d < 595.0
     return ok, d, size
 
@@ -137,20 +166,24 @@ async def regenerate_one(abbr: str, chapter: int, verses: list) -> dict:
             # expected > 600, fall through to split-regen path. The standard
             # MIN_DURATION_RATIO check would PASS at ratio=143% but the mp3 is
             # actually truncated.
-            expected = len(text) / CHARS_PER_SEC_CONSERVATIVE
+            cps = cps_for_voice(voice)
+            expected = len(text) / cps
             # (Hard-cap check moved into save_and_verify — if duration >= 595s,
             # ok=False is returned, so we never reach the success-return on
             # line 122 and fall through to split-regen here.)
             last_err = (
                 f"silent truncation: expected ≥{expected:.1f}s, "
-                f"got {duration:.1f}s ({duration*CHARS_PER_SEC_CONSERVATIVE/len(text)*100:.0f}%)"
+                f"got {duration:.1f}s ({duration*cps/len(text)*100:.0f}%)"
             )
             if attempt < MAX_RETRIES_PER_CHAPTER - 1:
                 await asyncio.sleep(2)
 
         # ─── Split-regen path (v4 2026-08-16) ───────────────────────────
-        # Find verse-boundary midpoint. TTS input limit is 600s = ~2900 chars
-        # at 4.83 cps. Aim for 50/50 split at verse nearest midpoint.
+        # Find verse-boundary midpoint. TTS input limit is 600s. The
+        # half-split chars budget depends on voice cps:
+        #   F voice → 600s × F_CPS(3.36) ≈ 2016 chars/half
+        #   M voice → 600s × M_CPS(4.70) ≈ 2820 chars/half
+        # Aim for 50/50 split at verse nearest midpoint.
         total_chars = len(text)
         split_target = total_chars // 2
         cumulative = 0
