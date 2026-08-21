@@ -217,9 +217,17 @@ async def main():
     # previously regen'd by rounds 1-3 — idempotent re-gen is safe).
     new_only = '--new-only' in sys.argv
     round4_only = '--round4-only' in sys.argv
+    round5_only = '--round5-only' in sys.argv
     NEW_CHARS_ROUND3 = {'軛', '縋', '讒', '貲', '賙', '單'}
     NEW_CHARS_ROUND4 = {'搆', '誆', '柺', '邑', '珥'}
-    if round4_only:
+    NEW_CHARS_ROUND5 = {'摶', '瓔', '轂', '鑷', '奩', '饈'}
+    if round5_only:
+        # Round 5 scope (2026-08-21): chapters containing any round-5 char.
+        # Round 1-4 chapters that don't have any round-5 chars are skipped
+        # (already regen'd in earlier rounds).
+        affected = find_new_only_chapters(NEW_CHARS_ROUND5)
+        scope = f"round-5-only ({len(NEW_CHARS_ROUND5)} new chars: {NEW_CHARS_ROUND5})"
+    elif round4_only:
         # Round 4 scope: chapters containing any round-4 char (regardless of
         # round 1-3 chars present). Round 1-3 chapters that don't have any
         # round-4 chars are skipped (already regen'd in earlier rounds).

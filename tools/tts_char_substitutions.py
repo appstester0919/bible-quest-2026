@@ -56,6 +56,10 @@ as 善). User directed semantic-shift accept to avoid silent/misread output.
 New 3 mappings (搆, 誆, 柺) added 2026-08-16 per user Cantonese ear verification —
 all 3 chars SILENT in zh-HK voices. 搆→夠 and 誆→框 are semantic shifts; 柺→拐 is
 traditional-to-simplified of the same word.
+New 6 mappings (摶, 瓔, 轂, 鑷, 奩, 饈) added 2026-08-21 per user Cantonese ear
+verification — all 6 chars REJECTED by edge TTS zh-HK voices (NoAudioReceived).
+User-direct subs: 摶→團, 瓔→英, 轂→谷, 鑷→聶, 奩→廉, 饈→收. Speech-v4 friendly
+homophones — 瓔/英 為最常見 pair; 饈→收 因 TTS 收る粵音近 xiū Mandarin.
 
 AFFECTED VERSES: ~534 verses across 40+ books (212 original 4 + 6 輜 + 75 驕 + 52
   軛 + 10 縋 + 18 讒 + 2 貲 + 19 賙 + 199 單 + 4 搆 + 4 誆 + 5 柺).
@@ -94,6 +98,12 @@ TTS_CHAR_MAP: dict[str, str] = {
     '柺': '拐',  # guǎi — added 2026-08-16 per user Cantonese ear verify
     '邑': '泣',  # qì — added 2026-08-16 per user Cantonese ear verify
     '珥': '耳',  # ěr — added 2026-08-16 per user Cantonese ear verify
+    '摶': '團',  # tuán — added 2026-08-21 per user Cantonese ear verify
+    '瓔': '英',  # yīng — added 2026-08-21 per user Cantonese ear verify
+    '轂': '谷',  # gǔ — added 2026-08-21 per user Cantonese ear verify
+    '鑷': '聶',  # niè — added 2026-08-21 per user Cantonese ear verify
+    '奩': '廉',  # lián — added 2026-08-21 per user Cantonese ear verify
+    '饈': '收',  # shōu (xiū→TTS reads as shōu acceptable per user Cantonese ear) — added 2026-08-21
 }
 
 # Frozen snapshot for safety (prevents accidental mutation)
