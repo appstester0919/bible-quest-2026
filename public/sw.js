@@ -1,6 +1,6 @@
 /* eslint-disable no-undef */
 
-const CACHE_NAME = 'bible-quest-v19' // bump v18→v19: round-6 tts: (a) source-edit bible-data.json 弗 3:13 add 「，」after 喪膽 (user direction 2026-08-21 — prefer permanent source-fix over pipeline-layer transform); (b) TTS_CHAR_MAP v23→v24 (罈→譚 added per user Cantonese ear verify; 罈 REJECTED by zh-HK voices NoAudioReceived); (c) 4 chapters regen'd: 弗 3 (source-edit), 王上 17, 耶 13, 耶 48 (罈 affected); (d) removed TTS_PUNCTUATION_FIXES entry for 弗 3:13 (no longer needed — source fixed). 撒下 1:23 marker still active (source-edit pending follow-up). bible-data.json source-edit applied 弗 3:13 only.
+const CACHE_NAME = 'bible-quest-v20' // bump v19→v20: round-6 follow-up — source-edit bible-data.json 撒下 1:23 (死時也不分離。他們 — comma + 。), TTS_PUNCTUATION_FIXES entry for 撒下 1:23 REMOVED (list now empty), 撒下 1 mp3 regen'd (F voice, 257.2s). All punctuation fixes are now source-level. bible-data.json source-edits applied 弗 3:13 + 撒下 1:23.
 
 // ─── Install ──────────────────────────────────────────────────────────────────
 self.addEventListener('install', (event) => {

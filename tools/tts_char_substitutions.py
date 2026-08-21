@@ -123,37 +123,24 @@ _FROZEN_MAP = frozenset(TTS_CHAR_MAP.items())
 # We use substring_marker so we don't need verse context — a substring that is
 # uniquely identifying for the typo, and only matches in the typo'd verse.
 #
-# Verse-specific punctuation fixes (source-edit-only — these were
-# previously applied as pipeline-layer transforms because the project
-# convention is "display text stays canonical". Per user direction
-# 2026-08-21, future punctuation typos should be fixed directly in
-# public/bible-data.json (the source-text is the ground truth that
-# downstream readers, search, and citation hashes all depend on).
-# This list remains in the file for back-compat with already-shipped
-# verses where the audio was gen'd against the unfixed source (撒下 1:23
-# is the one outstanding example — historically pipeline-fixed, source
-# was NOT edited at the time, so the marker is still active).
-# New typos should NOT be added here — see header note. Pending audit
-# candidate: 撒下 1:23 source-edit (remove marker once source is fixed).
+# Verse-specific punctuation fixes (source-edit-only — per user direction
+# 2026-08-21, future punctuation typos should be fixed DIRECTLY in
+# public/bible-data.json. The display text is ground truth for readers,
+# search, citation hashes. This list is back-compat for already-shipped
+# verses where audio was gen'd against unfixed source; it should NOT
+# grow with new entries. As of 2026-08-21 both historical entries
+# (撒下 1:23, 弗 3:13) have been source-edited and their markers removed.
 #
 # 2026-08-16: 撒下 1:23 raw = '掃羅和約拿單活時相悅相愛，死時也不分離他們比鷹更快，比獅子還強。'
 # Should be: '掃羅和約拿單活時相悅相愛，死時也不分離。他們比鷹更快，比獅子還強。'
 # (missing 。 after '也不分離'). Edge TTS reads '也不分離他們' as a single flowing
 # phrase without pause — distorts the parallel structure '相悅相愛/也不分離'.
-# Marker is still active (source not edited). Pending follow-up: source-edit
-# bible-data.json 撒下 1:23 + regenerate that chapter + remove marker.
+# Status (2026-08-21): SOURCE-EDITED. Marker removed.
 #
 # 2026-08-21: 弗 3:13 '...患難喪膽這原是你們的榮耀。' — flagged by user as
 # missing the 中間 '，'. Source-edit applied directly to bible-data.json
-# (per user's preference for permanent source-level fixes). No marker added.
-TTS_PUNCTUATION_FIXES: list[tuple[str, str, str]] = [
-    # (substring_marker, TTS_replacement, source_ref)
-    (
-        '死時也不分離他們',
-        '死時也不分離。他們',
-        '撒下 1:23 (CUV typo: missing 。 + comma before 他們) — source-edit pending',
-    ),
-]
+# (per user's preference for permanent source-level fixes). Marker removed.
+TTS_PUNCTUATION_FIXES: list[tuple[str, str, str]] = []
 
 
 def tts_text(display_text: str) -> str:
