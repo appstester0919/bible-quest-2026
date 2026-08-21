@@ -60,6 +60,9 @@ New 6 mappings (摶, 瓔, 轂, 鑷, 奩, 饈) added 2026-08-21 per user Cantones
 verification — all 6 chars REJECTED by edge TTS zh-HK voices (NoAudioReceived).
 User-direct subs: 摶→團, 瓔→英, 轂→谷, 鑷→聶, 奩→廉, 饈→收. Speech-v4 friendly
 homophones — 瓔/英 為最常見 pair; 饈→收 因 TTS 收る粵音近 xiū Mandarin.
+New 1 mapping (罈) added 2026-08-21 per user Cantonese ear verify — 罈 REJECTED
+by edge TTS zh-HK voices (NoAudioReceived). User-direct sub: 罈→譚 (tán/taam⁴).
+Slight semantic shift (jar→surname) but minimal collision in BQ corpus.
 
 AFFECTED VERSES: ~534 verses across 40+ books (212 original 4 + 6 輜 + 75 驕 + 52
   軛 + 10 縋 + 18 讒 + 2 貲 + 19 賙 + 199 單 + 4 搆 + 4 誆 + 5 柺).
@@ -104,6 +107,7 @@ TTS_CHAR_MAP: dict[str, str] = {
     '鑷': '聶',  # niè — added 2026-08-21 per user Cantonese ear verify
     '奩': '廉',  # lián — added 2026-08-21 per user Cantonese ear verify
     '饈': '收',  # shōu (xiū→TTS reads as shōu acceptable per user Cantonese ear) — added 2026-08-21
+    '罈': '譚',  # tán — added 2026-08-21 per user Cantonese ear verify (罈 REJECTED by edge TTS zh-HK, NoAudioReceived)
 }
 
 # Frozen snapshot for safety (prevents accidental mutation)
@@ -119,16 +123,35 @@ _FROZEN_MAP = frozenset(TTS_CHAR_MAP.items())
 # We use substring_marker so we don't need verse context — a substring that is
 # uniquely identifying for the typo, and only matches in the typo'd verse.
 #
+# Verse-specific punctuation fixes (source-edit-only — these were
+# previously applied as pipeline-layer transforms because the project
+# convention is "display text stays canonical". Per user direction
+# 2026-08-21, future punctuation typos should be fixed directly in
+# public/bible-data.json (the source-text is the ground truth that
+# downstream readers, search, and citation hashes all depend on).
+# This list remains in the file for back-compat with already-shipped
+# verses where the audio was gen'd against the unfixed source (撒下 1:23
+# is the one outstanding example — historically pipeline-fixed, source
+# was NOT edited at the time, so the marker is still active).
+# New typos should NOT be added here — see header note. Pending audit
+# candidate: 撒下 1:23 source-edit (remove marker once source is fixed).
+#
 # 2026-08-16: 撒下 1:23 raw = '掃羅和約拿單活時相悅相愛，死時也不分離他們比鷹更快，比獅子還強。'
 # Should be: '掃羅和約拿單活時相悅相愛，死時也不分離。他們比鷹更快，比獅子還強。'
 # (missing 。 after '也不分離'). Edge TTS reads '也不分離他們' as a single flowing
 # phrase without pause — distorts the parallel structure '相悅相愛/也不分離'.
+# Marker is still active (source not edited). Pending follow-up: source-edit
+# bible-data.json 撒下 1:23 + regenerate that chapter + remove marker.
+#
+# 2026-08-21: 弗 3:13 '...患難喪膽這原是你們的榮耀。' — flagged by user as
+# missing the 中間 '，'. Source-edit applied directly to bible-data.json
+# (per user's preference for permanent source-level fixes). No marker added.
 TTS_PUNCTUATION_FIXES: list[tuple[str, str, str]] = [
     # (substring_marker, TTS_replacement, source_ref)
     (
         '死時也不分離他們',
         '死時也不分離。他們',
-        '撒下 1:23 (CUV typo: missing 。 + comma before 他們)',
+        '撒下 1:23 (CUV typo: missing 。 + comma before 他們) — source-edit pending',
     ),
 ]
 

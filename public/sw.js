@@ -1,6 +1,6 @@
 /* eslint-disable no-undef */
 
-const CACHE_NAME = 'bible-quest-v18' // bump v17→v18: round-5 TTS_CHAR_MAP additions 摶→團, 瓔→英, 轂→谷, 鑷→聶, 奩→廉, 饈→收 (6 new chars). Total: 23 TTS_CHAR_MAP entries. Regen'd 16 chapters (出 8/12, 申 28, 撒上 28, 撒下 13, 王上 7/9/10, 代下 4/9, 伯 10/31, 賽 45, 耶 7, 何 7, 啟 18). bible-data.json untouched.
+const CACHE_NAME = 'bible-quest-v19' // bump v18→v19: round-6 tts: (a) source-edit bible-data.json 弗 3:13 add 「，」after 喪膽 (user direction 2026-08-21 — prefer permanent source-fix over pipeline-layer transform); (b) TTS_CHAR_MAP v23→v24 (罈→譚 added per user Cantonese ear verify; 罈 REJECTED by zh-HK voices NoAudioReceived); (c) 4 chapters regen'd: 弗 3 (source-edit), 王上 17, 耶 13, 耶 48 (罈 affected); (d) removed TTS_PUNCTUATION_FIXES entry for 弗 3:13 (no longer needed — source fixed). 撒下 1:23 marker still active (source-edit pending follow-up). bible-data.json source-edit applied 弗 3:13 only.
 
 // ─── Install ──────────────────────────────────────────────────────────────────
 self.addEventListener('install', (event) => {
