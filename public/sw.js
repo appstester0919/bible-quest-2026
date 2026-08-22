@@ -1,20 +1,24 @@
 /* eslint-disable no-undef */
 
-const CACHE_NAME = 'bible-quest-v20' // bump v19→v20: round-6 follow-up — source-edit bible-data.json 撒下 1:23 (死時也不分離。他們 — comma + 。), TTS_PUNCTUATION_FIXES entry for 撒下 1:23 REMOVED (list now empty), 撒下 1 mp3 regen'd (F voice, 257.2s). All punctuation fixes are now source-level. bible-data.json source-edits applied 弗 3:13 + 撒下 1:23.
+const CACHE_NAME = 'bible-quest-v21' // bump v20→v21: source-edit bible-data.json 弗 5:9 (光明所結的果子，就是一切良善、公義、誠實。 — restored 果子, + comma after 果子, removed spurious comma before 誠實, period at end). 弗 5 mp3 regen'd (F voice). All punctuation source-level.
 
 // ─── Install ──────────────────────────────────────────────────────────────────
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) =>
-      cache.addAll([
-        '/',
-        '/dashboard',
-        '/offline',
-        '/manifest.json',
-        '/icons/icon-192.png',
-        '/icons/icon-512.png',
-      ]).catch(() => { /* non-fatal */ })
-    )
+      cache
+        .addAll([
+          '/',
+          '/dashboard',
+          '/offline',
+          '/manifest.json',
+          '/icons/icon-192.png',
+          '/icons/icon-512.png',
+        ])
+        .catch(() => {
+          /* non-fatal */
+        }),
+    ),
   )
   self.skipWaiting()
 })
@@ -22,11 +26,15 @@ self.addEventListener('install', (event) => {
 // ─── Activate ─────────────────────────────────────────────────────────────────
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((cacheNames) =>
-      Promise.all(
-        cacheNames.filter((name) => name !== CACHE_NAME).map((name) => caches.delete(name))
-      )
-    )
+    caches
+      .keys()
+      .then((cacheNames) =>
+        Promise.all(
+          cacheNames
+            .filter((name) => name !== CACHE_NAME)
+            .map((name) => caches.delete(name)),
+        ),
+      ),
   )
   self.clients.claim()
 })
@@ -40,7 +48,10 @@ self.addEventListener('fetch', (event) => {
   if (url.protocol === 'chrome-extension:') return
 
   // Bypass cross-origin font requests (CSP connect-src issues with SW fetch)
-  if (url.hostname === 'fonts.googleapis.com' || url.hostname === 'fonts.gstatic.com') {
+  if (
+    url.hostname === 'fonts.googleapis.com' ||
+    url.hostname === 'fonts.gstatic.com'
+  ) {
     return // let the browser handle it directly
   }
 
@@ -48,9 +59,16 @@ self.addEventListener('fetch', (event) => {
   if (request.mode === 'navigate') {
     event.respondWith(
       fetch(request).catch(() =>
-        caches.match('/offline').then((r) => r ?? caches.match('/dashboard') ??
-          new Response('Offline — 請連接網絡', { status: 503, headers: { 'Content-Type': 'text/plain' } }))
-      )
+        caches.match('/offline').then(
+          (r) =>
+            r ??
+            caches.match('/dashboard') ??
+            new Response('Offline — 請連接網絡', {
+              status: 503,
+              headers: { 'Content-Type': 'text/plain' },
+            }),
+        ),
+      ),
     )
     return
   }
@@ -78,7 +96,7 @@ self.addEventListener('fetch', (event) => {
           }
           return response
         })
-      })
+      }),
     )
     return
   }
@@ -91,7 +109,11 @@ self.addEventListener('fetch', (event) => {
 self.addEventListener('push', (event) => {
   if (!event.data) return
   let data
-  try { data = event.data.json() } catch { data = { title: '📖 DuoBible', body: event.data.text() } }
+  try {
+    data = event.data.json()
+  } catch {
+    data = { title: '📖 DuoBible', body: event.data.text() }
+  }
 
   event.waitUntil(
     self.registration.showNotification(data.title ?? '📖 DuoBible', {
@@ -123,7 +145,7 @@ self.addEventListener('push', (event) => {
         { action: 'open', title: '📖 開啟讀經' },
         { action: 'dismiss', title: '稍後再說' },
       ],
-    })
+    }),
   )
 })
 
