@@ -63,6 +63,13 @@ homophones — 瓔/英 為最常見 pair; 饈→收 因 TTS 收る粵音近 xiū
 New 1 mapping (罈) added 2026-08-21 per user Cantonese ear verify — 罈 REJECTED
 by edge TTS zh-HK voices (NoAudioReceived). User-direct sub: 罈→譚 (tán/taam⁴).
 Slight semantic shift (jar→surname) but minimal collision in BQ corpus.
+New 1 mapping (縵) added 2026-08-24 per user Cantonese ear verify — 縵 REJECTED
+by edge TTS zh-HK voices (NoAudioReceived / SILENT). User-direct sub: 縵→慢
+(màn/maan⁶). 縵 = proper-name syllable in 乃縵 (Naaman) + 撒縵以色 (Shalmaneser);
+homophone 慢 (slow) preserves Cantonese pronunciation perfectly with zero
+collision in BQ corpus (乃慢 / 撒慢以色 read as natural proper name). Display
+text in bible-data.json stays canonical 縵 — sub applied only at generation time.
+Affects 20 verses across 4 chapters: 王下 5 / 王下 17 / 王下 18 / 路 4.
 
 AFFECTED VERSES: ~534 verses across 40+ books (212 original 4 + 6 輜 + 75 驕 + 52
   軛 + 10 縋 + 18 讒 + 2 貲 + 19 賙 + 199 單 + 4 搆 + 4 誆 + 5 柺).
@@ -108,6 +115,7 @@ TTS_CHAR_MAP: dict[str, str] = {
     '奩': '廉',  # lián — added 2026-08-21 per user Cantonese ear verify
     '饈': '收',  # shōu (xiū→TTS reads as shōu acceptable per user Cantonese ear) — added 2026-08-21
     '罈': '譚',  # tán — added 2026-08-21 per user Cantonese ear verify (罈 REJECTED by edge TTS zh-HK, NoAudioReceived)
+    '縵': '慢',  # màn — added 2026-08-24 per user Cantonese ear verify (縵 REJECTED by edge TTS zh-HK, NoAudioReceived/SILENT). Naaman/Shalmaneser proper name.
 }
 
 # Frozen snapshot for safety (prevents accidental mutation)

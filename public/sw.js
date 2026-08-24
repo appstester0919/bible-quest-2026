@@ -1,6 +1,6 @@
 /* eslint-disable no-undef */
 
-const CACHE_NAME = 'bible-quest-v21' // bump v20→v21: source-edit bible-data.json 弗 5:9 (光明所結的果子，就是一切良善、公義、誠實。 — restored 果子, + comma after 果子, removed spurious comma before 誠實, period at end). 弗 5 mp3 regen'd (F voice). All punctuation source-level.
+const CACHE_NAME = 'bible-quest-v22' // bump v21→v22: TTS_CHAR_MAP add 縵→慢 (2026-08-24, Round-9, zh-HK voices REJECT 縵 NoAudioReceived/SILENT). Regen 王下 5/17/18 + 路 4 (20 verses total). Display text unchanged (still 乃縵 / 撒縵以色).
 
 // ─── Install ──────────────────────────────────────────────────────────────────
 self.addEventListener('install', (event) => {
