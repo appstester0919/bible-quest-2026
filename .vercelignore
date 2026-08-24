@@ -1,0 +1,15 @@
+.git
+.next
+node_modules
+.husky
+.claude
+tests
+tsconfig.tsbuildinfo
+*.log
+.tts_gen_log.json
+AGENTS.md
+DESIGN.md
+README.md
+references
+docs
+.claude
