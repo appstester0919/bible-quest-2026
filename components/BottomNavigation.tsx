@@ -56,15 +56,6 @@ const CalendarIcon = ({ size }: IconProps) => (
   </Icon>
 )
 
-const UsersIcon = ({ size }: IconProps) => (
-  <Icon size={size}>
-    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-    <circle cx="9" cy="7" r="4" />
-    <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-    <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-  </Icon>
-)
-
 const MoreIcon = ({ size }: IconProps) => (
   <Icon size={size}>
     <circle cx="5" cy="12" r="1.7" fill="currentColor" stroke="none" />
@@ -126,8 +117,10 @@ const TOP_TABS = [
   },
 ] as const
 
-/** Routes served inside the「更多」sheet — any of these active ⇒ 更多 tab glows */
-const SHEET_ROUTE_PREFIXES = ['/partner']
+/** Routes served inside the「更多」sheet — any of these active ⇒ 更多 tab glows.
+ *  夥伴 (/partner) 已落架（2026-08）：功能被群組覆蓋且無入口；route 保留，
+ *  日後認真發展夥伴時喺 SHEET_GRID 加返 { href:'/partner', label:'夥伴' } */
+const SHEET_ROUTE_PREFIXES: string[] = []
 
 export default function BottomNavigation() {
   const pathname = usePathname()
@@ -262,13 +255,7 @@ export default function BottomNavigation() {
             </div>
 
             <div className="nav-sheet-grid">
-              <Link href="/partner" className="more-item">
-                <span className="more-item-icon more-item-icon-accent">
-                  <UsersIcon size={20} />
-                </span>
-                <span className="more-item-label">夥伴</span>
-              </Link>
-
+              {/* 夥伴已落架（見 SHEET_ROUTE_PREFIXES 註）；要加返喺度開一格 */}
               <button type="button" className="more-item" onClick={shareApp}>
                 <span className="more-item-icon more-item-icon-streak">
                   <ShareIcon size={20} />
