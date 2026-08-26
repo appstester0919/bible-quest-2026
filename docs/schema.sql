@@ -55,22 +55,30 @@ create table public.user_plan_enrollments (
   total_days           int  not null
                           check (total_days between 1 and 365),
   chapters_per_day     int  not null,
-                          -- ceil(scope_chapters / total_days). scope nt=259, ot=929, nt_ot=1188.
+                          -- ceil(scope_chapters / total_days). scope nt=260, ot=929, nt_ot=1189.
   start_book_index     int  not null default 0
-                          check (start_book_index between 0 and 64),
-                          -- 0-based book index where the plan starts (創=0, …, 瑪=38, 太=39, …, 啓=64).
+                          check (start_book_index between 0 and 65),
+                          -- 0-based book index where the plan starts (創=0, …, 瑪=38, 太=39, …, 啓=65).
                           -- NT plans use 39 (馬太福音) by default. OT plans use 0 (創世記).
   start_chapter        int  not null default 1
                           check (start_chapter >= 1),
                           -- 1-based chapter within start_book_index.
   nt_start_book_index  int  not null default 39
-                          check (nt_start_book_index between 39 and 64),
-                          -- Per-testament NT start (39=馬太 to 64=啟示錄). Used when
+                          check (nt_start_book_index between 39 and 65),
+                          -- Per-testament NT start (39=馬太 to 65=啟示錄). Used when
                           -- scope='nt' or as the NT half of a 'nt_ot' plan.
   ot_start_book_index  int  not null default 0
                           check (ot_start_book_index between 0 and 38),
                           -- Per-testament OT start (0=創世記 to 38=瑪拉基). Used when
                           -- scope='ot' or as the OT half of a 'nt_ot' plan.
+  nt_start_chapter     int  not null default 1
+                          check (nt_start_chapter >= 1),
+                          -- Per-testament start chapter (migration 013). For scope='nt_ot',
+                          -- takes precedence over start_chapter for the NT side.
+  ot_start_chapter     int  not null default 1
+                          check (ot_start_chapter >= 1),
+                          -- Per-testament start chapter (migration 013). For scope='nt_ot',
+                          -- takes precedence over start_chapter for the OT side.
   started_at           timestamptz not null default now(),
   completed_at         timestamptz,
   paused_at            timestamptz,
