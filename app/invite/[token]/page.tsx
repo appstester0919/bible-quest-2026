@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { acceptPartnerInvite } from '../../partner/actions'
+import { acceptPartnerInvite } from '../../(main)/partner/actions'
 
 export default function InviteAcceptPage() {
   const params = useParams()
@@ -11,14 +11,18 @@ export default function InviteAcceptPage() {
   const token = params.token as string
 
   const [inviterName, setInviterName] = useState<string>('')
-  const [status, setStatus] = useState<'loading' | 'error' | 'success' | 'already' | 'ready'>('loading')
+  const [status, setStatus] = useState<
+    'loading' | 'error' | 'success' | 'already' | 'ready'
+  >('loading')
   const [errorMsg, setErrorMsg] = useState('')
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
     async function checkInvite() {
       const supabase = createClient()
-      const { data: { user } } = await supabase.auth.getUser()
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
 
       if (!user) {
         // Not logged in → redirect to signup with return URL
@@ -28,7 +32,9 @@ export default function InviteAcceptPage() {
 
       const { data: invite } = await supabase
         .from('partner_invites')
-        .select('id, inviter_id, status, inviter:profiles!inviter_id(display_name)')
+        .select(
+          'id, inviter_id, status, inviter:profiles!inviter_id(display_name)',
+        )
         .eq('token', token)
         .single()
 
@@ -43,7 +49,9 @@ export default function InviteAcceptPage() {
         return
       }
 
-      const inviter = Array.isArray(invite.inviter) ? invite.inviter[0] : invite.inviter
+      const inviter = Array.isArray(invite.inviter)
+        ? invite.inviter[0]
+        : invite.inviter
       setInviterName(inviter?.display_name ?? '一位朋友')
 
       // Check if current user already has an active partner
@@ -62,7 +70,7 @@ export default function InviteAcceptPage() {
       setStatus('ready')
     }
     checkInvite()
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token])
 
   async function handleAccept() {
@@ -91,10 +99,16 @@ export default function InviteAcceptPage() {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-[var(--color-background)] px-4">
         <div className="text-6xl mb-4">🎉</div>
-        <h1 className="text-2xl font-extrabold text-[var(--color-primary)] mb-2">配對成功！</h1>
-        <p className="text-[var(--color-muted)] mb-6 text-center">你和 {inviterName} 已成為讀經夥伴！</p>
-        <a href="/dashboard"
-          className="py-3 px-6 bg-[var(--color-success)] text-white rounded-xl font-extrabold text-base shadow-[var(--shadow-button)]">
+        <h1 className="text-2xl font-extrabold text-[var(--color-primary)] mb-2">
+          配對成功！
+        </h1>
+        <p className="text-[var(--color-muted)] mb-6 text-center">
+          你和 {inviterName} 已成為讀經夥伴！
+        </p>
+        <a
+          href="/dashboard"
+          className="py-3 px-6 bg-[var(--color-success)] text-white rounded-xl font-extrabold text-base shadow-[var(--shadow-button)]"
+        >
           返去讀經 ✨
         </a>
       </div>
@@ -105,10 +119,16 @@ export default function InviteAcceptPage() {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-[var(--color-background)] px-4">
         <div className="text-6xl mb-4">ℹ️</div>
-        <h1 className="text-2xl font-extrabold text-[var(--color-primary)] mb-2">無需重複配對</h1>
-        <p className="text-[var(--color-muted)] mb-6 text-center">你已經有讀經夥伴了！</p>
-        <a href="/dashboard"
-          className="py-3 px-6 bg-[var(--color-success)] text-white rounded-xl font-extrabold text-base shadow-[var(--shadow-button)]">
+        <h1 className="text-2xl font-extrabold text-[var(--color-primary)] mb-2">
+          無需重複配對
+        </h1>
+        <p className="text-[var(--color-muted)] mb-6 text-center">
+          你已經有讀經夥伴了！
+        </p>
+        <a
+          href="/dashboard"
+          className="py-3 px-6 bg-[var(--color-success)] text-white rounded-xl font-extrabold text-base shadow-[var(--shadow-button)]"
+        >
           返去讀經
         </a>
       </div>
@@ -139,7 +159,10 @@ export default function InviteAcceptPage() {
         </button>
       )}
 
-      <a href="/dashboard" className="mt-4 text-sm text-[var(--color-muted)] underline">
+      <a
+        href="/dashboard"
+        className="mt-4 text-sm text-[var(--color-muted)] underline"
+      >
         稍後再說
       </a>
     </div>

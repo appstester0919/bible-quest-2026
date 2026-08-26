@@ -22,7 +22,7 @@ function Icon({
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth={2}
+      strokeWidth={2.2}
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden="true"
@@ -87,13 +87,6 @@ const SettingsIcon = ({ size }: IconProps) => (
   </Icon>
 )
 
-const AwardIcon = ({ size }: IconProps) => (
-  <Icon size={size}>
-    <circle cx="12" cy="8" r="6" />
-    <path d="M15.5 12.9 17 22l-5-3-5 3 1.5-9.1" />
-  </Icon>
-)
-
 const ShareIcon = ({ size }: IconProps) => (
   <Icon size={size}>
     <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" />
@@ -112,14 +105,29 @@ const CloseIcon = ({ size = 20 }: IconProps) => (
 // ─── Nav model ────────────────────────────────────────────────────────────────
 
 const TOP_TABS = [
-  { href: '/dashboard', label: '總覽', TabIcon: DashboardIcon },
-  { href: '/read', label: '讀經', TabIcon: BookIcon },
-  { href: '/calendar', label: '日曆', TabIcon: CalendarIcon },
-  { href: '/partner', label: '夥伴', TabIcon: UsersIcon },
+  {
+    href: '/dashboard',
+    label: '總覽',
+    TabIcon: DashboardIcon,
+    accent: '#FF9600',
+  },
+  { href: '/read', label: '讀經', TabIcon: BookIcon, accent: '#58CC02' },
+  {
+    href: '/calendar',
+    label: '日曆',
+    TabIcon: CalendarIcon,
+    accent: '#1CB0F6',
+  },
+  {
+    href: '/settings',
+    label: '設定',
+    TabIcon: SettingsIcon,
+    accent: '#CE82FF',
+  },
 ] as const
 
 /** Routes served inside the「更多」sheet — any of these active ⇒ 更多 tab glows */
-const SHEET_ROUTE_PREFIXES = ['/settings']
+const SHEET_ROUTE_PREFIXES = ['/partner']
 
 export default function BottomNavigation() {
   const pathname = usePathname()
@@ -128,9 +136,11 @@ export default function BottomNavigation() {
   const [copied, setCopied] = useState(false)
   const lastScrollY = useRef(0)
 
-  // Close the sheet on navigation and lock body scroll while open
+  // Close the sheet on navigation; reset transient nav state for the new page
   useEffect(() => {
     setSheetOpen(false)
+    setNavHidden(false)
+    lastScrollY.current = window.scrollY
   }, [pathname])
 
   useEffect(() => {
@@ -197,13 +207,14 @@ export default function BottomNavigation() {
         aria-label="主導覽"
       >
         <div className="bottom-nav-inner">
-          {TOP_TABS.map(({ href, label, TabIcon }) => {
+          {TOP_TABS.map(({ href, label, TabIcon, accent }) => {
             const active = pathname === href
             return (
               <Link
                 key={href}
                 href={href}
                 className={`bottom-tab${active ? ' bottom-tab-active' : ''}`}
+                style={{ '--tab-accent': accent } as React.CSSProperties}
                 aria-current={active ? 'page' : undefined}
               >
                 <TabIcon />
@@ -214,6 +225,7 @@ export default function BottomNavigation() {
           <button
             type="button"
             className={`bottom-tab${moreActive ? ' bottom-tab-active' : ''}`}
+            style={{ '--tab-accent': '#1F2937' } as React.CSSProperties}
             aria-expanded={sheetOpen}
             aria-haspopup="dialog"
             onClick={() => setSheetOpen((o) => !o)}
@@ -250,27 +262,12 @@ export default function BottomNavigation() {
             </div>
 
             <div className="nav-sheet-grid">
-              <Link href="/settings" className="more-item">
-                <span className="more-item-icon more-item-icon-gem">
-                  <SettingsIcon size={20} />
+              <Link href="/partner" className="more-item">
+                <span className="more-item-icon more-item-icon-accent">
+                  <UsersIcon size={20} />
                 </span>
-                <span className="more-item-label">設定</span>
+                <span className="more-item-label">夥伴</span>
               </Link>
-
-              <div
-                className="more-item more-item-disabled"
-                aria-disabled="true"
-              >
-                <span className="more-item-icon">
-                  <AwardIcon size={20} />
-                </span>
-                <span className="more-item-label">
-                  成就
-                  <span className="badge badge-muted more-item-badge">
-                    即將推出
-                  </span>
-                </span>
-              </div>
 
               <button type="button" className="more-item" onClick={shareApp}>
                 <span className="more-item-icon more-item-icon-streak">

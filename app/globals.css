@@ -560,13 +560,25 @@ a,
   cursor: pointer;
   text-decoration: none;
   padding: 8px 4px;
-  transition: color 0.15s ease;
+  margin: 0 4px;
+  border-radius: var(--bq-radius-full);
+  transition:
+    color 0.15s ease,
+    background-color 0.2s ease,
+    transform 0.08s ease;
 }
 .bottom-tab svg {
   display: block;
 }
+.bottom-tab:active {
+  transform: scale(0.94);
+}
+
+/* Active tab = colored Duolingo-style pill (accent set per-tab via --tab-accent) */
 .bottom-tab-active {
-  color: var(--color-bq-success);
+  background-color: var(--tab-accent, var(--color-bq-success));
+  color: var(--color-bq-surface);
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.15);
 }
 
 /* ── 更多 sheet ── */
@@ -666,6 +678,10 @@ a.more-item:active {
 .more-item-icon-streak {
   background-color: #ffe4b5;
   color: #c97800;
+}
+.more-item-icon-accent {
+  background-color: #ead0ff;
+  color: #7b3fb8;
 }
 
 .more-item-label {
