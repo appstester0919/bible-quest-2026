@@ -1,3 +1,8 @@
+// @vitest-environment node
+//
+// Pure logic suite (JSON + planGenerator): no DOM needed. The global jsdom
+// env intermittently fails worker startup under WSL load ("Timeout waiting
+// for worker to respond"), which makes pre-commit hooks flaky.
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'fs'
 import { generateReadingPlan } from '../../lib/bible/planGenerator'

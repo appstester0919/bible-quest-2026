@@ -1,3 +1,8 @@
+// @vitest-environment node
+//
+// jsdom worker startup intermittently times out under WSL load, so this
+// suite runs in node: the impl only checks `typeof window` before touching
+// localStorage, and stubbing both globals below covers that contract.
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 
 // These functions are expected to be implemented in the user-prefs module
@@ -11,6 +16,7 @@ import {
 
 describe('user-prefs', () => {
   beforeEach(() => {
+    vi.stubGlobal('window', { localStorage: {} })
     vi.stubGlobal('localStorage', {
       getItem: vi.fn(),
       setItem: vi.fn(),
