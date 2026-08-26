@@ -31,7 +31,7 @@ export type EnrollmentLite = {
   chapters_per_day: number
   reading_order?: string | null // for nt_ot: "2-5" / "nt_then_ot" / "ot_then_nt"
   started_at?: string | null
-  /** 0-based NT book index (39=馬太 to 64=啟示錄) where NT reading starts.
+  /** 0-based NT book index (39=馬太 to 65=啟示錄) where NT reading starts.
    *  Defaults to 39 (馬太) when not provided. */
   nt_start_book_index?: number
   /** 0-based OT book index (0=創世記 to 38=瑪拉基) where OT reading starts.
