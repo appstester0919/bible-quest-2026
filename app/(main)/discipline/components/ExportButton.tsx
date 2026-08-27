@@ -46,8 +46,13 @@ export default function ExportButton({
         setError(`找不到目標元素：${targetSelector}`)
         return null
       }
-      // Dynamic import keeps html-to-image out of the main bundle
-      const mod = await import('https://esm.sh/html-to-image@1.11.11')
+      // Dynamic import keeps html-to-image out of the main bundle.
+      // We use a runtime variable (not a string literal in import()) so
+      // webpack doesn't try to statically resolve the https:// URL —
+      // Next.js's webpack config doesn't have a handler for `https:` schemes.
+      // The `webpackIgnore` magic comment is belt-and-braces for older webpack.
+      const CDN_URL = 'https://esm.sh/html-to-image@1.11.11'
+      const mod = await import(/* webpackIgnore: true */ CDN_URL)
       const dataUrl = await mod.toPng(node as HTMLElement, {
         // Bump pixel ratio for sharper output on retina displays
         pixelRatio: 2,
