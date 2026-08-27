@@ -17,6 +17,60 @@
 
 import { useState } from 'react'
 
+type HtmlToImage = {
+  toPng: (node: HTMLElement, opts?: object) => Promise<string>
+  toJpeg?: (node: HTMLElement, opts?: object) => Promise<string>
+  toSvg?: (node: HTMLElement, opts?: object) => Promise<string>
+}
+
+declare global {
+  interface Window {
+    htmlToImage?: HtmlToImage
+  }
+}
+
+/**
+ * Lazy-load html-to-image (UMD bundle self-hosted at /vendor/html-to-image.js).
+ * Resolves with the `htmlToImage` global. Caches the promise so multiple
+ * concurrent calls share the same <script> injection.
+ */
+let htmlToImagePromise: Promise<HtmlToImage> | null = null
+function loadHtmlToImage(): Promise<HtmlToImage> {
+  if (typeof window === 'undefined') {
+    return Promise.reject(new Error('SSR: loadHtmlToImage called server-side'))
+  }
+  if (window.htmlToImage) return Promise.resolve(window.htmlToImage)
+  if (htmlToImagePromise) return htmlToImagePromise
+
+  htmlToImagePromise = new Promise<HtmlToImage>((resolve, reject) => {
+    const existing = document.querySelector(
+      'script[data-vendor="html-to-image"]'
+    )
+    if (existing) {
+      // Another concurrent call already injected the tag; wait for it
+      existing.addEventListener('load', () => {
+        if (window.htmlToImage) resolve(window.htmlToImage)
+        else reject(new Error('script loaded but window.htmlToImage missing'))
+      })
+      existing.addEventListener('error', () =>
+        reject(new Error('failed to load /vendor/html-to-image.js'))
+      )
+      return
+    }
+    const script = document.createElement('script')
+    script.src = '/vendor/html-to-image.js'
+    script.async = true
+    script.dataset.vendor = 'html-to-image'
+    script.onload = () => {
+      if (window.htmlToImage) resolve(window.htmlToImage)
+      else reject(new Error('script loaded but window.htmlToImage missing'))
+    }
+    script.onerror = () => reject(new Error('failed to load /vendor/html-to-image.js'))
+    document.head.appendChild(script)
+  })
+  return htmlToImagePromise
+}
+
 type Props = {
   /** querySelector or ref string for the node to export */
   targetSelector: string
@@ -46,14 +100,11 @@ export default function ExportButton({
         setError(`找不到目標元素：${targetSelector}`)
         return null
       }
-      // Dynamic import keeps html-to-image out of the main bundle.
-      // We use a runtime variable (not a string literal in import()) so
-      // webpack doesn't try to statically resolve the https:// URL —
-      // Next.js's webpack config doesn't have a handler for `https:` schemes.
-      // The `webpackIgnore` magic comment is belt-and-braces for older webpack.
-      const CDN_URL = 'https://esm.sh/html-to-image@1.11.11'
-      const mod = await import(/* webpackIgnore: true */ CDN_URL)
-      const dataUrl = await mod.toPng(node as HTMLElement, {
+      // Load html-to-image (UMD bundle) via <script> tag injection.
+      // We self-host at /vendor/html-to-image.js so we don't depend on
+      // any CDN — works offline, no CSP issues, faster (cached).
+      const htmlToImage = await loadHtmlToImage()
+      const dataUrl = await htmlToImage.toPng(node as HTMLElement, {
         // Bump pixel ratio for sharper output on retina displays
         pixelRatio: 2,
         // Cache buster on background to avoid transparent PNG
