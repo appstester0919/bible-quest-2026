@@ -1,6 +1,6 @@
 /* eslint-disable no-undef */
 
-const CACHE_NAME = 'bible-quest-v22' // bump v21→v22: TTS_CHAR_MAP add 縵→慢 (2026-08-24, Round-9, zh-HK voices REJECT 縵 NoAudioReceived/SILENT). Regen 王下 5/17/18 + 路 4 (20 verses total). Display text unchanged (still 乃縵 / 撒縵以色).
+const CACHE_NAME = 'bible-quest-v23' // bump v22→v23: TTS_CHAR_MAP add 鉈→陀 (2026-08-27, Round-10, zh-HK voices REJECT 鉈 NoAudioReceived/SILENT). Regen 賽28/賽34/王下21/亞4 (4 verses total). Display text unchanged (still 鉈 in bible-data.json).
 
 // ─── Install ──────────────────────────────────────────────────────────────────
 self.addEventListener('install', (event) => {

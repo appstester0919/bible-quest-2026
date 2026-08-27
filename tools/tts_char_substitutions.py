@@ -70,6 +70,12 @@ homophone 慢 (slow) preserves Cantonese pronunciation perfectly with zero
 collision in BQ corpus (乃慢 / 撒慢以色 read as natural proper name). Display
 text in bible-data.json stays canonical 縵 — sub applied only at generation time.
 Affects 20 verses across 4 chapters: 王下 5 / 王下 17 / 王下 18 / 路 4.
+New 1 mapping (鉈) added 2026-08-27 per user Cantonese ear verify — 鉈 REJECTED
+by edge TTS zh-HK voices (NoAudioReceived / SILENT). User-direct sub: 鉈→陀
+(tò/tò⁴). 鉈 = plumb-line / 線鉈 / 準繩 measurement instrument in 4 verses:
+賽 28:17 / 賽 34:11 / 王下 21:13 / 亞 4:10. Homophone 陀 (globe/steelyard base)
+preserves Cantonese pronunciation perfectly. Display text in bible-data.json
+stays canonical 鉈 — sub applied only at generation time.
 
 AFFECTED VERSES: ~534 verses across 40+ books (212 original 4 + 6 輜 + 75 驕 + 52
   軛 + 10 縋 + 18 讒 + 2 貲 + 19 賙 + 199 單 + 4 搆 + 4 誆 + 5 柺).
@@ -116,6 +122,7 @@ TTS_CHAR_MAP: dict[str, str] = {
     '饈': '收',  # shōu (xiū→TTS reads as shōu acceptable per user Cantonese ear) — added 2026-08-21
     '罈': '譚',  # tán — added 2026-08-21 per user Cantonese ear verify (罈 REJECTED by edge TTS zh-HK, NoAudioReceived)
     '縵': '慢',  # màn — added 2026-08-24 per user Cantonese ear verify (縵 REJECTED by edge TTS zh-HK, NoAudioReceived/SILENT). Naaman/Shalmaneser proper name.
+    '鉈': '陀',  # tò — added 2026-08-27 per user Cantonese ear verify (鉈 REJECTED by edge TTS zh-HK, NoAudioReceived/SILENT). 線鉈 / 準繩 plumb-line context. Display text stays canonical 鉈 — sub applied only at generation time.
 }
 
 # Frozen snapshot for safety (prevents accidental mutation)
