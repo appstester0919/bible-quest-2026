@@ -8,7 +8,9 @@ import { redirect } from 'next/navigation'
  */
 export async function createPartnerInvite(): Promise<{ token: string }> {
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
   // Check existing active partner
@@ -36,7 +38,9 @@ export async function createPartnerInvite(): Promise<{ token: string }> {
  */
 export async function acceptPartnerInvite(token: string) {
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
   const { data: invite } = await supabase
@@ -74,7 +78,10 @@ export async function acceptPartnerInvite(token: string) {
 
   if (pairError) throw new Error('配對失敗')
 
-  await supabase.from('partner_invites').update({ status: 'accepted' }).eq('token', token)
+  await supabase
+    .from('partner_invites')
+    .update({ status: 'accepted' })
+    .eq('token', token)
   return { success: true }
 }
 
@@ -85,22 +92,36 @@ export async function acceptPartnerInvite(token: string) {
 export async function getPartnerInfo(): Promise<{
   partner_id: string
   paired_at: string
-  partner: { id: string; display_name: string | null; avatar_url: string | null } | null
-  partner_stats: { current_streak: number; longest_streak: number; last_completed_date: string | null; total_xp: number; level: number } | null
+  partner: {
+    id: string
+    display_name: string | null
+    avatar_url: string | null
+  } | null
+  partner_stats: {
+    current_streak: number
+    longest_streak: number
+    last_completed_date: string | null
+    total_xp: number
+    level: number
+  } | null
 } | null> {
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
   if (!user) return null
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: pair } = await supabase
     .from('partner_pairs')
-    .select(`
+    .select(
+      `
       partner_id,
       paired_at,
       partner:profiles!partner_id(id, display_name, avatar_url),
       partner_stats:user_stats!partner_id(current_streak, longest_streak, last_completed_date, total_xp, level)
-    `)
+    `,
+    )
     .eq('user_id', user.id)
     .eq('status', 'active')
     .single()
@@ -112,7 +133,11 @@ export async function getPartnerInfo(): Promise<{
   return {
     partner_id: pair.partner_id,
     paired_at: pair.paired_at,
-    partner: Array.isArray(raw.partner) ? raw.partner[0] ?? null : raw.partner ?? null,
-    partner_stats: Array.isArray(raw.partner_stats) ? raw.partner_stats[0] ?? null : raw.partner_stats ?? null,
+    partner: Array.isArray(raw.partner)
+      ? (raw.partner[0] ?? null)
+      : (raw.partner ?? null),
+    partner_stats: Array.isArray(raw.partner_stats)
+      ? (raw.partner_stats[0] ?? null)
+      : (raw.partner_stats ?? null),
   }
 }
