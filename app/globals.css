@@ -1,5 +1,8 @@
 @import 'tailwindcss';
 
+/* Discipline pages (成全操練) — Goal / Weekly / Sharing styles */
+@import './(main)/discipline/discipline.css';
+
 /* Tell Tailwind v4 where to scan for utility classes */
 @source "../app/**/*.{js,ts,jsx,tsx,mdx}";
 @source "../components/**/*.{js,ts,jsx,tsx,mdx}";

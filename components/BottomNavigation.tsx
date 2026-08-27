@@ -86,6 +86,14 @@ const ShareIcon = ({ size }: IconProps) => (
   </Icon>
 )
 
+// 「操練」tab icon — heart with flame (combines love + streak metaphor)
+const PracticeIcon = ({ size }: IconProps) => (
+  <Icon size={size}>
+    <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+    <path d="M12 8c-1.5-2-4-2-4 0 0 1.5 1.5 3 4 5 2.5-2 4-3.5 4-5 0-2-2.5-2-4 0" />
+  </Icon>
+)
+
 const CloseIcon = ({ size = 20 }: IconProps) => (
   <Icon size={size}>
     <line x1="6" y1="6" x2="18" y2="18" />
@@ -110,9 +118,9 @@ const TOP_TABS = [
     accent: '#1CB0F6',
   },
   {
-    href: '/settings',
-    label: '設定',
-    TabIcon: SettingsIcon,
+    href: '/discipline',
+    label: '操練',
+    TabIcon: PracticeIcon,
     accent: '#CE82FF',
   },
 ] as const
@@ -256,6 +264,16 @@ export default function BottomNavigation() {
 
             <div className="nav-sheet-grid">
               {/* 夥伴已落架（見 SHEET_ROUTE_PREFIXES 註）；要加返喺度開一格 */}
+              <Link
+                href="/settings"
+                className="more-item"
+                onClick={() => setSheetOpen(false)}
+              >
+                <span className="more-item-icon more-item-icon-accent">
+                  <SettingsIcon size={20} />
+                </span>
+                <span className="more-item-label">設定</span>
+              </Link>
               <button type="button" className="more-item" onClick={shareApp}>
                 <span className="more-item-icon more-item-icon-streak">
                   <ShareIcon size={20} />
