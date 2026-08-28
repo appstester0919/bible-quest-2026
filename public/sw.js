@@ -1,8 +1,18 @@
 /* eslint-disable no-undef */
 
-const CACHE_NAME = 'bible-quest-v24' // bump v23→v24: explicit /vendor/ bypass (2026-08-28, Round-11). SW fetch handler previously cached any .js request — now /vendor/* falls through to network. TTS_CHAR_MAP note: v23 added 鉈→陀 for zh-HK SILENT fix.
+const CACHE_NAME = 'bible-quest-v25' // bump v24→v25 (2026-08-28, Round-12): skipWaiting + clients.claim so new SW activates immediately for active clients.
+// v24 added /vendor/ bypass, but a new SW only takes control after all old
+// clients close — so users with the page already open kept hitting the v23
+// cache-first .js rule and "Failed to fetch" persisted. Round-12 forces
+// immediate activation + claim so the bypass rule runs on next request.
+// TTS_CHAR_MAP note: v23 added 鉈→陀 for zh-HK SILENT fix.
 
 // ─── Install ──────────────────────────────────────────────────────────────────
+// Round-12: skipWaiting() forces the new SW to move into 'activating' state
+// without waiting for all old clients to close. This is required for the
+// /vendor/ bypass (added v24) to take effect on currently-open pages —
+// otherwise users see the stale v23 SW intercept /vendor/html-to-image.js
+// and "Failed to fetch" persists after deploy.
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) =>
@@ -24,6 +34,12 @@ self.addEventListener('install', (event) => {
 })
 
 // ─── Activate ─────────────────────────────────────────────────────────────────
+// Round-12: clients.claim() makes this SW the controller for all open pages
+// immediately after activation — no reload required. Pairs with skipWaiting()
+// above so the /vendor/ bypass (v24) takes effect on the very next fetch
+// from any already-open tab. We also delete any stale cache (v23, v24, etc.)
+// so old /vendor/html-to-image.js responses cannot leak back via the default
+// network-fallback path.
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches
