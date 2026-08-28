@@ -32,6 +32,7 @@ type HtmlToImage = {
   toPng: (node: HTMLElement, opts?: object) => Promise<string>
   toJpeg?: (node: HTMLElement, opts?: object) => Promise<string>
   toSvg?: (node: HTMLElement, opts?: object) => Promise<string>
+  toBlob?: (node: HTMLElement, opts?: object) => Promise<Blob | null>
 }
 
 declare global {
@@ -153,14 +154,27 @@ export default function ExportButton({
         return null
       }
       const htmlToImage = await loadHtmlToImage()
-      const dataUrl = await htmlToImage.toPng(node as HTMLElement, {
+      if (!htmlToImage.toBlob) {
+        setError(
+          '匯出失敗：html-to-image toBlob not available (version too old)',
+        )
+        return null
+      }
+      const blob = await htmlToImage.toBlob(node as HTMLElement, {
         // Bump pixel ratio for sharper output on retina displays
         pixelRatio: 2,
-        // Cache buster on background to avoid transparent PNG
+        // Cream background to match the discipline page palette and avoid
+        // transparent PNGs which look broken when shared into chat apps
         backgroundColor: '#FFFBF2',
       })
-      const blob = await (await fetch(dataUrl)).blob()
+      if (!blob) {
+        setError('匯出失敗：無法產生圖片 blob')
+        return null
+      }
       return blob
+      // Fallback (CSP-blocked): keep for reference only.
+      // const dataUrl = await htmlToImage.toPng(node as HTMLElement, {...})
+      // const blob = await (await fetch(dataUrl)).blob()
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
       setError(`匯出失敗：${msg}`)
