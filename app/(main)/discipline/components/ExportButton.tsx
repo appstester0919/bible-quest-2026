@@ -188,22 +188,29 @@ export default function ExportButton({
     const blob = await exportPNG()
     if (!blob) return
     const file = new File([blob], filename, { type: 'image/png' })
-    const nav = navigator as Navigator & {
-      canShare?: (data: { files: File[] }) => boolean
-    }
-    if (nav.canShare && nav.canShare({ files: [file] })) {
+
+    // Modern Web Share API: try sharing files directly
+    if (typeof navigator.share === 'function') {
       try {
         await navigator.share({
           files: [file],
           title: shareTitle,
           text: shareText,
         })
-        return
-      } catch {
-        // user cancelled or share failed — fall through to download
+        return // share succeeded
+      } catch (err) {
+        // AbortError = user dismissed share sheet (NOT a failure, just cancel)
+        if (err instanceof Error && err.name === 'AbortError') {
+          return
+        }
+        // Other errors (NotAllowedError, etc.) — log + fall through to download
+        if (typeof console !== 'undefined') {
+          console.debug('[ExportButton] navigator.share failed, falling back to download:', err)
+        }
       }
     }
-    // Fallback: trigger PNG download
+
+    // Fallback: trigger PNG download (no share sheet available)
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
