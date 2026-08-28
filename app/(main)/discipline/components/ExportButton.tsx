@@ -1,7 +1,7 @@
 'use client'
 
 /**
- * ExportButton — PNG export + Web Share for discipline pages.
+ * ExportButton — PNG download for discipline pages.
  *
  * Implementation note (2026-08-28): html-to-image UMD is self-hosted as a
  * static asset at `/vendor/html-to-image.js` (v1.11.11, pinned in
@@ -24,6 +24,22 @@
  * Concurrent load dedupe is handled by the module-scoped
  * `htmlToImagePromise` variable: N calls produce 1 <script> tag, 1
  * network request, 1 promise.
+ *
+ * --- Why download-only (Round 15 collapse) ---
+ *
+ * Rounds 11–14 added a 3-strategy Web Share API cascade (file-share →
+ * URL-share → download-fallback). On Android Chrome / Brave / Telegram
+ * in-app WebView, file-mode navigator.share silently fails after async
+ * toBlob render: the transient user-activation (gesture token) from the
+ * button tap expires during the PNG render, so navigator.share() rejects
+ * with NotAllowedError / DataError / TypeError. Result: the "share"
+ * button silently fell through to the same download path as the
+ * download-only button — two buttons, identical behavior.
+ *
+ * User decision (2026-08-28, verbatim): "如果只能繼續現在的方法，那麼
+ * 兩個button其實沒有分別，就只需要保留一個button 了，免得混淆用家。"
+ * → collapsed to a single 「📥 下載圖片」 button. No share code, no
+ * share props. The label describes what the button actually does.
  */
 
 import { useState } from 'react'
@@ -129,18 +145,9 @@ type Props = {
   targetSelector: string
   /** suggested filename, e.g. "weekly-2026-W34.png" */
   filename: string
-  /** Optional caption passed to Web Share API */
-  shareTitle?: string
-  /** Optional text passed alongside the image */
-  shareText?: string
 }
 
-export default function ExportButton({
-  targetSelector,
-  filename,
-  shareTitle = '成全操練',
-  shareText = '',
-}: Props) {
+export default function ExportButton({ targetSelector, filename }: Props) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -184,98 +191,7 @@ export default function ExportButton({
     }
   }
 
-  async function handleShare() {
-    const blob = await exportPNG()
-    if (!blob) return
-    const file = new File([blob], filename, { type: 'image/png' })
-
-    // Same pattern as the working 「更多 → 分享」 button in
-    // components/BottomNavigation.tsx (shareApp): Web Share API first,
-    // graceful fallback. The bottom-nav button shares a URL because that's
-    // all it has to share. For ExportButton we have a generated blob, so we
-    // we try file-based share first, then URL+text share as a wider-net
-    // secondary attempt, then download + user-visible hint.
-    //
-    // Note: File-based navigator.share is finicky on Android Chrome <89,
-    // Brave with strict shields, and Telegram in-app WebView — all of which
-    // may throw NotAllowedError / DataError / TypeError silently. That's
-    // why we wrap each strategy in its own try/catch with a hint at the end.
-
-    // Strategy 1: share the file directly (modern Android Chrome, Safari iOS)
-    if (
-      typeof navigator !== 'undefined' &&
-      typeof navigator.share === 'function' &&
-      typeof navigator.canShare === 'function' &&
-      navigator.canShare({ files: [file] })
-    ) {
-      try {
-        await navigator.share({
-          files: [file],
-          title: shareTitle,
-          text: shareText,
-        })
-        return // share succeeded
-      } catch (err) {
-        // AbortError = user dismissed share sheet (NOT a failure, just cancel)
-        if (err instanceof Error && err.name === 'AbortError') return
-        // Other errors — log + fall through to strategy 2
-        if (typeof console !== 'undefined') {
-          console.debug('[ExportButton] file-share failed:', err)
-        }
-      }
-    }
-
-    // Strategy 2: URL-based share with the image as a downloaded attachment
-    // in the share text. Matches the BottomNavigation.tsx shareApp pattern
-    // (URL-only share is universally supported and the simplest fallback).
-    if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
-      try {
-        // Trigger the download in parallel — many share targets (Telegram,
-        // WhatsApp, email) will let the user pick the freshly-downloaded
-        // file from the share sheet's recent files area.
-        const dlUrl = URL.createObjectURL(blob)
-        const a = document.createElement('a')
-        a.href = dlUrl
-        a.download = filename
-        document.body.appendChild(a)
-        a.click()
-        document.body.removeChild(a)
-        URL.revokeObjectURL(dlUrl)
-
-        await navigator.share({
-          title: shareTitle,
-          text:
-            `${shareText}\n\n📎 已將圖片下載為「${filename}」，請從附件選擇分享。`.trim(),
-          url: window.location.href,
-        })
-        return
-      } catch (err) {
-        if (err instanceof Error && err.name === 'AbortError') return
-        if (typeof console !== 'undefined') {
-          console.debug('[ExportButton] URL-share failed:', err)
-        }
-      }
-    }
-
-    // Strategy 3: download + user-visible hint. This is what handles
-    // every browser without navigator.share at all (older desktops, some
-    // in-app WebViews). The hint solves the original UX complaint: user
-    // taps 匯出並分享, sees a download, and now knows what to do next.
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = filename
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-    URL.revokeObjectURL(url)
-
-    setError(
-      `圖片已下載為「${filename}」。請打開 Telegram / WhatsApp 等 app，從「最近分享」或「下載項目」選擇此圖片分享。`,
-    )
-  }
-
-  async function handleDownloadOnly() {
+  async function handleExport() {
     const blob = await exportPNG()
     if (!blob) return
     const url = URL.createObjectURL(blob)
@@ -293,19 +209,11 @@ export default function ExportButton({
       <button
         type="button"
         className="btn-primary export-button-main"
-        onClick={handleShare}
+        onClick={handleExport}
         disabled={busy}
         aria-busy={busy}
       >
-        {busy ? '匯出中…' : '📤 匯出並分享'}
-      </button>
-      <button
-        type="button"
-        className="btn-secondary export-button-alt"
-        onClick={handleDownloadOnly}
-        disabled={busy}
-      >
-        下載圖片
+        {busy ? '匯出中…' : '📥 下載圖片'}
       </button>
       {error && (
         <p className="export-error" role="alert">

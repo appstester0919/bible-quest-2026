@@ -238,8 +238,6 @@ export default function WeeklyPage() {
         <ExportButton
           targetSelector="#discipline-weekly-export"
           filename={filename}
-          shareTitle={`成全操練週報 ${week}`}
-          shareText={`這是 ${week} 的操練週報，請導師過目。`}
         />
         <details className="discipline-week-nav">
           <summary>其他週次快速跳轉</summary>

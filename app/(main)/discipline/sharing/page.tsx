@@ -145,8 +145,6 @@ export default function SharingPage() {
         <ExportButton
           targetSelector="#discipline-sharing-export"
           filename={filename}
-          shareTitle={`成全操練分享紀錄 ${week}`}
-          shareText={`這是 ${week} 的信仰分享紀錄，請導師過目。`}
         />
         <details className="discipline-week-nav">
           <summary>其他週次快速跳轉</summary>

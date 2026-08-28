@@ -165,8 +165,6 @@ export default function GoalsPage() {
         <ExportButton
           targetSelector="#discipline-goals-export"
           filename={filename}
-          shareTitle="成全操練目標設定"
-          shareText="這是我的成全追求每週目標，請導師過目。"
         />
       </DisciplineCard>
     </div>
