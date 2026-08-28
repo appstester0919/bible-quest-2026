@@ -76,9 +76,17 @@ by edge TTS zh-HK voices (NoAudioReceived / SILENT). User-direct sub: 鉈→陀
 賽 28:17 / 賽 34:11 / 王下 21:13 / 亞 4:10. Homophone 陀 (globe/steelyard base)
 preserves Cantonese pronunciation perfectly. Display text in bible-data.json
 stays canonical 鉈 — sub applied only at generation time.
+New 1 mapping (諂) added 2026-08-28 per user Cantonese ear verify — 諂 REJECTED
+by edge TTS zh-HK voices (NoAudioReceived, 0 B). User-direct sub: 諂→闡
+(chǎn / cin2). 諂 = flattery, always in compound 諂媚 (flatter / cajole), appears
+in 12 verses across 10 chapters / 8 books (詩5/詩78/箴6/箴7/箴26/箴28/箴29/
+但11/帖前2/猶1). Homophone 闡 (expound / cin2) preserves Cantonese pronunciation
+perfectly. Display text in bible-data.json stays canonical 諂 — sub applied only
+at generation time.
 
-AFFECTED VERSES: ~534 verses across 40+ books (212 original 4 + 6 輜 + 75 驕 + 52
-  軛 + 10 縋 + 18 讒 + 2 貲 + 19 賙 + 199 單 + 4 搆 + 4 誆 + 5 柺).
+AFFECTED VERSES: ~534+12 = ~546 verses across 40+ books (212 original 4 + 6 輜 +
+  75 驕 + 52 軛 + 10 縋 + 18 讒 + 2 貲 + 19 賙 + 199 單 + 4 搆 + 4 誆 + 5 柺 + 12
+  諂 [詩5 詩78 箴6 箴7 箴26 箴28 箴29 但11 帖前2 猶1]).
   Books affected: 創/利/民/申/書士撒上撒下王上王下代上代下拉尼伯詩箴歌賽耶結但珥摩俄彌鴻番太可路約徒林前林後來/plus new: 哀/傳/出/亞/何/加/多/提前/提後/斯/士/耶/珥/摩/plus 2026-08-16: 撒下1/賽10/林後10/士14/士16/王上13
 
 REGENERATION SCOPE: any chapter containing affected chars needs regen.
@@ -123,6 +131,7 @@ TTS_CHAR_MAP: dict[str, str] = {
     '罈': '譚',  # tán — added 2026-08-21 per user Cantonese ear verify (罈 REJECTED by edge TTS zh-HK, NoAudioReceived)
     '縵': '慢',  # màn — added 2026-08-24 per user Cantonese ear verify (縵 REJECTED by edge TTS zh-HK, NoAudioReceived/SILENT). Naaman/Shalmaneser proper name.
     '鉈': '陀',  # tò — added 2026-08-27 per user Cantonese ear verify (鉈 REJECTED by edge TTS zh-HK, NoAudioReceived/SILENT). 線鉈 / 準繩 plumb-line context. Display text stays canonical 鉈 — sub applied only at generation time.
+    '諂': '闡',  # chǎn / cin2 — added 2026-08-28 per user Cantonese ear verify (諂 REJECTED by edge TTS zh-HK, NoAudioReceived, 0 B). Affects 12 verses across 10 chapters (詩/箴/但/帖前/猶) — all in compound 諂媚. Display text stays canonical 諂 — sub applied only at generation time.
 }
 
 # Frozen snapshot for safety (prevents accidental mutation)
@@ -203,6 +212,7 @@ if __name__ == '__main__':
         ('彌賽亞繙出來就是基督。', '彌賽亞翻出來就是基督。'),
         ('為那兩隻羊拈鬮，一鬮歸與耶和華。', '為那兩隻羊拈鳩，一鳩歸與耶和華。'),
         ('我心裡也仔細省察捫心自問。', '我心裡也仔細省察悶心自問。'),
+        ('他們用舌頭諂媚人。', '他們用舌頭闡媚人。'),  # Round-11 2026-08-28
     ]
     print('=== tts_text() tests ===')
     all_pass = True

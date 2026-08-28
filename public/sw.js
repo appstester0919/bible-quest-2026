@@ -1,6 +1,6 @@
 /* eslint-disable no-undef */
 
-const CACHE_NAME = 'bible-quest-v25' // bump v24→v25 (2026-08-28, Round-12): skipWaiting + clients.claim so new SW activates immediately for active clients.
+const CACHE_NAME = 'bible-quest-v26' // bump v25→v26 (2026-08-28, Round-11): audio regen for 諂→闡 sub applied to 10 chapters. Force client refetch.
 // v24 added /vendor/ bypass, but a new SW only takes control after all old
 // clients close — so users with the page already open kept hitting the v23
 // cache-first .js rule and "Failed to fetch" persisted. Round-12 forces
