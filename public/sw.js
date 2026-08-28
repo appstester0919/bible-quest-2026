@@ -1,6 +1,6 @@
 /* eslint-disable no-undef */
 
-const CACHE_NAME = 'bible-quest-v23' // bump v22→v23: TTS_CHAR_MAP add 鉈→陀 (2026-08-27, Round-10, zh-HK voices REJECT 鉈 NoAudioReceived/SILENT). Regen 賽28/賽34/王下21/亞4 (4 verses total). Display text unchanged (still 鉈 in bible-data.json).
+const CACHE_NAME = 'bible-quest-v24' // bump v23→v24: explicit /vendor/ bypass (2026-08-28, Round-11). SW fetch handler previously cached any .js request — now /vendor/* falls through to network. TTS_CHAR_MAP note: v23 added 鉈→陀 for zh-HK SILENT fix.
 
 // ─── Install ──────────────────────────────────────────────────────────────────
 self.addEventListener('install', (event) => {
@@ -52,6 +52,17 @@ self.addEventListener('fetch', (event) => {
     url.hostname === 'fonts.googleapis.com' ||
     url.hostname === 'fonts.gstatic.com'
   ) {
+    return // let the browser handle it directly
+  }
+
+  // Bypass /vendor/* — always network (Round-11, 2026-08-28).
+  // Reason: /vendor/html-to-image.js is a pinned third-party UMD loaded via
+  // <script src>. The SW cache-first .js rule below would otherwise cache
+  // the first response indefinitely, blocking future UMD version bumps
+  // (same URL, new bytes) and risking stale code serving after deploys.
+  // /vendor/* is small, cacheable at the HTTP layer by the browser, and
+  // not performance-critical for cold-load.
+  if (url.pathname.startsWith('/vendor/')) {
     return // let the browser handle it directly
   }
 
