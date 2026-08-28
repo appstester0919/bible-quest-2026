@@ -189,8 +189,25 @@ export default function ExportButton({
     if (!blob) return
     const file = new File([blob], filename, { type: 'image/png' })
 
-    // Modern Web Share API: try sharing files directly
-    if (typeof navigator.share === 'function') {
+    // Same pattern as the working 「更多 → 分享」 button in
+    // components/BottomNavigation.tsx (shareApp): Web Share API first,
+    // graceful fallback. The bottom-nav button shares a URL because that's
+    // all it has to share. For ExportButton we have a generated blob, so we
+    // we try file-based share first, then URL+text share as a wider-net
+    // secondary attempt, then download + user-visible hint.
+    //
+    // Note: File-based navigator.share is finicky on Android Chrome <89,
+    // Brave with strict shields, and Telegram in-app WebView — all of which
+    // may throw NotAllowedError / DataError / TypeError silently. That's
+    // why we wrap each strategy in its own try/catch with a hint at the end.
+
+    // Strategy 1: share the file directly (modern Android Chrome, Safari iOS)
+    if (
+      typeof navigator !== 'undefined' &&
+      typeof navigator.share === 'function' &&
+      typeof navigator.canShare === 'function' &&
+      navigator.canShare({ files: [file] })
+    ) {
       try {
         await navigator.share({
           files: [file],
@@ -200,25 +217,62 @@ export default function ExportButton({
         return // share succeeded
       } catch (err) {
         // AbortError = user dismissed share sheet (NOT a failure, just cancel)
-        if (err instanceof Error && err.name === 'AbortError') {
-          return
-        }
-        // Other errors (NotAllowedError, etc.) — log + fall through to download
+        if (err instanceof Error && err.name === 'AbortError') return
+        // Other errors — log + fall through to strategy 2
         if (typeof console !== 'undefined') {
-          console.debug('[ExportButton] navigator.share failed, falling back to download:', err)
+          console.debug('[ExportButton] file-share failed:', err)
         }
       }
     }
 
-    // Fallback: trigger PNG download (no share sheet available)
+    // Strategy 2: URL-based share with the image as a downloaded attachment
+    // in the share text. Matches the BottomNavigation.tsx shareApp pattern
+    // (URL-only share is universally supported and the simplest fallback).
+    if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
+      try {
+        // Trigger the download in parallel — many share targets (Telegram,
+        // WhatsApp, email) will let the user pick the freshly-downloaded
+        // file from the share sheet's recent files area.
+        const dlUrl = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = dlUrl
+        a.download = filename
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        URL.revokeObjectURL(dlUrl)
+
+        await navigator.share({
+          title: shareTitle,
+          text:
+            `${shareText}\n\n📎 已將圖片下載為「${filename}」，請從附件選擇分享。`.trim(),
+          url: window.location.href,
+        })
+        return
+      } catch (err) {
+        if (err instanceof Error && err.name === 'AbortError') return
+        if (typeof console !== 'undefined') {
+          console.debug('[ExportButton] URL-share failed:', err)
+        }
+      }
+    }
+
+    // Strategy 3: download + user-visible hint. This is what handles
+    // every browser without navigator.share at all (older desktops, some
+    // in-app WebViews). The hint solves the original UX complaint: user
+    // taps 匯出並分享, sees a download, and now knows what to do next.
     const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = filename
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = filename
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
     URL.revokeObjectURL(url)
+
+    setError(
+      `圖片已下載為「${filename}」。請打開 Telegram / WhatsApp 等 app，從「最近分享」或「下載項目」選擇此圖片分享。`,
+    )
   }
 
   async function handleDownloadOnly() {
