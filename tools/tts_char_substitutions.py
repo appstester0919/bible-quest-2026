@@ -132,6 +132,7 @@ TTS_CHAR_MAP: dict[str, str] = {
     '縵': '慢',  # màn — added 2026-08-24 per user Cantonese ear verify (縵 REJECTED by edge TTS zh-HK, NoAudioReceived/SILENT). Naaman/Shalmaneser proper name.
     '鉈': '陀',  # tò — added 2026-08-27 per user Cantonese ear verify (鉈 REJECTED by edge TTS zh-HK, NoAudioReceived/SILENT). 線鉈 / 準繩 plumb-line context. Display text stays canonical 鉈 — sub applied only at generation time.
     '諂': '闡',  # chǎn / cin2 — added 2026-08-28 per user Cantonese ear verify (諂 REJECTED by edge TTS zh-HK, NoAudioReceived, 0 B). Affects 12 verses across 10 chapters (詩/箴/但/帖前/猶) — all in compound 諂媚. Display text stays canonical 諂 — sub applied only at generation time.
+    '鈸': '拔',  # bá / bat6 — added 2026-08-30 per user Cantonese ear verify (鈸 REJECTED by edge TTS zh-HK, NoAudioReceived, 0 B). Affects 15 verses across 10 chapters (代上/代下/尼/拉/撒下/林前/詩) — all 鈸 proper-noun musical instrument. Display text stays canonical 鈸 — sub applied only at generation time.
 }
 
 # Frozen snapshot for safety (prevents accidental mutation)

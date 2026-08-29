@@ -12,6 +12,7 @@ import asyncio
 import edge_tts
 import os
 import json
+import subprocess
 import time
 import sys
 from datetime import datetime
