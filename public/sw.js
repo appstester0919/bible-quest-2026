@@ -1,11 +1,11 @@
 /* eslint-disable no-undef */
 
-const CACHE_NAME = 'bible-quest-v27' // bump v26→v27 (2026-08-30, Round-12): audio regen for 鈸→拔 sub applied to 10 chapters. Force client refetch.
+const CACHE_NAME = 'bible-quest-v28' // bump v27→v28 (2026-09-01, Round-13): audio regen for 賚→萊 sub applied to 1 chapter (代上 27).
 // v24 added /vendor/ bypass, but a new SW only takes control after all old
 // clients close — so users with the page already open kept hitting the v23
 // cache-first .js rule and "Failed to fetch" persisted. Round-12 forces
 // immediate activation + claim so the bypass rule runs on next request.
-// TTS_CHAR_MAP note: v23 added 鉈→陀 for zh-HK SILENT fix.
+// TTS_CHAR_MAP note: v23 added 鉈→陀 for zh-HK SILENT fix. v28 added 賚→萊 (proper name 施提賚/亞第賚 in 代上 27:29).
 
 // ─── Install ──────────────────────────────────────────────────────────────────
 // Round-12: skipWaiting() forces the new SW to move into 'activating' state
