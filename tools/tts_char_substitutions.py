@@ -83,10 +83,28 @@ in 12 verses across 10 chapters / 8 books (詩5/詩78/箴6/箴7/箴26/箴28/箴2
 但11/帖前2/猶1). Homophone 闡 (expound / cin2) preserves Cantonese pronunciation
 perfectly. Display text in bible-data.json stays canonical 諂 — sub applied only
 at generation time.
+New 1 mapping (賚) added 2026-09-01 per user Cantonese ear verify — 賚 REJECTED
+by edge TTS zh-HK voices (NoAudioReceived, both voices). User-direct sub: 賚→萊
+(lài / lai6). 賚 = proper-name syllable in 施提賚 / 亞第賚 (代上 27:29 only).
+Homophone 萊 (goosefoot / lai6) preserves Cantonese pronunciation perfectly with
+zero collision in BQ corpus. Display text in bible-data.json stays canonical 賚
+— sub applied only at generation time. Affects 1 verse / 1 chapter (代上 27:29).
+Round-13 narrow-regen pattern (≤10 chapters) structurally sidesteps §21.
+New 2 mappings (鍤, 誚) added 2026-09-02 per user Cantonese ear verify — both
+REJECTED by edge TTS zh-HK voices (NoAudioReceived, 0 B, both voices).
+鍤 REJECTED in 出27/出38/民4/代下4 (4 verses, all 肉鍤子 altar-meat-fork utensil).
+User-direct sub: 鍤→插 (chǎ / caap3) — same Cantonese reading, semantically
+faithful (fork = something inserted).
+誚 REJECTED in 24 verses / 22 chapters spanning 申/士/王上/代下/伯/詩/箴/賽/結/哈/
+太/可/路/徒/彼後/猶 — all in compound 譏誚 (mock/scoff verb). User-direct sub:
+誚→俏 (qiào / qiu3) — Cantonese homophone, minimal semantic drift in verb-noun
+compound context.
+Display text in bible-data.json stays canonical 鍤 / 誚 — sub applied only at
+generation time. Total Round-14: 26 chapters affected.
 
-AFFECTED VERSES: ~534+12 = ~546 verses across 40+ books (212 original 4 + 6 輜 +
+AFFECTED VERSES: ~546+28 = ~574 verses across 40+ books (212 original 4 + 6 輜 +
   75 驕 + 52 軛 + 10 縋 + 18 讒 + 2 貲 + 19 賙 + 199 單 + 4 搆 + 4 誆 + 5 柺 + 12
-  諂 [詩5 詩78 箴6 箴7 箴26 箴28 箴29 但11 帖前2 猶1]).
+  諂 [詩5 詩78 箴6 箴7 箴26 箴28 箴29 但11 帖前2 猶1] + 2026-09-02: 4 鍤 [出27 出38 民4 代下4] + 24 誚 [申28 士8 王上9 代下7 代下30 代下36 伯16 伯34 詩123 箴3 箴27 賽28 結22 結36 哈1 太27 可15 路23 徒2 徒17 彼後3 猶1]).
   Books affected: 創/利/民/申/書士撒上撒下王上王下代上代下拉尼伯詩箴歌賽耶結但珥摩俄彌鴻番太可路約徒林前林後來/plus new: 哀/傳/出/亞/何/加/多/提前/提後/斯/士/耶/珥/摩/plus 2026-08-16: 撒下1/賽10/林後10/士14/士16/王上13
 
 REGENERATION SCOPE: any chapter containing affected chars needs regen.
@@ -134,6 +152,8 @@ TTS_CHAR_MAP: dict[str, str] = {
     '諂': '闡',  # chǎn / cin2 — added 2026-08-28 per user Cantonese ear verify (諂 REJECTED by edge TTS zh-HK, NoAudioReceived, 0 B). Affects 12 verses across 10 chapters (詩/箴/但/帖前/猶) — all in compound 諂媚. Display text stays canonical 諂 — sub applied only at generation time.
     '鈸': '拔',  # bá / bat6 — added 2026-08-30 per user Cantonese ear verify (鈸 REJECTED by edge TTS zh-HK, NoAudioReceived, 0 B). Affects 15 verses across 10 chapters (代上/代下/尼/拉/撒下/林前/詩) — all � proper-noun musical instrument. Display text stays canonical 鈸 — sub applied only at generation time.
     '賚': '萊',  # lài / lai6 — added 2026-09-01 per user Cantonese ear verify (賚 REJECTED by edge TTS zh-HK, NoAudioReceived, both voices). Affects 1 verse (代上 27:29, 施提賚/亞第賚 — proper names). Display text stays canonical 賚 — sub applied only at generation time.
+    '鍤': '插',  # chǎ / caap3 — added 2026-09-02 per user Cantonese ear verify (鍤 REJECTED by edge TTS zh-HK, NoAudioReceived, both voices). Affects 4 verses across 4 chapters (出27/出38/民4/代下4) — all in compound 肉鍤子 (altar meat fork utensil). Cantonese caap3 = 插 (insert/fork) preserved perfectly. Display text stays canonical 鍤 — sub applied only at generation time.
+    '誚': '俏',  # qiào / qiu3 — added 2026-09-02 per user Cantonese ear verify (誚 REJECTED by edge TTS zh-HK, NoAudioReceived, both voices). Affects 24 verses across 22 chapters (申28/士8/王上9/代下7/代下30/代下36/伯16/伯34/詩123/箴3/箴27/賽28/結22×2/結36/哈1/太27×2/可15/路23/徒2/徒17/彼後3/猶1) — all in compound 譏誚 (mock/scoff verb). Cantonese qiu3 = 俏 (pretty/lively) preserved. Display text stays canonical 誚 — sub applied only at generation time.
 }
 
 # Frozen snapshot for safety (prevents accidental mutation)
@@ -229,7 +249,7 @@ if __name__ == '__main__':
 
     print(f'\n=== Module info ===')
     print(f'  Affected chars: {list_affected_chars()}')
-    print(f'  Total: {len(TTS_CHAR_MAP)} chars, 212 affected verses across 30+ books')
+    print(f'  Total: {len(TTS_CHAR_MAP)} chars (Round-14), 574+ affected verses across 40+ books')
 
     if all_pass:
         print('\n✅ All tests pass')
