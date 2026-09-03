@@ -21,6 +21,7 @@
 import { useEffect, useState } from 'react'
 import DisciplineCard from '../components/DisciplineCard'
 import ExportButton from '../components/ExportButton'
+import AutoTextarea from '../components/AutoTextarea'
 import FontSizeControl from '../components/FontSizeControl'
 import WeekSelector, {
   isoWeekString,
@@ -181,13 +182,14 @@ export default function SharingPage() {
             <p className="discipline-sharing-hint">
               聽完本週成全操練課程的講台訊息後，記下你的啟發和得著
             </p>
-            <textarea
+            <AutoTextarea
               className="discipline-sharing-textarea"
               value={form.message}
               onChange={(e) =>
                 setForm((f) => ({ ...f, message: e.target.value }))
               }
               placeholder="本週講台訊息給我的啟發…"
+              minHeight={110}
               rows={5}
               aria-label={`${week} MESSAGE`}
             />
@@ -198,11 +200,12 @@ export default function SharingPage() {
             <p className="discipline-sharing-hint">
               與導師分享本週生活：近況、信仰經歷、感恩或代禱事項
             </p>
-            <textarea
+            <AutoTextarea
               className="discipline-sharing-textarea"
               value={form.daily}
               onChange={(e) => setForm((f) => ({ ...f, daily: e.target.value }))}
               placeholder="本週生活分享：近況 / 信仰經歷 / 代禱事項…"
+              minHeight={150}
               rows={7}
               aria-label={`${week} DAILY SHARING`}
             />

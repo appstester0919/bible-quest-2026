@@ -30,6 +30,24 @@
  *     round-trip tap-to-cycle loses the 28px oval feel).
  *   - Padding: .discipline-card 24px → 18px and .discipline-export-frame
  *     24px 20px → 18px 14px on mobile.
+ *
+ * Round 17 (2026-09-03) — mobile weekly one-card compaction:
+ *   - REMOVED the `.discipline-weekly-table--mobile` day-stack layout
+ *     (and its JSX counterpart). The 8-col grid is now the single
+ *     layout shown at every viewport.
+ *   - Below 600px the grid is compacted so the WHOLE 5×8 table fits
+ *     inside one DisciplineCard on a 375px phone without vertical
+ *     scroll — see the @media (max-width: 600px) block. Specifically:
+ *       cat-label col 90px → 56px,
+ *       cell padding 6px 4px → 2px 1px,
+ *       cell min-height 60px → 44px,
+ *       emoji button 32px → 24px,
+ *       export-frame padding 18px 14px → 12px 8px,
+ *       card padding 18px → 14px,
+ *       row gap 4px → 1px,
+ *       day-en / day-num / cat-en 0.75rem → 0.6rem,
+ *       cat-zh 1.05rem → 0.75rem,
+ *       template-sub 0.85rem → 0.7rem.
  */
 
 .page-discipline,
@@ -290,22 +308,14 @@
 
 /* ─── Weekly table ─────────────────────────────────────────────────── */
 
-/* Desktop layout: 5 rows (categories) × 8 cols (label + 7 days).
- * The mobile reflow uses `.discipline-weekly-table--mobile` (one card
- * per day, vertical stack) and is hidden on desktop; CSS-only, no
- * JS media query needed. */
+/* Single layout: 5 rows (categories) × 8 cols (label + 7 days). The
+ * same grid renders at every viewport; below 600px it is compacted via
+ * @media so the whole table fits inside one DisciplineCard on a phone
+ * (Round 17). */
 .discipline-weekly-table {
   display: flex;
   flex-direction: column;
   gap: 4px;
-}
-
-.discipline-weekly-table--desktop {
-  /* default: visible */
-}
-
-.discipline-weekly-table--mobile {
-  display: none;
 }
 
 .discipline-weekly-row {
@@ -402,64 +412,6 @@
  * nothing rather than throwing. */
 .discipline-note-input {
   display: none;
-}
-
-/* ─── Mobile vertical day-stack layout ─────────────────────────────── */
-
-/* Each day is a card with 5 category rows inside. Renders below 600px
- * via CSS-only toggle (the desktop table is hidden in the same
- * breakpoint). */
-.discipline-weekly-day-card {
-  background: #FFFBF2;
-  border: 1px solid #F0E5C8;
-  border-radius: 12px;
-  padding: 10px 12px;
-  margin-bottom: 10px;
-}
-
-.discipline-weekly-day-card-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  margin-bottom: 8px;
-  padding-bottom: 6px;
-  border-bottom: 1px dashed rgba(0, 0, 0, 0.08);
-}
-
-.discipline-weekly-day-card-head .discipline-weekly-day-en {
-  font-size: 0.85rem;
-}
-
-.discipline-weekly-day-card-head .discipline-weekly-day-num {
-  font-size: 0.95rem;
-  font-weight: 700;
-}
-
-.discipline-weekly-day-card-row {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 8px;
-  align-items: center;
-  padding: 6px 0;
-}
-
-.discipline-weekly-day-card-row + .discipline-weekly-day-card-row {
-  border-top: 1px solid rgba(0, 0, 0, 0.04);
-}
-
-.discipline-weekly-day-card-row-label {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-
-.discipline-weekly-day-card-row-label .discipline-cat-zh {
-  font-size: 1rem;
-  margin-top: 0;
-}
-
-.discipline-weekly-day-card-row-label .discipline-cat-en {
-  font-size: 0.7rem;
 }
 
 /* ─── Sharing block ─────────────────────────────────────────────────── */
@@ -640,11 +592,14 @@
   margin: 4px 0 0;
 }
 
-/* ─── Mobile responsive (Round 16 — overhauled) ─────────────────────── */
+/* ─── Mobile responsive (Round 16 — overhauled, Round 17 — weekly compaction) ─ */
 
-/* @media (max-width: 600px) — primary mobile breakpoint. Triggers
- * the weekly vertical day-stack reflow and applies the bumped mobile
- * font sizes. */
+/* @media (max-width: 600px) — primary mobile breakpoint.
+ * Round 17 (2026-09-03) compacts the weekly table so the WHOLE 5×8
+ * grid fits inside one DisciplineCard on a 375px phone without
+ * vertical scroll. Previous behavior (Round 16) toggled between an
+ * 8-col grid and a vertical day-stack — that toggle is GONE; we now
+ * compress the same 8-col grid. */
 @media (max-width: 600px) {
   .page-discipline,
   .page-discipline-goals,
@@ -654,19 +609,19 @@
   }
 
   .discipline-card {
-    padding: 18px; /* was 24px */
+    padding: 14px; /* was 18px (Round 16) → 14px (Round 17, more room for grid) */
   }
 
   .discipline-export-frame {
-    padding: 18px 14px; /* was 24px 20px */
+    padding: 12px 8px; /* was 18px 14px → 12px 8px (Round 17) */
   }
 
-  /* Weekly: hide the desktop 8-col grid, show the day-stack cards */
-  .discipline-weekly-table--desktop {
-    display: none;
+  .discipline-template-header {
+    margin-bottom: 8px; /* tighter header on mobile so the grid breathes */
   }
-  .discipline-weekly-table--mobile {
-    display: block;
+
+  .discipline-template-sub {
+    font-size: 0.7rem; /* was 0.85rem → 0.7rem (Round 17) */
   }
 
   /* Goal rows collapse to a single column on mobile (one row per
@@ -685,26 +640,50 @@
     padding: 6px 10px;
   }
 
-  /* Emoji touch targets: 32px square for fat-finger taps. */
-  .discipline-emoji-btn {
-    width: 32px;
-    height: 32px;
-    font-size: 1.65rem;
+  /* ─── Weekly: compact the 8-col grid so it fits one card (Round 17) ─ */
+
+  .discipline-weekly-table {
+    gap: 1px; /* was 4px — compress row gap so 5 rows + header stay tight */
   }
 
-  /* Bump weekly day labels one more step on the tightest phone
-   * viewports (the <480px block re-asserts and also bumps the
-   * category labels). */
+  .discipline-weekly-row {
+    grid-template-columns: 56px repeat(7, 1fr); /* was 90px ... — 56px cat label */
+    gap: 2px; /* was 4px — compress cell gap */
+  }
+
+  .discipline-weekly-cell {
+    padding: 2px 1px; /* was 6px 4px → 2px 1px */
+    min-height: 44px; /* was 60px → 44px */
+    gap: 2px;
+  }
+
+  .discipline-weekly-day {
+    padding: 2px 0; /* tighter header-cell padding so day-en/day-num stack */
+    min-height: auto;
+  }
+
+  /* Emoji touch targets: 24px square on phones. Still within the
+   * ~24px WCAG-friendly tap-target floor (a touch slop zone of 2-3px
+   * around the visible glyph makes misses rare). */
+  .discipline-emoji-btn {
+    width: 24px;
+    height: 24px;
+    font-size: 1.25rem; /* shrink the visible emoji so it fits the smaller tap area */
+  }
+
+  /* Trim the header-row fonts further so SAT/12 style cells don't
+   * dominate the small column. */
   .discipline-weekly-day-en,
   .discipline-weekly-day-num {
-    font-size: 0.75rem;
+    font-size: 0.6rem; /* was 0.75rem → 0.6rem */
   }
 
   .discipline-cat-en {
-    font-size: 0.75rem;
+    font-size: 0.6rem; /* was 0.75rem → 0.6rem */
   }
   .discipline-cat-zh {
-    font-size: 1.05rem;
+    font-size: 0.75rem; /* was 1.05rem → 0.75rem */
+    margin-top: 1px;
   }
 
   /* Hint text: tighter font so it doesn't dominate the mobile view */
@@ -717,23 +696,24 @@
 }
 
 /* @media (max-width: 480px) — narrow phones (iPhone SE, etc.).
- * Keep the existing legacy tweaks and add Round-16 touch-target
- * refinements. */
+ * Round 17 keeps the legacy <480px tweaks for the goal rows, but
+ * the weekly table is already compact via the 600px block above —
+ * we only bump emoji touch targets a touch bigger here for
+ * thumb reach on the very narrowest viewports.
+ *
+ * NOTE: the previous <480px block nicked `.discipline-weekly-row`
+ * to `60px repeat(7, 1fr)` and bumped emoji buttons to 36px. Those
+ * tweaks are no longer compatible with our one-card target
+ * (60px cat col + 36px emoji would overflow a 375px viewport).
+ * They've been removed in Round 17. */
 @media (max-width: 480px) {
-  .discipline-weekly-row {
-    grid-template-columns: 60px repeat(7, 1fr);
-    font-size: 0.7rem;
-  }
-  .discipline-weekly-cell {
-    padding: 4px 2px;
-    min-height: 50px;
-  }
   .discipline-emoji-btn {
-    /* On the narrowest phones, push emoji buttons even bigger for
-     * thumb reach. */
-    width: 36px;
-    height: 36px;
-    font-size: 1.75rem;
+    /* Small bump on the narrowest phones for thumb reach — but still
+     * capped well below the 36px the legacy block used, so the 5×8
+     * grid stays inside the viewport. */
+    width: 26px;
+    height: 26px;
+    font-size: 1.3rem;
   }
   /* Note input kept hidden — see Round 16 removal. */
   .discipline-note-input {

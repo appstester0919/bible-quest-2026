@@ -31,9 +31,13 @@
  *     `note` field is preserved in the type even though the UI no
  *     longer exposes the input (non-breaking Supabase schema, future-
  *     proof for re-introducing notes).
- *   - Mobile reflow: a vertical day-stack (one card per day, 5 category
- *     rows inside) renders below 600px via CSS-only toggle — both
- *     layouts are emitted in JSX and CSS shows/hides them by class.
+ *   - Mobile layout (Round 17, 2026-09-03): the vertical day-stack from
+ *     Round 16 has been REMOVED. The same 8-col grid renders at all
+ *     viewports; below 600px the CSS shrinks the cat-label column
+ *     (90px→56px), cell padding (6px 4px → 2px 1px), cell min-height
+ *     (60px→44px), emoji button size (32px→24px), and several font
+ *     sizes so the whole 5×8 table fits as ONE card on a 375px
+ *     phone viewport without vertical scroll.
  *   - FontSizeControl wired into the page header.
  */
 
@@ -55,6 +59,14 @@ import {
   type WeeklyCell,
   type WeeklyCellsPayload,
 } from '@/lib/disciplineActions'
+
+/** Pretty range for export, e.g. "8月18日 – 8月24日" (Mon..Sun) */
+function weekRangeLabel(iso: string): string {
+  const monday = weekDates(iso)[0]
+  const sunday = weekDates(iso)[6]
+  const fmt = (d: Date) => `${d.getMonth() + 1}月${d.getDate()}日`
+  return `${fmt(monday)} – ${fmt(sunday)}`
+}
 
 const CATEGORIES: { key: CategoryKey; label: string; zh: string }[] = [
   { key: 'virtue', label: 'VIRTUE', zh: '品德' },
@@ -438,11 +450,16 @@ export default function WeeklyPage() {
         <div id="discipline-weekly-export" className="discipline-export-frame">
           <div className="discipline-template-header">
             <h2 className="discipline-template-title">WEEKLY PATIENCE RECORD</h2>
-            <p className="discipline-template-sub">成全追求 · 操練追蹤</p>
+            <p className="discipline-template-sub">
+              成全追求 · 操練追蹤 · {week}（{weekRangeLabel(week)}）
+            </p>
           </div>
 
-          {/* ─── Desktop layout: 5 rows × 8 cols ─────────────── */}
-          <div className="discipline-weekly-table discipline-weekly-table--desktop">
+          {/* ─── Weekly table: 5 rows × 8 cols (cat label + 7 days) ──
+           * Single layout shown at all viewports. Mobile (<600px) gets
+           * a compact 8-col grid via CSS so the whole table fits in
+           * one card (Round 17, 2026-09-03). */}
+          <div className="discipline-weekly-table">
             <div className="discipline-weekly-row discipline-weekly-head">
               <div className="discipline-weekly-cell discipline-weekly-cat">
                 範疇
@@ -513,67 +530,6 @@ export default function WeeklyPage() {
                 </div>
               )
             })}
-          </div>
-
-          {/* ─── Mobile layout: vertical day-stack (CSS-only reflow) ─ */}
-          <div className="discipline-weekly-table discipline-weekly-table--mobile">
-            {DAY_HEADERS.map((d, di) => (
-              <div
-                key={d.key}
-                className="discipline-weekly-day-card"
-              >
-                <div className="discipline-weekly-day-card-head">
-                  <span className="discipline-weekly-day-en">
-                    {d.label}（{d.enShort}）
-                  </span>
-                  <span className="discipline-weekly-day-num">
-                    {dates[di]?.getDate() ?? ''}
-                  </span>
-                </div>
-                {CATEGORIES.map((cat) => {
-                  const cell = cells[cat.key][d.key]
-                  const n = goalLengths[cat.key]
-                  return (
-                    <div
-                      key={cat.key}
-                      className="discipline-weekly-day-card-row"
-                    >
-                      <div className="discipline-weekly-day-card-row-label">
-                        <span className="discipline-cat-zh">
-                          {cat.zh}
-                          {n > 1 && (
-                            <span className="discipline-goal-target-index">
-                              {` ×${n}`}
-                            </span>
-                          )}
-                        </span>
-                        <span className="discipline-cat-en">{cat.label}</span>
-                      </div>
-                      {hydrated ? (
-                        <div className="discipline-emoji-row">
-                          {cell.targets.map((state, ti) => {
-                            const s = coerceState(state)
-                            return (
-                              <button
-                                key={ti}
-                                type="button"
-                                className="discipline-emoji-btn"
-                                aria-label={`${cat.label} ${d.enShort} 目標 ${ti + 1} 目前 ${LABEL_FOR[s]}，點擊切換`}
-                                onClick={() => cycle(cat.key, d.key, ti)}
-                              >
-                                {EMOJI_FOR[s]}
-                              </button>
-                            )
-                          })}
-                        </div>
-                      ) : (
-                        <div className="discipline-weekly-cell-skeleton" />
-                      )}
-                    </div>
-                  )
-                })}
-              </div>
-            ))}
           </div>
 
           {savedAt && (

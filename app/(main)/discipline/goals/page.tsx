@@ -20,6 +20,7 @@
 import { useEffect, useState } from 'react'
 import DisciplineCard from '../components/DisciplineCard'
 import ExportButton from '../components/ExportButton'
+import AutoTextarea from '../components/AutoTextarea'
 import FontSizeControl from '../components/FontSizeControl'
 import {
   getDisciplineGoals,
@@ -292,7 +293,7 @@ export default function GoalsPage() {
                     </div>
                     <div className="discipline-goal-cell">
                       {hydrated ? (
-                        <textarea
+                        <AutoTextarea
                           className="discipline-textarea"
                           value={target.plan}
                           onChange={(e) =>
@@ -303,6 +304,7 @@ export default function GoalsPage() {
                               ? `${cat.zh}的目標 ${idx + 1}…`
                               : `${cat.zh}的目標…`
                           }
+                          minHeight={60}
                           rows={3}
                           aria-label={`${cat.label} 目標 ${idx + 1} 計劃`}
                         />
@@ -312,13 +314,14 @@ export default function GoalsPage() {
                     </div>
                     <div className="discipline-goal-cell">
                       {hydrated ? (
-                        <textarea
+                        <AutoTextarea
                           className="discipline-textarea"
                           value={target.steps}
                           onChange={(e) =>
                             updateTarget(cat.key, idx, 'steps', e.target.value)
                           }
                           placeholder="具體步驟 / 時間…"
+                          minHeight={60}
                           rows={3}
                           aria-label={`${cat.label} 目標 ${idx + 1} 步驟`}
                         />
