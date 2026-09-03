@@ -54,6 +54,18 @@
 .page-discipline-goals,
 .page-discipline-weekly,
 .page-discipline-sharing {
+  /* Round 19 (2026-09-03) — re-apply the 0.92 white overlay on the
+   * page root so the identity bg picture (Uni/High/Prim .jpg) shows
+   * dimmed, matching the soft-washed look of /login /signup /invite
+   * and other open pages. Those pages do this via the Tailwind v4
+   * utility `bg-[var(--color-background)]` on their own root div;
+   * discipline pages use the legacy .page-discipline class and were
+   * missing this overlay, so only body's single 0.92 layer was
+   * applied — leaving the bg.jpg too bright / high-contrast on phone.
+   * Adding a second 0.92 overlay here (stacked over body's) brings
+   * the overall dim down to ~99.4% white (8% remaining image hint),
+   * consistent with other pages. */
+  background: var(--color-background);
   padding: 24px 12px 96px; /* bottom padding clears bottom-nav */
   max-width: 600px;
   margin: 0 auto;
