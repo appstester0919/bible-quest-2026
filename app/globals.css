@@ -68,6 +68,12 @@
  * rewrite every page in one go.
  * ============================================================ */
 :root {
+  /* Font-scale knob (Round 16, 2026-09-03) — set by FontSizeControl
+   * (app/(main)/discipline/components/FontSizeControl.tsx). Discrete
+   * steps: 0.85 / 1.0 / 1.15 / 1.3. Defaults to 1 so the rest of the
+   * app is unaffected when the control hasn't mounted yet. */
+  --bq-font-scale: 1;
+
   --color-primary: var(--color-bq-primary);
   --color-streak: var(--color-bq-streak);
   --color-success: var(--color-bq-success);
@@ -113,6 +119,11 @@ html {
   color: var(--color-primary);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  /* Round 16 (2026-09-03): FontSizeControl writes --bq-font-scale to
+   * documentElement on mount; we propagate it here so every `rem`-
+   * based declaration in the discipline pages (and elsewhere, harmlessly)
+   * scales uniformly without per-element CSS rewrites. */
+  font-size: calc(16px * var(--bq-font-scale, 1));
 }
 
 /* ============================================================

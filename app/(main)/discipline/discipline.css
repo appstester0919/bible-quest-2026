@@ -14,14 +14,30 @@
  *
  * Sans-serif chrome: Nunito (loaded globally).
  * Serif scripture: Noto Serif TC (only if we ever show verse refs).
+ *
+ * Round 16 (2026-09-03) — mobile-first overhaul:
+ *   - Dropped 720px max-width → pages go full-width up to 600px max with
+ *     12px side padding so phones (375px viewport) breathe instead of
+ *     cram.
+ *   - Bumped all mobile font sizes one tick (0.7→0.75, 0.95→1.0,
+ *     0.95→1.05 for category labels).
+ *   - Weekly grid: added a vertical day-stack reflow below 600px so
+ *     each day becomes its own card. The 7-column desktop grid is
+ *     hidden on mobile via `.discipline-weekly-table--desktop { display:
+ *     none; }`, and the day-stack is hidden on desktop via the
+ *     `--mobile` variant.
+ *   - Touch targets: emoji buttons 22px → 32px on mobile (the
+ *     round-trip tap-to-cycle loses the 28px oval feel).
+ *   - Padding: .discipline-card 24px → 18px and .discipline-export-frame
+ *     24px 20px → 18px 14px on mobile.
  */
 
 .page-discipline,
 .page-discipline-goals,
 .page-discipline-weekly,
 .page-discipline-sharing {
-  padding: 24px 20px 96px; /* bottom padding clears bottom-nav */
-  max-width: 720px;
+  padding: 24px 12px 96px; /* bottom padding clears bottom-nav */
+  max-width: 600px;
   margin: 0 auto;
 }
 
@@ -36,11 +52,76 @@
   color: var(--color-bq-primary);
 }
 
+.page-header {
+  /* flex layout so FontSizeControl (added Round 16) can sit at the
+   * top-right of the header next to the <h1>. */
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.page-header > .page-subtitle {
+  /* subtitle goes on its own line under the flex row */
+  flex-basis: 100%;
+  margin: 4px 0 0;
+}
+
 .page-subtitle {
   font-size: 0.95rem;
   color: var(--color-bq-muted);
   margin: 0 0 24px;
   line-height: 1.5;
+}
+
+/* ─── FontSizeControl widget (Round 16) ─────────────────────────── */
+
+.bq-font-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--color-bq-surface);
+  border: 1px solid var(--color-bq-line);
+  border-radius: 9999px;
+  padding: 4px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  flex-shrink: 0;
+}
+
+.bq-font-control-btn {
+  /* big enough to tap with a thumb (~40px square) without dominating
+   * the header row. */
+  min-width: 36px;
+  min-height: 36px;
+  border: none;
+  background: transparent;
+  border-radius: 9999px;
+  font-family: 'Nunito', 'Noto Sans TC', sans-serif;
+  font-weight: 700;
+  font-size: 0.9rem;
+  color: var(--color-bq-primary);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 10px;
+  transition: background 0.15s, color 0.15s;
+}
+
+.bq-font-control-btn:hover:not(:disabled) {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.bq-font-control-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.bq-font-control-reset {
+  /* The center 'A' reset button gets a subtle filled state when the
+   * scale is at the default (already handled by :disabled above). */
+  font-size: 1rem;
 }
 
 /* ─── Landing card grid ────────────────────────────────────────────────── */
@@ -124,7 +205,7 @@
 
 .discipline-template-title {
   font-family: 'Nunito', 'Noto Sans TC', sans-serif;
-  font-size: 1.5rem;
+  font-size: 1.35rem; /* slightly trimmed from 1.5 to fit a 375px viewport */
   font-weight: 800;
   color: #2E5BFF; /* matches the printed sheet's blue */
   margin: 0;
@@ -177,13 +258,13 @@
 .discipline-cat-en {
   font-family: 'Nunito', sans-serif;
   font-weight: 800;
-  font-size: 0.7rem;
+  font-size: 0.75rem; /* bumped from 0.7 per Round 16 mobile-first */
   letter-spacing: 0.05em;
   color: var(--color-bq-primary);
 }
 
 .discipline-cat-zh {
-  font-size: 0.95rem;
+  font-size: 1.05rem; /* bumped from 0.95 per Round 16 mobile-first */
   font-weight: 700;
   color: var(--color-bq-primary);
   margin-top: 2px;
@@ -195,7 +276,7 @@
   background: transparent;
   resize: vertical;
   font-family: 'Noto Sans TC', sans-serif;
-  font-size: 0.95rem;
+  font-size: 1rem; /* bumped from 0.95 per Round 16 mobile-first */
   line-height: 1.5;
   color: var(--color-bq-primary);
   outline: none;
@@ -209,10 +290,22 @@
 
 /* ─── Weekly table ─────────────────────────────────────────────────── */
 
+/* Desktop layout: 5 rows (categories) × 8 cols (label + 7 days).
+ * The mobile reflow uses `.discipline-weekly-table--mobile` (one card
+ * per day, vertical stack) and is hidden on desktop; CSS-only, no
+ * JS media query needed. */
 .discipline-weekly-table {
   display: flex;
   flex-direction: column;
   gap: 4px;
+}
+
+.discipline-weekly-table--desktop {
+  /* default: visible */
+}
+
+.discipline-weekly-table--mobile {
+  display: none;
 }
 
 .discipline-weekly-row {
@@ -258,50 +351,115 @@
 .discipline-weekly-day-en {
   font-family: 'Nunito', sans-serif;
   font-weight: 800;
-  font-size: 0.7rem;
+  font-size: 0.75rem; /* bumped from 0.7 per Round 16 mobile-first */
   letter-spacing: 0.04em;
 }
 
 .discipline-weekly-day-num {
-  font-size: 0.7rem;
+  font-size: 0.75rem; /* bumped from 0.7 per Round 16 mobile-first */
   color: var(--color-bq-muted);
 }
 
-.discipline-check-btn {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  border: 2px solid var(--color-bq-muted);
-  background: var(--color-bq-surface);
-  font-size: 1rem;
-  font-weight: 800;
-  color: var(--color-bq-success);
-  cursor: pointer;
+/* ─── Emoji status (Round 16) — replaces the old ✓ button + note input ─── */
+
+.discipline-emoji-row {
   display: flex;
+  gap: 2px;
   align-items: center;
   justify-content: center;
-  transition: all 0.15s;
+  flex-wrap: nowrap;
 }
 
-.discipline-check-btn[aria-pressed='true'] {
-  border-color: var(--color-bq-success);
-  background: var(--color-bq-success);
-  color: var(--color-bq-surface);
-}
-
-.discipline-note-input {
-  width: 100%;
+.discipline-emoji-btn {
+  /* Large tap target (32px on mobile via media query below) with no
+   * visible border — the emoji itself is the affordance. */
+  width: 28px;
+  height: 28px;
   border: none;
   background: transparent;
-  font-size: 0.7rem;
-  color: var(--color-bq-primary);
-  text-align: center;
-  outline: none;
-  padding: 2px;
+  font-size: 1.5rem; /* large emoji centered in cell */
+  line-height: 1;
+  padding: 0;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  transition: background 0.15s, transform 0.1s;
+  -webkit-tap-highlight-color: transparent;
 }
 
-.discipline-note-input::placeholder {
-  color: rgba(31, 41, 55, 0.4);
+.discipline-emoji-btn:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.discipline-emoji-btn:active {
+  transform: scale(0.92);
+}
+
+/* The note input was removed in Round 16 — kept the class as a stub
+ * (display: none) so any old localStorage `note` data still renders
+ * nothing rather than throwing. */
+.discipline-note-input {
+  display: none;
+}
+
+/* ─── Mobile vertical day-stack layout ─────────────────────────────── */
+
+/* Each day is a card with 5 category rows inside. Renders below 600px
+ * via CSS-only toggle (the desktop table is hidden in the same
+ * breakpoint). */
+.discipline-weekly-day-card {
+  background: #FFFBF2;
+  border: 1px solid #F0E5C8;
+  border-radius: 12px;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+}
+
+.discipline-weekly-day-card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px dashed rgba(0, 0, 0, 0.08);
+}
+
+.discipline-weekly-day-card-head .discipline-weekly-day-en {
+  font-size: 0.85rem;
+}
+
+.discipline-weekly-day-card-head .discipline-weekly-day-num {
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.discipline-weekly-day-card-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  align-items: center;
+  padding: 6px 0;
+}
+
+.discipline-weekly-day-card-row + .discipline-weekly-day-card-row {
+  border-top: 1px solid rgba(0, 0, 0, 0.04);
+}
+
+.discipline-weekly-day-card-row-label {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.discipline-weekly-day-card-row-label .discipline-cat-zh {
+  font-size: 1rem;
+  margin-top: 0;
+}
+
+.discipline-weekly-day-card-row-label .discipline-cat-en {
+  font-size: 0.7rem;
 }
 
 /* ─── Sharing block ─────────────────────────────────────────────────── */
@@ -324,7 +482,7 @@
 }
 
 .discipline-sharing-hint {
-  font-size: 0.85rem;
+  font-size: 0.9rem; /* bumped from 0.85 per Round 16 mobile-first */
   color: var(--color-bq-muted);
   margin: 0 0 8px;
 }
@@ -336,7 +494,7 @@
   border-radius: 12px;
   padding: 12px;
   font-family: 'Noto Sans TC', sans-serif;
-  font-size: 0.95rem;
+  font-size: 1rem; /* bumped from 0.95 per Round 16 mobile-first */
   line-height: 1.6;
   color: var(--color-bq-primary);
   outline: none;
@@ -482,9 +640,40 @@
   margin: 4px 0 0;
 }
 
-/* ─── Mobile responsive ─────────────────────────────────────────────── */
+/* ─── Mobile responsive (Round 16 — overhauled) ─────────────────────── */
 
-@media (max-width: 480px) {
+/* @media (max-width: 600px) — primary mobile breakpoint. Triggers
+ * the weekly vertical day-stack reflow and applies the bumped mobile
+ * font sizes. */
+@media (max-width: 600px) {
+  .page-discipline,
+  .page-discipline-goals,
+  .page-discipline-weekly,
+  .page-discipline-sharing {
+    padding: 18px 12px 96px; /* tighter top padding on phones */
+  }
+
+  .discipline-card {
+    padding: 18px; /* was 24px */
+  }
+
+  .discipline-export-frame {
+    padding: 18px 14px; /* was 24px 20px */
+  }
+
+  /* Weekly: hide the desktop 8-col grid, show the day-stack cards */
+  .discipline-weekly-table--desktop {
+    display: none;
+  }
+  .discipline-weekly-table--mobile {
+    display: block;
+  }
+
+  /* Goal rows collapse to a single column on mobile (one row per
+   * category + each target stacked underneath). The <480px block
+   * already did this; we extend the cutoff to <600px so the
+   * "600-481px" range (e.g. small tablets, large phones in
+   * landscape) also gets the single-column form. */
   .discipline-goal-row {
     grid-template-columns: 1fr;
     gap: 4px;
@@ -495,6 +684,42 @@
     gap: 8px;
     padding: 6px 10px;
   }
+
+  /* Emoji touch targets: 32px square for fat-finger taps. */
+  .discipline-emoji-btn {
+    width: 32px;
+    height: 32px;
+    font-size: 1.65rem;
+  }
+
+  /* Bump weekly day labels one more step on the tightest phone
+   * viewports (the <480px block re-asserts and also bumps the
+   * category labels). */
+  .discipline-weekly-day-en,
+  .discipline-weekly-day-num {
+    font-size: 0.75rem;
+  }
+
+  .discipline-cat-en {
+    font-size: 0.75rem;
+  }
+  .discipline-cat-zh {
+    font-size: 1.05rem;
+  }
+
+  /* Hint text: tighter font so it doesn't dominate the mobile view */
+  .discipline-sharing-hint {
+    font-size: 0.9rem;
+  }
+  .page-subtitle {
+    font-size: 1rem;
+  }
+}
+
+/* @media (max-width: 480px) — narrow phones (iPhone SE, etc.).
+ * Keep the existing legacy tweaks and add Round-16 touch-target
+ * refinements. */
+@media (max-width: 480px) {
   .discipline-weekly-row {
     grid-template-columns: 60px repeat(7, 1fr);
     font-size: 0.7rem;
@@ -503,12 +728,15 @@
     padding: 4px 2px;
     min-height: 50px;
   }
-  .discipline-check-btn {
-    width: 22px;
-    height: 22px;
-    font-size: 0.8rem;
+  .discipline-emoji-btn {
+    /* On the narrowest phones, push emoji buttons even bigger for
+     * thumb reach. */
+    width: 36px;
+    height: 36px;
+    font-size: 1.75rem;
   }
+  /* Note input kept hidden — see Round 16 removal. */
   .discipline-note-input {
-    font-size: 0.6rem;
+    display: none;
   }
 }

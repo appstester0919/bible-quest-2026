@@ -21,6 +21,7 @@
 import { useEffect, useState } from 'react'
 import DisciplineCard from '../components/DisciplineCard'
 import ExportButton from '../components/ExportButton'
+import FontSizeControl from '../components/FontSizeControl'
 import WeekSelector, {
   isoWeekString,
   shiftWeek,
@@ -153,6 +154,7 @@ export default function SharingPage() {
     <div className="page page-discipline-sharing">
       <header className="page-header">
         <h1 className="h1">分享信仰</h1>
+        <FontSizeControl />
         <p className="page-subtitle">
           記錄本週的福音信息要點（MESSAGE）與日常分享（DAILY SHARING）
         </p>
@@ -177,7 +179,7 @@ export default function SharingPage() {
           <div className="discipline-sharing-block">
             <div className="discipline-sharing-label">MESSAGE</div>
             <p className="discipline-sharing-hint">
-              用 3-5 句話總結你會如何向人介紹福音
+              聽完本週成全操練課程的講台訊息後，記下你的啟發和得著
             </p>
             <textarea
               className="discipline-sharing-textarea"
@@ -185,7 +187,7 @@ export default function SharingPage() {
               onChange={(e) =>
                 setForm((f) => ({ ...f, message: e.target.value }))
               }
-              placeholder="福音的核心信息…"
+              placeholder="本週講台訊息給我的啟發…"
               rows={5}
               aria-label={`${week} MESSAGE`}
             />
@@ -194,13 +196,13 @@ export default function SharingPage() {
           <div className="discipline-sharing-block">
             <div className="discipline-sharing-label">DAILY SHARING</div>
             <p className="discipline-sharing-hint">
-              本週與哪些人分享過信仰？結果如何？
+              與導師分享本週生活：近況、信仰經歷、感恩或代禱事項
             </p>
             <textarea
               className="discipline-sharing-textarea"
               value={form.daily}
               onChange={(e) => setForm((f) => ({ ...f, daily: e.target.value }))}
-              placeholder="週一：與同事午飯時分享耶穌的愛…"
+              placeholder="本週生活分享：近況 / 信仰經歷 / 代禱事項…"
               rows={7}
               aria-label={`${week} DAILY SHARING`}
             />

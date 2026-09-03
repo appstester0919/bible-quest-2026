@@ -5,7 +5,7 @@
  *
  * Mirrors the printed worksheet:
  *   5 rows (categories) × 7 columns (Sat..Fri)
- *   Each cell = 1-or-2 target checkboxes + 50-char note
+ *   Each cell = 1-or-2 emoji status buttons
  *
  * Target count per cell follows goals[cat].length (1 or 2), so the UI
  * auto-extends when the user adds a 2nd target in /goals. Goals are
@@ -17,13 +17,30 @@
  * (lib/disciplineActions.ts). Falls back to localStorage
  * 'duobible.discipline.weekly.v1.<isoWeek>' on first load if no
  * Supabase row yet — that legacy data is converted from
- * `{cat: {day: {checked, note}}}` to `{cat: {day: {targets: [checked], note}}}`
- * on the way in.
+ * `{cat: {day: {checked, note}}}` (v1) or `{cat: {day: {targets: [bool], note}}}`
+ * (v2) to `{cat: {day: {targets: [state], note}}}` (v3 — Round 16).
+ *
+ * Round 16 (2026-09-03) — Issue 4 overhaul:
+ *   - Replaced circular ✓ button + "備註" text input with a tap-to-cycle
+ *     emoji per target: ⚪ pending → ✅ done → ❌ missed → ⚪ pending.
+ *   - Each target in a cell cycles independently (so 2-target cells
+ *     show two side-by-side emojis).
+ *   - Persistence shape change: `targets: boolean[]` →
+ *     `targets: ('pending'|'done'|'missed')[]`. Legacy booleans are
+ *     migrated on read (`false` → 'pending', `true` → 'done'). The
+ *     `note` field is preserved in the type even though the UI no
+ *     longer exposes the input (non-breaking Supabase schema, future-
+ *     proof for re-introducing notes).
+ *   - Mobile reflow: a vertical day-stack (one card per day, 5 category
+ *     rows inside) renders below 600px via CSS-only toggle — both
+ *     layouts are emitted in JSX and CSS shows/hides them by class.
+ *   - FontSizeControl wired into the page header.
  */
 
 import { useEffect, useMemo, useState } from 'react'
 import DisciplineCard from '../components/DisciplineCard'
 import ExportButton from '../components/ExportButton'
+import FontSizeControl from '../components/FontSizeControl'
 import WeekSelector, {
   isoWeekString,
   weekDates,
@@ -34,6 +51,7 @@ import {
   upsertDisciplineWeekly,
   type CategoryKey,
   type DayKey,
+  type TargetState,
   type WeeklyCell,
   type WeeklyCellsPayload,
 } from '@/lib/disciplineActions'
@@ -56,6 +74,39 @@ const DAY_HEADERS: { key: DayKey; label: string; enShort: string }[] = [
   { key: 'fri', label: '五', enShort: 'FRI' },
 ]
 
+/* ─── Round 16: emoji states for the tap-to-cycle button ────────────── */
+
+const EMOJI_FOR: Record<TargetState, string> = {
+  pending: '⚪',
+  done: '✅',
+  missed: '❌',
+}
+
+const LABEL_FOR: Record<TargetState, string> = {
+  pending: '未做',
+  done: '完成',
+  missed: '未做到',
+}
+
+function nextState(s: TargetState): TargetState {
+  // pending → done → missed → pending (cycle of 3)
+  if (s === 'pending') return 'done'
+  if (s === 'done') return 'missed'
+  return 'pending'
+}
+
+/** Migrate any non-valid value to 'pending' — guards against future
+ *  shape drift / corrupted localStorage. */
+function coerceState(v: unknown): TargetState {
+  if (v === 'done' || v === 'missed' || v === 'pending') return v
+  return 'pending'
+}
+
+/** Migrate a single legacy boolean (Round-15 schema) to a TargetState. */
+function migrateBool(b: unknown): TargetState {
+  return b ? 'done' : 'pending'
+}
+
 const STORAGE_PREFIX = 'duobible.discipline.weekly.v1'
 
 /**
@@ -65,13 +116,13 @@ function emptyCells(n = 1): WeeklyCellsPayload {
   const out = {} as WeeklyCellsPayload
   for (const c of CATEGORIES) {
     out[c.key] = {
-      sat: { targets: Array.from({ length: n }, () => false), note: '' },
-      sun: { targets: Array.from({ length: n }, () => false), note: '' },
-      mon: { targets: Array.from({ length: n }, () => false), note: '' },
-      tue: { targets: Array.from({ length: n }, () => false), note: '' },
-      wed: { targets: Array.from({ length: n }, () => false), note: '' },
-      thu: { targets: Array.from({ length: n }, () => false), note: '' },
-      fri: { targets: Array.from({ length: n }, () => false), note: '' },
+      sat: { targets: Array.from({ length: n }, () => 'pending'), note: '' },
+      sun: { targets: Array.from({ length: n }, () => 'pending'), note: '' },
+      mon: { targets: Array.from({ length: n }, () => 'pending'), note: '' },
+      tue: { targets: Array.from({ length: n }, () => 'pending'), note: '' },
+      wed: { targets: Array.from({ length: n }, () => 'pending'), note: '' },
+      thu: { targets: Array.from({ length: n }, () => 'pending'), note: '' },
+      fri: { targets: Array.from({ length: n }, () => 'pending'), note: '' },
     }
   }
   return out
@@ -80,13 +131,15 @@ function emptyCells(n = 1): WeeklyCellsPayload {
 type LegacyCell = { checked?: boolean; note?: string }
 
 /**
- * Convert legacy v1 shape `{cat: {day: {checked, note}}}` to v2 shape
- * `{cat: {day: {targets: [checked], note}}}`. Tolerates missing keys.
+ * Convert legacy v1 shape `{cat: {day: {checked, note}}}` to v3 shape
+ * `{cat: {day: {targets: [state], note}}}`. Tolerates missing keys.
  */
 function migrateLegacyCells(raw: unknown): WeeklyCellsPayload | null {
   if (!raw || typeof raw !== 'object') return null
   const obj = raw as Record<string, unknown>
-  // v2 shape: { cat: { day: { targets: [bool], note } } }
+  // v3 shape: { cat: { day: { targets: [state], note } } } with state
+  // being a string in {'pending','done','missed'}.
+  // v2 shape: { cat: { day: { targets: [bool], note } } } (Round 15).
   // Detect: any category with day shape having 'targets' array.
   for (const cat of CATEGORIES) {
     const cv = obj[cat.key]
@@ -95,7 +148,7 @@ function migrateLegacyCells(raw: unknown): WeeklyCellsPayload | null {
     for (const d of DAY_HEADERS) {
       const dv = dayVals[d.key]
       if (dv && typeof dv === 'object' && 'targets' in (dv as object)) {
-        // already v2-ish; trust and return as-is
+        // already v2-ish; trust and return as-is (will be coerced in buildCells)
         return null
       }
     }
@@ -117,7 +170,10 @@ function migrateLegacyCells(raw: unknown): WeeklyCellsPayload | null {
           typeof (dv as LegacyCell).note === 'string'
             ? (dv as LegacyCell).note ?? ''
             : ''
-        out[cat.key][d.key] = { targets: [checked], note }
+        out[cat.key][d.key] = {
+          targets: [migrateBool(checked)],
+          note,
+        }
         if (checked || note) any = true
       }
     }
@@ -132,9 +188,9 @@ function readLegacyCells(week: string): WeeklyCellsPayload | null {
     const parsed: unknown = JSON.parse(raw)
     if (!parsed || typeof parsed !== 'object') return null
     const obj = parsed as { cells?: unknown; form?: unknown }
-    // v2 wrapper: { cells: {...}, savedAt }
+    // v2/v3 wrapper: { cells: {...}, savedAt }
     if (obj.cells && typeof obj.cells === 'object') {
-      // If legacy key was already in v2 shape, don't try to convert
+      // If legacy key was already in v2+ shape, don't try to convert
       const inner = obj.cells as Record<string, unknown>
       let looksV2 = false
       for (const cat of CATEGORIES) {
@@ -164,8 +220,9 @@ function readLegacyCells(week: string): WeeklyCellsPayload | null {
 
 /**
  * Build cells whose targets length matches goals[cat].length per cat.
- * If cells come from Supabase/localStorage, realign them; otherwise return
- * empty cells with the right shape.
+ * Migrates any v2 boolean[] → v3 TargetState[] along the way. Unknown
+ * / malformed values coerce to 'pending' so a corrupted localStorage
+ * entry never produces a runtime crash.
  */
 function buildCells(
   raw: WeeklyCellsPayload | null | undefined,
@@ -179,9 +236,15 @@ function buildCells(
     for (const d of DAY_HEADERS) {
       const existing = raw[cat.key]?.[d.key]
       const existingTargets = existing?.targets ?? []
-      const next: boolean[] = []
+      const next: TargetState[] = []
       for (let i = 0; i < n; i++) {
-        next.push(Boolean(existingTargets[i]))
+        const rawVal = existingTargets[i]
+        // Detect legacy boolean (Round 15 schema) and migrate forward.
+        if (typeof rawVal === 'boolean') {
+          next.push(migrateBool(rawVal))
+        } else {
+          next.push(coerceState(rawVal))
+        }
       }
       out[cat.key][d.key] = {
         targets: next,
@@ -287,9 +350,14 @@ export default function WeeklyPage() {
         for (const d of DAY_HEADERS) {
           const existing = c[cat.key]?.[d.key]
           const existingTargets = existing?.targets ?? []
-          const next: boolean[] = []
+          const next: TargetState[] = []
           for (let i = 0; i < n; i++) {
-            next.push(Boolean(existingTargets[i]))
+            const rawVal = existingTargets[i]
+            if (typeof rawVal === 'boolean') {
+              next.push(migrateBool(rawVal))
+            } else {
+              next.push(coerceState(rawVal))
+            }
           }
           out[cat.key][d.key] = {
             targets: next,
@@ -301,25 +369,15 @@ export default function WeeklyPage() {
     })
   }, [goalLengths, hydrated])
 
-  function toggle(cat: CategoryKey, day: DayKey, targetIdx: number) {
+  function cycle(cat: CategoryKey, day: DayKey, targetIdx: number) {
     setCells((c) => {
       const cell = c[cat][day]
       const targets = cell.targets.map((v, i) =>
-        i === targetIdx ? !v : v
+        i === targetIdx ? nextState(coerceState(v)) : v
       )
       return {
         ...c,
         [cat]: { ...c[cat], [day]: { ...cell, targets } },
-      }
-    })
-  }
-
-  function setNote(cat: CategoryKey, day: DayKey, note: string) {
-    setCells((c) => {
-      const cell = c[cat][day]
-      return {
-        ...c,
-        [cat]: { ...c[cat], [day]: { ...cell, note } },
       }
     })
   }
@@ -361,8 +419,9 @@ export default function WeeklyPage() {
     <div className="page page-discipline-weekly">
       <header className="page-header">
         <h1 className="h1">每週操練</h1>
+        <FontSizeControl />
         <p className="page-subtitle">
-          記錄本週 7 天的操練表現（完成日期打✓ + 備註，每個範疇 1-2 個目標）
+          記錄本週 7 天的操練表現（點擊 emoji：⚪ 未做 → ✅ 完成 → ❌ 未做到，每個範疇 1-2 個目標）
         </p>
       </header>
 
@@ -382,7 +441,8 @@ export default function WeeklyPage() {
             <p className="discipline-template-sub">成全追求 · 操練追蹤</p>
           </div>
 
-          <div className="discipline-weekly-table">
+          {/* ─── Desktop layout: 5 rows × 8 cols ─────────────── */}
+          <div className="discipline-weekly-table discipline-weekly-table--desktop">
             <div className="discipline-weekly-row discipline-weekly-head">
               <div className="discipline-weekly-cell discipline-weekly-cat">
                 範疇
@@ -417,46 +477,33 @@ export default function WeeklyPage() {
                   </div>
                   {DAY_HEADERS.map((d) => {
                     const cell = cells[cat.key][d.key]
-                    const allChecked = cell.targets.every(Boolean)
                     return (
                       <div
                         key={d.key}
                         className={`discipline-weekly-cell ${
-                          allChecked && cell.targets.length > 0
+                          cell.targets.some((s) => coerceState(s) === 'done') &&
+                          cell.targets.length > 0
                             ? 'is-checked'
                             : ''
                         }`}
                       >
                         {hydrated ? (
-                          <>
-                            <div className="discipline-weekly-checks">
-                              {cell.targets.map((checked, ti) => (
+                          <div className="discipline-emoji-row">
+                            {cell.targets.map((state, ti) => {
+                              const s = coerceState(state)
+                              return (
                                 <button
                                   key={ti}
                                   type="button"
-                                  className="discipline-check-btn"
-                                  aria-label={`${cat.label} ${d.enShort} 目標 ${ti + 1} ${
-                                    checked ? '取消打勾' : '打勾'
-                                  }`}
-                                  aria-pressed={checked}
-                                  onClick={() => toggle(cat.key, d.key, ti)}
+                                  className="discipline-emoji-btn"
+                                  aria-label={`${cat.label} ${d.enShort} 目標 ${ti + 1} 目前 ${LABEL_FOR[s]}，點擊切換`}
+                                  onClick={() => cycle(cat.key, d.key, ti)}
                                 >
-                                  {checked ? '✓' : ''}
+                                  {EMOJI_FOR[s]}
                                 </button>
-                              ))}
-                            </div>
-                            <input
-                              type="text"
-                              className="discipline-note-input"
-                              value={cell.note}
-                              onChange={(e) =>
-                                setNote(cat.key, d.key, e.target.value)
-                              }
-                              placeholder="備註"
-                              aria-label={`${cat.label} ${d.enShort} 備註`}
-                              maxLength={50}
-                            />
-                          </>
+                              )
+                            })}
+                          </div>
                         ) : (
                           <div className="discipline-weekly-cell-skeleton" />
                         )}
@@ -466,6 +513,67 @@ export default function WeeklyPage() {
                 </div>
               )
             })}
+          </div>
+
+          {/* ─── Mobile layout: vertical day-stack (CSS-only reflow) ─ */}
+          <div className="discipline-weekly-table discipline-weekly-table--mobile">
+            {DAY_HEADERS.map((d, di) => (
+              <div
+                key={d.key}
+                className="discipline-weekly-day-card"
+              >
+                <div className="discipline-weekly-day-card-head">
+                  <span className="discipline-weekly-day-en">
+                    {d.label}（{d.enShort}）
+                  </span>
+                  <span className="discipline-weekly-day-num">
+                    {dates[di]?.getDate() ?? ''}
+                  </span>
+                </div>
+                {CATEGORIES.map((cat) => {
+                  const cell = cells[cat.key][d.key]
+                  const n = goalLengths[cat.key]
+                  return (
+                    <div
+                      key={cat.key}
+                      className="discipline-weekly-day-card-row"
+                    >
+                      <div className="discipline-weekly-day-card-row-label">
+                        <span className="discipline-cat-zh">
+                          {cat.zh}
+                          {n > 1 && (
+                            <span className="discipline-goal-target-index">
+                              {` ×${n}`}
+                            </span>
+                          )}
+                        </span>
+                        <span className="discipline-cat-en">{cat.label}</span>
+                      </div>
+                      {hydrated ? (
+                        <div className="discipline-emoji-row">
+                          {cell.targets.map((state, ti) => {
+                            const s = coerceState(state)
+                            return (
+                              <button
+                                key={ti}
+                                type="button"
+                                className="discipline-emoji-btn"
+                                aria-label={`${cat.label} ${d.enShort} 目標 ${ti + 1} 目前 ${LABEL_FOR[s]}，點擊切換`}
+                                onClick={() => cycle(cat.key, d.key, ti)}
+                              >
+                                {EMOJI_FOR[s]}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      ) : (
+                        <div className="discipline-weekly-cell-skeleton" />
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            ))}
           </div>
 
           {savedAt && (

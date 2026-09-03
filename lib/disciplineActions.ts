@@ -28,10 +28,17 @@
  *
  *   discipline_weekly.cells:
  *     Record<CategoryKey, Record<DayKey, WeeklyCell>>
- *     WeeklyCell.targets is a boolean[] whose length MUST match the
+ *     WeeklyCell.targets is a TargetState[] whose length MUST match the
  *     corresponding goals[categoryKey].length for this user — the UI
  *     is responsible for keeping them aligned (the server does not
  *     cross-validate, per the migration's "ui is responsible" note).
+ *
+ *     Round 16 (2026-09-03): targets changed from `boolean[]` to
+ *     `('pending'|'done'|'missed')[]` to support a 3-state tap-to-cycle
+ *     emoji UI on the weekly grid. Backward-compatible read path: any
+ *     boolean[] in stored jsonb is coerced to TargetState[] at the
+ *     `buildCells` boundary in the UI layer. New writes are always
+ *     TargetState[].
  */
 
 import { createClient } from '@/lib/supabase/server'
@@ -56,8 +63,12 @@ export type GoalTarget = { plan: string; steps: string }
  */
 export type GoalsPayload = Record<CategoryKey, GoalTarget[]>
 
-/** One cell in the weekly grid: per-target booleans + free-text note. */
-export type WeeklyCell = { targets: boolean[]; note: string }
+/** Per-target tri-state status for the weekly grid emoji cycle.
+ *  Exported so the consuming page can build cell data without redeclaring. */
+export type TargetState = 'pending' | 'done' | 'missed'
+
+/** One cell in the weekly grid: per-target TargetState + free-text note. */
+export type WeeklyCell = { targets: TargetState[]; note: string }
 
 /** Full weekly payload: 5 cats × 7 days. */
 export type WeeklyCellsPayload = Record<CategoryKey, Record<DayKey, WeeklyCell>>

@@ -20,6 +20,7 @@
 import { useEffect, useState } from 'react'
 import DisciplineCard from '../components/DisciplineCard'
 import ExportButton from '../components/ExportButton'
+import FontSizeControl from '../components/FontSizeControl'
 import {
   getDisciplineGoals,
   upsertDisciplineGoals,
@@ -255,6 +256,7 @@ export default function GoalsPage() {
     <div className="page page-discipline-goals">
       <header className="page-header">
         <h1 className="h1">目標設定</h1>
+        <FontSizeControl />
         <p className="page-subtitle">
           課程開始前，請為每個範疇訂立你的本季目標（每個範疇可設 1-2 個目標）
         </p>
@@ -328,15 +330,16 @@ export default function GoalsPage() {
                 ))}
                 {hydrated && (
                   <div className="discipline-goal-row-tools">
-                    <button
-                      type="button"
-                      className="btn-secondary btn-sm"
-                      onClick={() => addTarget(cat.key)}
-                      disabled={goals[cat.key].length >= 2}
-                      aria-label={`${cat.label} 添加第二個目標`}
-                    >
-                      + 添加目標
-                    </button>
+                    {goals[cat.key].length < 2 && (
+                      <button
+                        type="button"
+                        className="btn-secondary btn-sm"
+                        onClick={() => addTarget(cat.key)}
+                        aria-label={`${cat.label} 添加第二個目標`}
+                      >
+                        + 添加目標
+                      </button>
+                    )}
                     <button
                       type="button"
                       className="btn-secondary btn-sm"

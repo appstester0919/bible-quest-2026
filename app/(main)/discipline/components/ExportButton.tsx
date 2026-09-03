@@ -155,7 +155,7 @@ export default function ExportButton({ targetSelector, filename }: Props) {
     setBusy(true)
     setError(null)
     try {
-      const node = document.querySelector(targetSelector)
+      const node = document.querySelector<HTMLElement>(targetSelector)
       if (!node) {
         setError(`找不到目標元素：${targetSelector}`)
         return null
@@ -167,13 +167,56 @@ export default function ExportButton({ targetSelector, filename }: Props) {
         )
         return null
       }
-      const blob = await htmlToImage.toBlob(node as HTMLElement, {
-        // Bump pixel ratio for sharper output on retina displays
-        pixelRatio: 2,
-        // Cream background to match the discipline page palette and avoid
-        // transparent PNGs which look broken when shared into chat apps
-        backgroundColor: '#FFFBF2',
-      })
+
+      // Round 16 (2026-09-03): capture full scrollable content, not just
+      // the visible viewport. Without this, textareas whose content
+      // overflows their visible area get cut at the bottom of the PNG
+      // because toBlob() snapshots `offsetWidth × offsetHeight` of the
+      // node (i.e. the visible frame), not the full scrollable extent.
+      // Strategy:
+      //   1. Read the full content size (scrollWidth/Height) BEFORE
+      //      touching inline styles so we get the real content extent.
+      //   2. Temporarily clear any max-height / overflow:hidden on the
+      //      node itself so toBlob's internal clone renders the full
+      //      content (html-to-image clones the node with inline styles).
+      //   3. Pass explicit width/height to toBlob so the canvas matches
+      //      the scrollable extent (not the visible frame).
+      //   4. Restore inline styles in a finally block — even if toBlob
+      //      throws — so the page never ends up visually broken.
+      const fullWidth = Math.max(node.scrollWidth, node.offsetWidth)
+      const fullHeight = Math.max(node.scrollHeight, node.offsetHeight)
+      const originalMaxHeight = node.style.maxHeight
+      const originalOverflow = node.style.overflow
+      node.style.maxHeight = 'none'
+      node.style.overflow = 'visible'
+
+      let blob: Blob | null = null
+      try {
+        blob = await htmlToImage.toBlob(node, {
+          // Bump pixel ratio for sharper output on retina displays
+          pixelRatio: 2,
+          // Cream background to match the discipline page palette and avoid
+          // transparent PNGs which look broken when shared into chat apps
+          backgroundColor: '#FFFBF2',
+          // Force the canvas to the full scrollable extent so content
+          // below the original viewport fold is included.
+          width: fullWidth,
+          height: fullHeight,
+          // Defuse any inherited CSS transform on the page that would
+          // shift the clone off-canvas (the discipline export frames are
+          // not transformed today, but `transform: 'none'` here is a
+          // cheap insurance policy if a future parent picks up a
+          // hover-transform).
+          style: {
+            transform: 'none',
+            transformOrigin: 'top left',
+          },
+        })
+      } finally {
+        node.style.maxHeight = originalMaxHeight
+        node.style.overflow = originalOverflow
+      }
+
       if (!blob) {
         setError('匯出失敗：無法產生圖片 blob')
         return null
