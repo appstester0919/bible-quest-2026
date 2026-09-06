@@ -1,12 +1,27 @@
 'use client'
 
 /**
- * WeekSelector — pick any ISO week, default to current.
+ * WeekSelector — pick any Sat-based week, default to current.
  *
  * Used by /discipline/weekly to switch between weeks for late fill-in.
- * ISO week numbering: weeks start Monday; week 1 = first week with a Thursday.
  *
- * Stored value: ISO year + week, formatted as "YYYY-Www" (e.g. "2026-W34").
+ * Week boundaries: SAT→FRI (牧會/營會週). The 7-day window covers
+ * Sat, Sun, Mon, Tue, Wed, Thu, Fri in that order — matches
+ * DAY_HEADERS in /discipline/weekly/page.tsx.
+ *
+ * Stored value: ISO year + week, formatted as "YYYY-Www"
+ * (e.g. "2026-W36" = Sat 9月5日 → Fri 9月11日).
+ *
+ * Round-20 (2026-09-06) — switched from ISO Mon-based week (Round-19 era)
+ * to Sat-based week boundaries so the printed worksheet layout
+ * (Sat..Fri columns) lines up with the displayed date numbers.
+ *
+ * Migration note (Round-20): cells["sat"] + cells["sun"] round-trip
+ * cleanly because both algorithms agree those two days fall on the
+ * same calendar date for the same week label. cells["mon"]..["fri"]
+ * shift by 7 days under the new algorithm — any previously-saved
+ * weekday records will land on the wrong day after deploy; the
+ * /discipline/weekly page shows a one-time banner explaining this.
  */
 
 import { useMemo } from 'react'
@@ -17,57 +32,69 @@ type Props = {
   onChange: (next: string) => void
 }
 
-/** Convert Date to ISO "YYYY-Www" string */
-export function isoWeekString(d: Date): string {
-  const target = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()))
-  const dayNum = (target.getUTCDay() + 6) % 7 // Mon=0 ... Sun=6
-  target.setUTCDate(target.getUTCDate() - dayNum + 3) // nearest Thursday
-  const firstThursday = new Date(Date.UTC(target.getUTCFullYear(), 0, 4))
-  const week =
-    1 +
-    Math.round(
-      ((target.getTime() - firstThursday.getTime()) / 86400000 -
-        3 +
-        ((firstThursday.getUTCDay() + 6) % 7)) /
-        7
-    )
-  const year = target.getUTCFullYear()
+/** Convert Date to "YYYY-Www" string where week starts Saturday. */
+export function weekString(d: Date): string {
+  // Clone to avoid mutating caller's date.
+  const ref = new Date(d.getFullYear(), d.getMonth(), d.getDate())
+  // JS getDay(): Sun=0..Sat=6. We want Sat=0..Fri=6.
+  // dayShift = 0 if Sat, 1 if Sun, 2 if Mon, ..., 6 if Fri.
+  const dayShift = (ref.getDay() + 1) % 7
+  // Saturday of this week (anchor).
+  ref.setDate(ref.getDate() - dayShift)
+
+  // Find Jan 1 of ref's year, then walk forward to the first Saturday —
+  // that's the first week's anchor. Week 1 = the week containing Jan 1.
+  const jan1 = new Date(ref.getFullYear(), 0, 1)
+  const jan1Shift = (jan1.getDay() + 1) % 7
+  const firstSaturday = new Date(jan1)
+  firstSaturday.setDate(jan1.getDate() - jan1Shift)
+
+  const daysSinceFirstSat = Math.round(
+    (ref.getTime() - firstSaturday.getTime()) / 86400000
+  )
+  const week = Math.floor(daysSinceFirstSat / 7) + 1
+  const year = ref.getFullYear()
   return `${year}-W${String(week).padStart(2, '0')}`
 }
 
-/** Get the Monday (start) of an ISO week */
-function startOfISOWeek(iso: string): Date {
+/** Back-compat alias for callers that still import isoWeekString. */
+export const isoWeekString = weekString
+
+/** Get the Saturday (start) of a Sat-based week. */
+function startOfWeek(iso: string): Date {
   const [yearStr, weekStr] = iso.split('-W')
   const year = parseInt(yearStr, 10)
   const week = parseInt(weekStr, 10)
-  // Jan 4 is always in week 1
-  const jan4 = new Date(year, 0, 4)
-  const jan4Day = (jan4.getDay() + 6) % 7 // Mon=0
-  const mondayWeek1 = new Date(jan4)
-  mondayWeek1.setDate(jan4.getDate() - jan4Day)
-  const monday = new Date(mondayWeek1)
-  monday.setDate(mondayWeek1.getDate() + (week - 1) * 7)
-  return monday
+  const jan1 = new Date(year, 0, 1)
+  const jan1Shift = (jan1.getDay() + 1) % 7
+  const firstSaturday = new Date(jan1)
+  firstSaturday.setDate(jan1.getDate() - jan1Shift)
+  const saturday = new Date(firstSaturday)
+  saturday.setDate(firstSaturday.getDate() + (week - 1) * 7)
+  return saturday
 }
 
-/** Step an ISO week by ±N weeks */
+/** Back-compat alias. */
+export const startOfISOWeek = startOfWeek
+
+/** Step a Sat-based week by ±N weeks. */
 export function shiftWeek(iso: string, delta: number): string {
-  const monday = startOfISOWeek(iso)
-  monday.setDate(monday.getDate() + delta * 7)
-  return isoWeekString(monday)
+  const saturday = startOfWeek(iso)
+  saturday.setDate(saturday.getDate() + delta * 7)
+  return weekString(saturday)
 }
 
-/** Pretty range, e.g. "8月18日 – 8月24日" */
+/** Pretty range, e.g. "9月5日 – 9月11日" (Sat..Fri). */
 function weekRangeLabel(iso: string): string {
-  const monday = startOfISOWeek(iso)
-  const sunday = new Date(monday)
-  sunday.setDate(monday.getDate() + 6)
+  const saturday = startOfWeek(iso)
+  const friday = new Date(saturday)
+  friday.setDate(saturday.getDate() + 6)
   const fmt = (d: Date) => `${d.getMonth() + 1}月${d.getDate()}日`
-  return `${fmt(monday)} – ${fmt(sunday)}`
+  return `${fmt(saturday)} – ${fmt(friday)}`
 }
 
 export default function WeekSelector({ value, onChange }: Props) {
-  const currentWeek = useMemo(() => isoWeekString(new Date()), [])
+  const currentWeek = useMemo(() => weekString(new Date()), [])
   const isCurrent = value === currentWeek
   const label = useMemo(() => weekRangeLabel(value), [value])
 
@@ -98,12 +125,12 @@ export default function WeekSelector({ value, onChange }: Props) {
   )
 }
 
-/** Convenience: get all 7 dates (Mon..Sun) for an ISO week */
+/** Convenience: get all 7 dates (Sat..Fri) for a Sat-based week. */
 export function weekDates(iso: string): Date[] {
-  const monday = startOfISOWeek(iso)
+  const saturday = startOfWeek(iso)
   return Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(monday)
-    d.setDate(monday.getDate() + i)
+    const d = new Date(saturday)
+    d.setDate(saturday.getDate() + i)
     return d
   })
 }
