@@ -382,6 +382,17 @@
   color: var(--color-bq-muted);
 }
 
+/* Round 21 — highlight "today" column header. Subtle warm ring + bg. */
+.discipline-weekly-day.is-today {
+  background: rgba(255, 214, 10, 0.12); /* #ffd60a family */
+  border-radius: 6px;
+  box-shadow: inset 0 0 0 1.5px var(--color-bq-accent, #ffd60a);
+}
+.discipline-weekly-day.is-today .discipline-weekly-day-num {
+  color: var(--color-bq-accent, #ffd60a);
+  font-weight: 700;
+}
+
 /* ─── Emoji status (Round 16) — replaces the old ✓ button + note input ─── */
 
 .discipline-emoji-row {

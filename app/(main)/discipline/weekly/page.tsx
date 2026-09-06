@@ -68,6 +68,16 @@ function weekRangeLabel(iso: string): string {
   return `${fmt(monday)} – ${fmt(sunday)}`
 }
 
+/** True if two Dates fall on the same local calendar day (Round 21 — today highlight). */
+function isSameDay(a: Date | undefined, b: Date): boolean {
+  if (!a) return false
+  return (
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
+  )
+}
+
 const CATEGORIES: { key: CategoryKey; label: string; zh: string }[] = [
   { key: 'virtue', label: 'VIRTUE', zh: '品德' },
   { key: 'knowledge', label: 'KNOWLEDGE', zh: '知識' },
@@ -464,17 +474,20 @@ export default function WeeklyPage() {
               <div className="discipline-weekly-cell discipline-weekly-cat">
                 範疇
               </div>
-              {DAY_HEADERS.map((d, i) => (
+              {DAY_HEADERS.map((d, i) => {
+                const isToday = isSameDay(dates[i], new Date())
+                return (
                 <div
                   key={d.key}
-                  className="discipline-weekly-cell discipline-weekly-day"
+                  className={`discipline-weekly-cell discipline-weekly-day${isToday ? ' is-today' : ''}`}
                 >
                   <span className="discipline-weekly-day-en">{d.enShort}</span>
                   <span className="discipline-weekly-day-num">
                     {dates[i]?.getDate() ?? ''}
                   </span>
                 </div>
-              ))}
+                )
+              })}
             </div>
 
             {CATEGORIES.map((cat) => {
