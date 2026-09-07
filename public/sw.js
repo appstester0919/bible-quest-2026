@@ -1,6 +1,6 @@
 /* eslint-disable no-undef */
 
-const CACHE_NAME = 'bible-quest-v29' // bump v28→v29 (2026-09-02, Round-14): audio regen for 鍤→插 + 誚→俏 subs applied to 26 chapters.
+const CACHE_NAME = 'bible-quest-v30' // bump v29→v30 (2026-09-07, Round-23): source-text fixes for 提多書 2:13 / 3:3 / 3:7 / 3:8 / 3:14 — 5 byte-level edits to fix corrupted （或作坃X）→（或作：X） parentheticals. Narrow-regen audio for 多2 + 多3.
 // v24 added /vendor/ bypass, but a new SW only takes control after all old
 // clients close — so users with the page already open kept hitting the v23
 // cache-first .js rule and "Failed to fetch" persisted. Round-12 forces
