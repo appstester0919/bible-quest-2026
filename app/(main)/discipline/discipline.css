@@ -64,11 +64,40 @@
    * applied — leaving the bg.jpg too bright / high-contrast on phone.
    * Adding a second 0.92 overlay here (stacked over body's) brings
    * the overall dim down to ~99.4% white (8% remaining image hint),
-   * consistent with other pages. */
+   * consistent with other pages.
+   *
+   * Round 22 (2026-09-07) — full-width overlay box:
+   * Previously this rule also set `max-width: 600px; margin: 0 auto`,
+   * which clipped the dimmed overlay to a 600px center column. Other
+   * open pages (`/dashboard` `/read` `/calendar` `/settings`) use
+   * `<div className="min-h-screen bg-[var(--color-background)] ...">`
+   * with no max-width, so the dim overlay covers the full viewport.
+   * To match that visual, we drop the page-root max-width here (the
+   * dim overlay now spans edge-to-edge) and push the 600px cap down
+   * to the direct children (`.page-discipline > *`, see below). On
+   * phones (< 600px viewport) the inner cap auto-shrinks to viewport
+   * width, so the 12px horizontal padding still provides breathing
+   * room against the screen edge — preserving the Round-16/17 mobile
+   * layout. */
   background: var(--color-background);
   padding: 24px 12px 96px; /* bottom padding clears bottom-nav */
+}
+
+/* Cap content at 600px on wider viewports (desktop / tablet). Each
+ * page-discipline page's direct children are a `<header class="page-header">`
+ * plus content blocks (`discipline-grid`, `discipline-export-frame`,
+ * `discipline-actions`, etc.) — all need the same width cap so the
+ * page reads as one centered column on desktop and fits edge-to-edge
+ * on phone. On viewports < 600px `max-width: 600px` is a no-op
+ * (container is already narrower), so the 12px horizontal padding on
+ * the parent rule above provides the visible gutter. */
+.page-discipline > *,
+.page-discipline-goals > *,
+.page-discipline-weekly > *,
+.page-discipline-sharing > * {
   max-width: 600px;
-  margin: 0 auto;
+  margin-left: auto;
+  margin-right: auto;
 }
 
 .page-discipline .h1,
