@@ -65,6 +65,13 @@ create trigger bq_external_links_touch
 -- service_role — this Supabase project's service_role is NOT a Postgres
 -- superuser and needs explicit GRANT too. Documented so future tables on
 -- this project ship with all 3 role grants.)
+-- Round-26 (2026-09-09) further refinement: even after the anon+service_role
+-- grants, an AUTHENTICATED user (logged-in appkhlai account) got 42501 on
+-- SELECT because the original GRANT statement was `grant insert, update,
+-- delete ... to authenticated` — accidentally omitting SELECT. The bug
+-- only surfaced when a real logged-in user navigated to /links; anon
+-- requests (no login) hit the anon grant and worked. **ALWAYS grant ALL
+-- 4 privileges (SELECT/INSERT/UPDATE/DELETE) to authenticated, not just D-I-U.**
 grant select on public.bq_external_links to anon;
-grant insert, update, delete on public.bq_external_links to authenticated;
+grant select, insert, update, delete on public.bq_external_links to authenticated;
 grant select, insert, update, delete on public.bq_external_links to service_role;
