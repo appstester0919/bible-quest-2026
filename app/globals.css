@@ -1030,9 +1030,10 @@ a.more-item:active {
   transform: scale(0.96);
 }
 .chip-active {
-  background-color: #ead0ff;
-  color: #7b3fb8;
-  border-color: #ead0ff;
+  background-color: var(--color-bq-success);
+  color: var(--color-bq-surface);
+  border-color: var(--color-bq-success);
+  box-shadow: 0 2px 0 var(--color-bq-success-dark);
 }
 
 /* ============================================================
@@ -1053,4 +1054,93 @@ a.card-link:hover,
 a.card-link:active,
 .card-link:active {
   transform: scale(0.995);
+}
+
+/* ============================================================
+ * LESSON-CARD-LINK — Round 28 /links link card
+ * Per DESIGN.md: white surface + 20px corner + 24px padding +
+ * `card` elevation. Hover lift + success-green border highlight.
+ * CSS-only ripple via :active pseudo (no JS).
+ * ============================================================ */
+.lesson-card-link {
+  display: block;
+  background-color: var(--color-bq-surface);
+  color: var(--color-bq-primary);
+  border-radius: var(--bq-radius-lg);
+  padding: var(--spacing-lg);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  border: 2px solid transparent;
+  text-decoration: none;
+  position: relative;
+  overflow: hidden;
+  cursor: pointer;
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease,
+    border-color 0.15s ease;
+}
+.lesson-card-link:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  border-color: var(--color-bq-success);
+}
+.lesson-card-link:active {
+  transform: translateY(0) scale(0.99);
+}
+.lesson-card-link::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    circle at center,
+    rgba(88, 204, 2, 0.18) 0%,
+    transparent 60%
+  );
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.45s ease;
+}
+.lesson-card-link:active::after {
+  opacity: 1;
+  transition: opacity 0s;
+}
+
+/* ============================================================
+ * CATEGORY-HEADER-STREAK — Round 28 /links category group header
+ * Per DESIGN.md: streak-orange (#FF9600) reserved for "rare,
+ * celebratory" moments. Each link category gets its own banner.
+ * ============================================================ */
+.category-header-streak {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 12px;
+  padding: 14px 18px;
+  background-color: var(--color-bq-streak);
+  color: var(--color-bq-surface);
+  border-radius: var(--bq-radius-md);
+  font-family: var(--font-sans);
+  font-size: 1.125rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  box-shadow: 0 3px 0 #c97800;
+}
+
+/* ============================================================
+ * EMPTY-STATE-CARD — Round 28 /links empty state
+ * Per DESIGN.md: red (#FF4B4B) reserved for warning/streak-at-risk.
+ * Empty link list is a "no content yet" warning — danger-light bg.
+ * ============================================================ */
+.empty-state-card {
+  background-color: rgba(255, 75, 75, 0.06);
+  border: 2px dashed rgba(255, 75, 75, 0.3);
+  border-radius: var(--bq-radius-lg);
+  padding: var(--spacing-lg);
+  text-align: center;
+  color: var(--color-bq-danger);
+  font-weight: 700;
+  margin-top: var(--spacing-lg);
+}
+.empty-state-card p {
+  margin: 0;
 }
