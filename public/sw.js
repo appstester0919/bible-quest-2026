@@ -1,6 +1,6 @@
 /* eslint-disable no-undef */
 
-const CACHE_NAME = 'bible-quest-v31' // bump v30→v31 (2026-09-09, Round-24): new /links page + BottomNavigation sheet entry + 5 new CSS classes (.h-subsection/.chip/.chip-active/.card-link/.page-links).
+const CACHE_NAME = 'bible-quest-v32' // bump v31→v32 (2026-09-09, Round-24 follow-up follow-up): force full client-bundle rebuild after revalidate=0 alone did NOT trigger Vercel to emit new chunk hash.
 // v24 added /vendor/ bypass, but a new SW only takes control after all old
 // clients close — so users with the page already open kept hitting the v23
 // cache-first .js rule and "Failed to fetch" persisted. Round-12 forces
