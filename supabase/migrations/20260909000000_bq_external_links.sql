@@ -54,3 +54,12 @@ $$ language plpgsql;
 create trigger bq_external_links_touch
   before update on public.bq_external_links
   for each row execute function public.touch_updated_at();
+
+-- Supabase RLS requires explicit table-level GRANTs on top of policies.
+-- RLS policies gate WHICH rows a role can see; GRANT controls WHETHER the
+-- role can read the table at all. Without these grants, anon / authenticated
+-- SELECT will silently 42501 permission denied even with correct RLS policy.
+-- (Round-24 lesson: discovered when /links page rendered empty after migration.
+-- PostgREST hint was: "GRANT SELECT ON public.bq_external_links TO anon".)
+grant select on public.bq_external_links to anon;
+grant insert, update, delete on public.bq_external_links to authenticated;
