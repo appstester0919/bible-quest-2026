@@ -14,6 +14,12 @@ import { createClient } from '@/lib/supabase/server'
 import LinksView from './LinksView'
 
 export const dynamic = 'force-dynamic'
+// Vercel CDN caches the initial empty-state response even with force-dynamic
+// (the first SSR happened when RLS GRANT was missing → 0 rows → cached empty).
+// revalidate=0 + cache:' no-store on fetch ensures every request re-runs Supabase.
+// Round-24 follow-up: without these, /links shows "暫時未有連結" until Vercel
+// cache TTL expires (~1 min).
+export const revalidate = 0
 
 type Link = {
   id: string
