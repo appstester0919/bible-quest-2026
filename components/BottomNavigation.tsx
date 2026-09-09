@@ -94,6 +94,15 @@ const PracticeIcon = ({ size }: IconProps) => (
   </Icon>
 )
 
+// 外網連結 icon — chain link glyph for the /links sheet entry
+// (Round 24, 2026-09-09). Same stroke style as the rest of the nav.
+const LinkIcon = ({ size }: IconProps) => (
+  <Icon size={size}>
+    <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+    <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+  </Icon>
+)
+
 const CloseIcon = ({ size = 20 }: IconProps) => (
   <Icon size={size}>
     <line x1="6" y1="6" x2="18" y2="18" />
@@ -127,8 +136,9 @@ const TOP_TABS = [
 
 /** Routes served inside the「更多」sheet — any of these active ⇒ 更多 tab glows.
  *  夥伴 (/partner) 已落架（2026-08）：功能被群組覆蓋且無入口；route 保留，
- *  日後認真發展夥伴時喺 SHEET_GRID 加返 { href:'/partner', label:'夥伴' } */
-const SHEET_ROUTE_PREFIXES: string[] = []
+ *  日後認真發展夥伴時喺 SHEET_GRID 加返 { href:'/partner', label:'夥伴' }
+ *  Round 24 (2026-09-09) — 外網連結 (/links) joined the sheet. */
+const SHEET_ROUTE_PREFIXES: string[] = ['/links']
 
 export default function BottomNavigation() {
   const pathname = usePathname()
@@ -273,6 +283,19 @@ export default function BottomNavigation() {
                   <SettingsIcon size={20} />
                 </span>
                 <span className="more-item-label">設定</span>
+              </Link>
+              {/* Round 24 (2026-09-09) — /links sheet entry, between
+                  settings and share. Same accent color as settings to
+                  visually pair them as "more menu" links. */}
+              <Link
+                href="/links"
+                className="more-item"
+                onClick={() => setSheetOpen(false)}
+              >
+                <span className="more-item-icon more-item-icon-accent">
+                  <LinkIcon size={20} />
+                </span>
+                <span className="more-item-label">外網連結</span>
               </Link>
               <button type="button" className="more-item" onClick={shareApp}>
                 <span className="more-item-icon more-item-icon-streak">

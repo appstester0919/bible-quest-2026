@@ -970,3 +970,87 @@ a.more-item:active {
 .animate-shake {
   animation: shake 0.4s ease-in-out;
 }
+
+/* ============================================================
+ * SUBSECTION HEADING — used inside cards / grouped sections
+ * (Round 24, /links page category groups)
+ * ============================================================ */
+.h-subsection {
+  font-family: var(--font-sans);
+  font-size: 1rem;
+  font-weight: 800;
+  line-height: 1.3;
+  letter-spacing: -0.005em;
+  color: var(--color-primary);
+  margin: 0;
+}
+
+/* ============================================================
+ * PAGE-LINKS — /links page root (Round 24, 2026-09-09)
+ *
+ * The bg overlay utility (`bg-[var(--color-background)]`) lives on
+ * the page root for full-width coverage (Round-19 lesson).
+ * Content max-width is handled inside LinksView (max-w-3xl mx-auto
+ * on the wrapper div), matching how /dashboard /calendar cap their
+ * own content. No `.page-links > *` rule needed here — the inner
+ * wrapper's max-w already centers the content without clipping the
+ * parent overlay (the overlay extends edge-to-edge while the inner
+ * content stays within its own centered column).
+ * ============================================================ */
+
+/* ============================================================
+ * CHIPS — category filter buttons (Duolingo-style rounded pills)
+ * Used by /links page category filter. Active state: accent purple
+ * to match the existing .more-item-icon-accent / badge-accent palette.
+ * ============================================================ */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 8px 14px;
+  border-radius: var(--bq-radius-full);
+  background-color: var(--color-bq-surface);
+  color: var(--color-bq-ink-soft);
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+  font-weight: 700;
+  line-height: 1;
+  border: 1.5px solid var(--color-bq-line);
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease,
+    border-color 0.15s ease,
+    transform 0.08s ease;
+  flex-shrink: 0;
+}
+.chip:active {
+  transform: scale(0.96);
+}
+.chip-active {
+  background-color: #ead0ff;
+  color: #7b3fb8;
+  border-color: #ead0ff;
+}
+
+/* ============================================================
+ * CARD-LINK — clickable card used inside /links
+ * Inherits .card's surface/shadow but renders the <a> element
+ * as block-level clickable region without default underline.
+ * ============================================================ */
+a.card-link,
+.card-link {
+  display: block;
+  color: inherit;
+  text-decoration: none;
+}
+a.card-link:hover,
+.card-link:hover {
+  background-color: rgba(31, 41, 55, 0.02);
+}
+a.card-link:active,
+.card-link:active {
+  transform: scale(0.995);
+}

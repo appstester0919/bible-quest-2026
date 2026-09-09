@@ -1,6 +1,6 @@
 /* eslint-disable no-undef */
 
-const CACHE_NAME = 'bible-quest-v30' // bump v29→v30 (2026-09-07, Round-23): source-text fixes for 提多書 2:13 / 3:3 / 3:7 / 3:8 / 3:14 — 5 byte-level edits to fix corrupted （或作坃X）→（或作：X） parentheticals. Narrow-regen audio for 多2 + 多3.
+const CACHE_NAME = 'bible-quest-v31' // bump v30→v31 (2026-09-09, Round-24): new /links page + BottomNavigation sheet entry + 5 new CSS classes (.h-subsection/.chip/.chip-active/.card-link/.page-links).
 // v24 added /vendor/ bypass, but a new SW only takes control after all old
 // clients close — so users with the page already open kept hitting the v23
 // cache-first .js rule and "Failed to fetch" persisted. Round-12 forces
