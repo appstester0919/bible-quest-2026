@@ -60,6 +60,11 @@ create trigger bq_external_links_touch
 -- role can read the table at all. Without these grants, anon / authenticated
 -- SELECT will silently 42501 permission denied even with correct RLS policy.
 -- (Round-24 lesson: discovered when /links page rendered empty after migration.
--- PostgREST hint was: "GRANT SELECT ON public.bq_external_links TO anon".)
+-- PostgREST hint was: "GRANT SELECT ON public.bq_external_links TO anon".
+-- Round-24 follow-up: Apps Script onChange sync failed with 42501 even for
+-- service_role — this Supabase project's service_role is NOT a Postgres
+-- superuser and needs explicit GRANT too. Documented so future tables on
+-- this project ship with all 3 role grants.)
 grant select on public.bq_external_links to anon;
 grant insert, update, delete on public.bq_external_links to authenticated;
+grant select, insert, update, delete on public.bq_external_links to service_role;
