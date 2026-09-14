@@ -101,10 +101,27 @@ faithful (fork = something inserted).
 compound context.
 Display text in bible-data.json stays canonical 鍤 / 誚 — sub applied only at
 generation time. Total Round-14: 26 chapters affected.
+New 2 mappings (帑, 驛) added 2026-09-14 per user Cantonese ear verify.
+帑 MISREAD by edge TTS zh-HK as seoi3 Cantonese (帥 sound); canonical CUV
+Cantonese for 國帑 is bai6 (treasury). User-direct sub: 帑→幣 (bì / bai6) —
+Cantonese bai6 = 幣 (coin/currency) preserves canonical pronunciation
+perfectly. Affects 1 verse (斯 3:9, 掌管國帑). Display text stays canonical
+帑 — sub applied only at generation time.
+驛 REJECTED by edge TTS zh-HK (NoAudioReceived, both voices). Affects 6
+verses across 3 chapters (代下30 v6 v10 / 斯3 v13 v15 / 斯8 v10 v14) — all in
+compound 驛卒 (postal messenger). User-direct sub: 驛→譯 (yì / jik6) —
+Cantonese jik6 = 譯 (translate) preserves canonical pronunciation perfectly.
+Display text stays canonical 驛 — sub applied only at generation time.
+Round-16 (2026-09-14) combines Lane A (source-edit) + Lane B (TTS_CHAR_MAP)
+in one commit: 來 13:3 多餘 ',' removed from bible-data.json (byte-level
+replace, §32 pattern) + 2 new TTS_CHAR_MAP entries (帑→幣, 驛→譯).
+Total Round-16: 3 chapters affected (代下 30, 斯 3, 斯 8). Punctuation fix
+covers 來 13:3 only (1 chapter, no audio regen per §33).
 
 AFFECTED VERSES: ~546+28 = ~574 verses across 40+ books (212 original 4 + 6 輜 +
   75 驕 + 52 軛 + 10 縋 + 18 讒 + 2 貲 + 19 賙 + 199 單 + 4 搆 + 4 誆 + 5 柺 + 12
-  諂 [詩5 詩78 箴6 箴7 箴26 箴28 箴29 但11 帖前2 猶1] + 2026-09-02: 4 鍤 [出27 出38 民4 代下4] + 24 誚 [申28 士8 王上9 代下7 代下30 代下36 伯16 伯34 詩123 箴3 箴27 賽28 結22 結36 哈1 太27 可15 路23 徒2 徒17 彼後3 猶1]).
+  諂 [詩5 詩78 箴6 箴7 箴26 箴28 箴29 但11 帖前2 猶1] + 2026-09-02: 4 鍤 [出27 出38 民4 代下4] + 24 誚 [申28 士8 王上9 代下7 代下30 代下36 伯16 伯34 詩123 箴3 箴27 賽28 結22 結36 哈1 太27 可15 路23 徒2 徒17 彼後3 猶1]
+  + 2026-09-14: 1 帑 [斯3] + 6 驛 [代下30 斯3 斯8]).
   Books affected: 創/利/民/申/書士撒上撒下王上王下代上代下拉尼伯詩箴歌賽耶結但珥摩俄彌鴻番太可路約徒林前林後來/plus new: 哀/傳/出/亞/何/加/多/提前/提後/斯/士/耶/珥/摩/plus 2026-08-16: 撒下1/賽10/林後10/士14/士16/王上13
 
 REGENERATION SCOPE: any chapter containing affected chars needs regen.
@@ -153,7 +170,9 @@ TTS_CHAR_MAP: dict[str, str] = {
     '鈸': '拔',  # bá / bat6 — added 2026-08-30 per user Cantonese ear verify (鈸 REJECTED by edge TTS zh-HK, NoAudioReceived, 0 B). Affects 15 verses across 10 chapters (代上/代下/尼/拉/撒下/林前/詩) — all � proper-noun musical instrument. Display text stays canonical 鈸 — sub applied only at generation time.
     '賚': '萊',  # lài / lai6 — added 2026-09-01 per user Cantonese ear verify (賚 REJECTED by edge TTS zh-HK, NoAudioReceived, both voices). Affects 1 verse (代上 27:29, 施提賚/亞第賚 — proper names). Display text stays canonical 賚 — sub applied only at generation time.
     '鍤': '插',  # chǎ / caap3 — added 2026-09-02 per user Cantonese ear verify (鍤 REJECTED by edge TTS zh-HK, NoAudioReceived, both voices). Affects 4 verses across 4 chapters (出27/出38/民4/代下4) — all in compound 肉鍤子 (altar meat fork utensil). Cantonese caap3 = 插 (insert/fork) preserved perfectly. Display text stays canonical 鍤 — sub applied only at generation time.
-    '誚': '俏',  # qiào / qiu3 — added 2026-09-02 per user Cantonese ear verify (誚 REJECTED by edge TTS zh-HK, NoAudioReceived, both voices). Affects 24 verses across 22 chapters (申28/士8/王上9/代下7/代下30/代下36/伯16/伯34/詩123/箴3/箴27/賽28/結22×2/結36/哈1/太27×2/可15/路23/徒2/徒17/彼後3/猶1) — all in compound 譏誚 (mock/scoff verb). Cantonese qiu3 = 俏 (pretty/lively) preserved. Display text stays canonical 誚 — sub applied only at generation time.
+    '誚': '俏',  # qiào / qiu3 — added 2026-09-02 per user Cantonese ear verify (誚 REJECTED by edge TTS zh-HK, NoAudioReceived, both voices). Affects 24 verses across 22 chapters (申28/士8/王上9/代下7/代下30/代下36/伯16/伯34/詩123/箴3/箴27/賽28/結22×2/結36/哈1/太27×2/可15/路23/徒2/徒17/彼後3/猶1) — all in compound 譏誚 (mock/scoff verb). Cantonese qiu3 = 俏 (pretty/lively) preserved. Display text in bible-data.json stays canonical 誚 — sub applied only at generation time.
+    '帑': '幣',  # tǎng / bai6 — added 2026-09-14 per user Cantonese ear verify (帑 MISREAD by edge TTS zh-HK as seoi3 Cantonese / 帥 sound; canonical CUV Cantonese = 國幣 bai6 = national treasury). Affects 1 verse (斯 3:9, 掌管國帑). Cantonese bai6 = 幣 (coin/currency) preserves canonical pronunciation perfectly. Display text stays canonical 帑 — sub applied only at generation time.
+    '驛': '譯',  # yì / jik6 — added 2026-09-14 per user Cantonese ear verify (驛 REJECTED by edge TTS zh-HK, NoAudioReceived, both voices). Affects 6 verses across 3 chapters (代下30 v6 v10 / 斯3 v13 v15 / 斯8 v10 v14) — all in compound 驛卒 (postal messenger). Cantonese jik6 = 譯 (translate) preserves canonical pronunciation perfectly. Display text stays canonical 驛 — sub applied only at generation time.
 }
 
 # Frozen snapshot for safety (prevents accidental mutation)
@@ -249,7 +268,7 @@ if __name__ == '__main__':
 
     print(f'\n=== Module info ===')
     print(f'  Affected chars: {list_affected_chars()}')
-    print(f'  Total: {len(TTS_CHAR_MAP)} chars (Round-14), 574+ affected verses across 40+ books')
+    print(f'  Total: {len(TTS_CHAR_MAP)} chars (Round-16), 580+ affected verses across 40+ books')
 
     if all_pass:
         print('\n✅ All tests pass')

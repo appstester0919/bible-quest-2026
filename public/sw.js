@@ -1,6 +1,6 @@
 /* eslint-disable no-undef */
 
-const CACHE_NAME = 'bible-quest-v32' // bump v31→v32 (2026-09-09, Round-24 follow-up follow-up): force full client-bundle rebuild after revalidate=0 alone did NOT trigger Vercel to emit new chunk hash.
+const CACHE_NAME = 'bible-quest-v33' // bump v32→v33 (2026-09-14, Round-16): force client-bundle rebuild after 帑→幣 + 驛→譯 TTS char-sub additions + 來 13:3 punctuation source-edit.
 // v24 added /vendor/ bypass, but a new SW only takes control after all old
 // clients close — so users with the page already open kept hitting the v23
 // cache-first .js rule and "Failed to fetch" persisted. Round-12 forces
