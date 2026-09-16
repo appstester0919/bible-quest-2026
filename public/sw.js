@@ -1,6 +1,6 @@
 /* eslint-disable no-undef */
 
-const CACHE_NAME = 'bible-quest-v33' // bump v32→v33 (2026-09-14, Round-16): force client-bundle rebuild after 帑→幣 + 驛→譯 TTS char-sub additions + 來 13:3 punctuation source-edit.
+const CACHE_NAME = 'bible-quest-v34' // bump v33→v34 (2026-09-16, Round-17): force client-bundle rebuild after 儹→讚 + 鷙→致 TTS char-sub additions (35th + 36th mappings, 8 chapters).
 // v24 added /vendor/ bypass, but a new SW only takes control after all old
 // clients close — so users with the page already open kept hitting the v23
 // cache-first .js rule and "Failed to fetch" persisted. Round-12 forces
