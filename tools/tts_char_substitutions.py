@@ -117,11 +117,23 @@ in one commit: 來 13:3 多餘 ',' removed from bible-data.json (byte-level
 replace, §32 pattern) + 2 new TTS_CHAR_MAP entries (帑→幣, 驛→譯).
 Total Round-16: 3 chapters affected (代下 30, 斯 3, 斯 8). Punctuation fix
 covers 來 13:3 only (1 chapter, no audio regen per §33).
+New 2 mappings (儹, 鷙) added 2026-09-16 per user Cantonese ear verify —
+both REJECTED by edge TTS zh-HK voices (NoAudioReceived, 0 B, both voices).
+儹 REJECTED in 太6 v19 v20 / 雅5 v3 (3 verses, 2 chapters, all in compound
+積儹 "accumulate"). User-direct sub: 儹→讚 (zǎn / zaan3) — Cantonese zaan3
+= 讚 (praise) preserves canonical pronunciation perfectly.
+鷙 REJECTED in 創15 v11 / 伯28 v7 / 賽18 v6 / 賽46 v11 / 耶12 v9 / 結39 v4
+(6 verses, 6 chapters, all in compound 鷙鳥 "ravenous bird"). User-direct
+sub: 鷙→致 (zhì / zi3) — Cantonese zi3 = 致 (arrive/cause) preserves
+canonical pronunciation per user direction. Display text stays canonical
+儹 / 鷙 — sub applied only at generation time. Total Round-17: 8 chapters
+affected (太6, 雅5, 創15, 伯28, 賽18, 賽46, 耶12, 結39). Pure Lane-B
+(no Lane-A source edits this round).
 
-AFFECTED VERSES: ~546+28 = ~574 verses across 40+ books (212 original 4 + 6 輜 +
+AFFECTED VERSES: ~546+28+9 = ~583 verses across 40+ books (212 original 4 + 6 輜 +
   75 驕 + 52 軛 + 10 縋 + 18 讒 + 2 貲 + 19 賙 + 199 單 + 4 搆 + 4 誆 + 5 柺 + 12
   諂 [詩5 詩78 箴6 箴7 箴26 箴28 箴29 但11 帖前2 猶1] + 2026-09-02: 4 鍤 [出27 出38 民4 代下4] + 24 誚 [申28 士8 王上9 代下7 代下30 代下36 伯16 伯34 詩123 箴3 箴27 賽28 結22 結36 哈1 太27 可15 路23 徒2 徒17 彼後3 猶1]
-  + 2026-09-14: 1 帑 [斯3] + 6 驛 [代下30 斯3 斯8]).
+  + 2026-09-14: 1 帑 [斯3] + 6 驛 [代下30 斯3 斯8] + 2026-09-16: 3 儹 [太6 雅5] + 6 鷙 [創15 伯28 賽18 賽46 耶12 結39]).
   Books affected: 創/利/民/申/書士撒上撒下王上王下代上代下拉尼伯詩箴歌賽耶結但珥摩俄彌鴻番太可路約徒林前林後來/plus new: 哀/傳/出/亞/何/加/多/提前/提後/斯/士/耶/珥/摩/plus 2026-08-16: 撒下1/賽10/林後10/士14/士16/王上13
 
 REGENERATION SCOPE: any chapter containing affected chars needs regen.
@@ -173,6 +185,8 @@ TTS_CHAR_MAP: dict[str, str] = {
     '誚': '俏',  # qiào / qiu3 — added 2026-09-02 per user Cantonese ear verify (誚 REJECTED by edge TTS zh-HK, NoAudioReceived, both voices). Affects 24 verses across 22 chapters (申28/士8/王上9/代下7/代下30/代下36/伯16/伯34/詩123/箴3/箴27/賽28/結22×2/結36/哈1/太27×2/可15/路23/徒2/徒17/彼後3/猶1) — all in compound 譏誚 (mock/scoff verb). Cantonese qiu3 = 俏 (pretty/lively) preserved. Display text in bible-data.json stays canonical 誚 — sub applied only at generation time.
     '帑': '幣',  # tǎng / bai6 — added 2026-09-14 per user Cantonese ear verify (帑 MISREAD by edge TTS zh-HK as seoi3 Cantonese / 帥 sound; canonical CUV Cantonese = 國幣 bai6 = national treasury). Affects 1 verse (斯 3:9, 掌管國帑). Cantonese bai6 = 幣 (coin/currency) preserves canonical pronunciation perfectly. Display text stays canonical 帑 — sub applied only at generation time.
     '驛': '譯',  # yì / jik6 — added 2026-09-14 per user Cantonese ear verify (驛 REJECTED by edge TTS zh-HK, NoAudioReceived, both voices). Affects 6 verses across 3 chapters (代下30 v6 v10 / 斯3 v13 v15 / 斯8 v10 v14) — all in compound 驛卒 (postal messenger). Cantonese jik6 = 譯 (translate) preserves canonical pronunciation perfectly. Display text stays canonical 驛 — sub applied only at generation time.
+    '儹': '讚',  # zǎn / zaan3 — added 2026-09-16 per user Cantonese ear verify (儹 REJECTED by edge TTS zh-HK, NoAudioReceived, both voices). Affects 3 verses across 2 chapters (太6 v19 v20 / 雅5 v3) — all in compound 積儹 (accumulate). Cantonese zaan3 = 讚 (praise) preserves canonical pronunciation perfectly. Display text stays canonical 儹 — sub applied only at generation time.
+    '鷙': '致',  # zhì / zi3 — added 2026-09-16 per user Cantonese ear verify (鷙 REJECTED by edge TTS zh-HK, NoAudioReceived, both voices). Affects 6 verses across 6 chapters (創15/伯28/賽18/賽46/耶12/結39) — all in compound 鷙鳥 (ravenous bird). Cantonese zi3 = 致 (arrive/cause) preserves canonical pronunciation per user direction. Display text stays canonical 鷙 — sub applied only at generation time.
 }
 
 # Frozen snapshot for safety (prevents accidental mutation)
@@ -268,7 +282,7 @@ if __name__ == '__main__':
 
     print(f'\n=== Module info ===')
     print(f'  Affected chars: {list_affected_chars()}')
-    print(f'  Total: {len(TTS_CHAR_MAP)} chars (Round-16), 580+ affected verses across 40+ books')
+    print(f'  Total: {len(TTS_CHAR_MAP)} chars (Round-17), 583+ affected verses across 40+ books')
 
     if all_pass:
         print('\n✅ All tests pass')
