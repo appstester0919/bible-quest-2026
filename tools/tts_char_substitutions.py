@@ -129,6 +129,26 @@ canonical pronunciation per user direction. Display text stays canonical
 儹 / 鷙 — sub applied only at generation time. Total Round-17: 8 chapters
 affected (太6, 雅5, 創15, 伯28, 賽18, 賽46, 耶12, 結39). Pure Lane-B
 (no Lane-A source edits this round).
+New 1 mapping (轡) added 2026-09-17 per user Cantonese dictionary lookup
+(Round-18, 38th mapping). 轡 REJECTED by edge TTS zh-HK voices
+(NoAudioReceived, both voices). User-direct sub: 轡→臂 (pei3 / Cantonese
+bei3) — 臂 (arm) preserves Cantonese pronunciation per user's Cantonese
+dictionary (verbatim: 「我check過字典，廣東話 轡 應該發『臂』音」). Affects
+3 verses in 3 chapters (伯30 v11 / 詩32 v9 / 箴26 v3) — all in compound
+轡頭 (bridle/rein). Display text in bible-data.json stays canonical 轡
+— sub applied only at generation time. Pure Lane-B (no Lane-A source edits).
+Round-18 also adds 1 user-direct pipeline-layer punctuation marker:
+TTS_PUNCTUATION_FIXES entry 「；）→；　）」 — user verbatim: 「；） 本來就係
+標點符號，唔應該讀出聲」 (no source-data fix per user direction 2026-09-17;
+the ；） syllable pair is read by edge TTS as emoji/wink-tone sound instead
+of silent punctuation; injecting full-width space between chars breaks the
+emoji-as-sound pair into two individual silent chars — both probe-tested
+as NoAudioReceived in both zh-HK voices). 4 occurrences across 3
+chapters (伯31 v30 v32 / 羅10 v6 / 加2 v8). Audio regen of ；） chapters
+is OPTIONAL per §33 (non-audible punctuation) but Round-18 regens all
+3 affected ：） chapters alongside the 3 轡 chapters to keep shipped-
+audio consistency; affected chapters: 伯30, 伯31, 詩32, 箴26, 羅10,
+加2 (6 chapters total).
 
 AFFECTED VERSES: ~546+28+9 = ~583 verses across 40+ books (212 original 4 + 6 輜 +
   75 驕 + 52 軛 + 10 縋 + 18 讒 + 2 貲 + 19 賙 + 199 單 + 4 搆 + 4 誆 + 5 柺 + 12
@@ -152,6 +172,7 @@ Use `regen_tts_affected_chapters.py` after wiring this module in.
 # references/tts-char-substitution-2026-08-10.md for full audit + reverting
 # story.
 TTS_CHAR_MAP: dict[str, str] = {
+    '轡': '臂',  # Cantonese pei3 = 臂 (arm/limb) — added 2026-09-17 per user Cantonese ear verify (Round-18). 轡 REJECTED by edge TTS zh-HK (NoAudioReceived, both voices) and MISREAD would be risk if read phonetically. User confirmed Cantonese dictionary: 轡 = 臂音. Display text stays canonical 轡 — sub applied only at generation time. Affects 3 verses in 3 chapters (伯30 v11 / 詩32 v9 / 箴26 v3) — all in compound 轡頭 (bridle).
     '櫺': '靈',  # líng
     '繙': '翻',  # fān
     '鬮': '鳩',  # jiū
@@ -219,7 +240,25 @@ _FROZEN_MAP = frozenset(TTS_CHAR_MAP.items())
 # 2026-08-21: 弗 3:13 '...患難喪膽這原是你們的榮耀。' — flagged by user as
 # missing the 中間 '，'. Source-edit applied directly to bible-data.json
 # (per user's preference for permanent source-level fixes). Marker removed.
-TTS_PUNCTUATION_FIXES: list[tuple[str, str, str]] = []
+#
+# 2026-09-17: ;)-pattern emoji-as-sound pipe fix (Round-18, user-direct
+# pipeline-layer marker). 4 occurrences of the substring 「；）」 (CJK full-width
+# semicolon + CJK full-width close-paren, appearing as adjacent punctuation
+# in 4 verses: 伯31 v30 / 伯31 v32 / 羅10 v6 / 加2 v8). Edge TTS reads the
+# combined 「；）」 sequence as a winking-emoji sound (audio size 16128B for
+# both zh-HK voices when probed as a 2-char input — empirically the engine
+# tokenizes the adjacent pair as a single emoji-glyph string rather than as
+# silent punctuation). User direction 2026-09-17: 「純粹係 TTS punctuation
+# fix，唔需要改動文本」 — adding a full-width space 「　」 between the two
+# chars breaks the emoji-as-sound tokenization and makes the pair silent
+# (probe-tested with the marker-replacement form: NoAudioReceived returned
+# by both zh-HK voices). The display text remains canonical 「；）」 (no
+# source-edit applied). This is a Round-18 pipeline-layer exception to
+# the §14 source-edit-default rule — user explicitly chose the marker path.
+# Format: (search_substring, replacement_substring, verse-ref-context)
+TTS_PUNCTUATION_FIXES: list[tuple[str, str, str]] = [
+    ('；）', '；　）', 'Round-18 emoji-as-sound pipe fix; 伯31×2 / 羅10 / 加2'),
+]
 
 
 def tts_text(display_text: str) -> str:
@@ -268,6 +307,10 @@ if __name__ == '__main__':
         ('為那兩隻羊拈鬮，一鬮歸與耶和華。', '為那兩隻羊拈鳩，一鳩歸與耶和華。'),
         ('我心裡也仔細省察捫心自問。', '我心裡也仔細省察悶心自問。'),
         ('他們用舌頭諂媚人。', '他們用舌頭闡媚人。'),  # Round-11 2026-08-28
+        ('鬆開他們的繩索苦待我，在我面前脫去轡頭。', '鬆開他們的繩索苦待我，在我面前脫去臂頭。'),  # Round-18 2026-09-17 轡→臂
+        ('（我沒有容口犯罪，咒詛他的生命；）', '（我沒有容口犯罪，咒詛他的生命；　）'),  # Round-18 ；）→；　）
+        ('（從來我沒有容客旅在街上住宿，卻開門迎接行路的人；）', '（從來我沒有容客旅在街上住宿，卻開門迎接行路的人；　）'),
+        ('（那感動彼得、叫他為受割禮之人作使徒的，也感動我，叫我為外邦人作使徒；）', '（那感動彼得、叫他為受割禮之人作使徒的，也感動我，叫我為外邦人作使徒；　）'),
     ]
     print('=== tts_text() tests ===')
     all_pass = True
@@ -282,7 +325,7 @@ if __name__ == '__main__':
 
     print(f'\n=== Module info ===')
     print(f'  Affected chars: {list_affected_chars()}')
-    print(f'  Total: {len(TTS_CHAR_MAP)} chars (Round-17), 583+ affected verses across 40+ books')
+    print(f'  Total: {len(TTS_CHAR_MAP)} chars in TTS_CHAR_MAP (37 with Round-18 轡→臂), 583+ affected verses across 40+ books, 1 punctuation marker in TTS_PUNCTUATION_FIXES (Round-18)')
 
     if all_pass:
         print('\n✅ All tests pass')
