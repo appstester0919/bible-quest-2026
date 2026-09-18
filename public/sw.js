@@ -1,6 +1,6 @@
 /* eslint-disable no-undef */
 
-const CACHE_NAME = 'bible-quest-v35' // bump v34→v35 (2026-09-17, Round-18): force client-bundle rebuild after 轡→臂 TTS_CHAR_MAP (37th mapping, 3 chapters: 伯30 / 詩32 / 箴26) + ；）→；　） pipeline-marker punctuation fix (4 verses / 3 chapters: 伯31 / 羅10 / 加2 — pure pipeline-layer per user direction 2026-09-17, no source-edit).
+const CACHE_NAME = 'bible-quest-v36' // bump v35→v36 (2026-09-18, Round-19): force client-bundle rebuild after Lane-A 伯 39:19 char fixes (浛→挲 + 𢔰(U+28970)→鬃, 2 chars, 1 chapter regen, F voice, 1.20 MB mp3). User kept 「他」 per chapter 39 corpus convention (722 hits, 0 牠 — corpus-consistency overrides fhl.net 牠 reading).
 // v24 added /vendor/ bypass, but a new SW only takes control after all old
 // clients close — so users with the page already open kept hitting the v23
 // cache-first .js rule and "Failed to fetch" persisted. Round-12 forces
