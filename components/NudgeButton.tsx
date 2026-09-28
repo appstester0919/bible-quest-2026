@@ -1,9 +1,17 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { getIncompleteGroupMembersToday } from '@/lib/groupActions'
 import { NudgeDialog } from './NudgeDialog'
+
+/**
+ * Visibility poll interval. The three flags below (completedToday / quotaUsed /
+ * hasMembership) each change at most once or twice per calendar day, so a
+ * minutes-long poll is plenty. Freshness when the user actually *looks* at the
+ * page is handled by the focus / visibilitychange listeners instead.
+ */
+const POLL_INTERVAL_MS = 180_000
 
 /**
  * v0.5 (2026-08-15) — NudgeButton: "📣 提醒組員" CTA.
@@ -15,7 +23,8 @@ import { NudgeDialog } from './NudgeDialog'
  *      where sender_id=me AND nudge_date_local=today).
  *   3. Current user has ≥1 group membership (otherwise nothing to nudge).
  *
- * Visibility polls every 30s. Click → loads incomplete recipients via
+ * Visibility polls every 3 min, and immediately on window focus /
+ * tab visibilitychange. Click → loads incomplete recipients via
  * `getIncompleteGroupMembersToday()` and opens <NudgeDialog>. If the list is
  * empty, show an inline celebratory message instead.
  */
@@ -30,7 +39,28 @@ export function NudgeButton() {
   const [inlineMessage, setInlineMessage] = useState<string | null>(null)
 
   // ── Visibility refresh ────────────────────────────────────────────────────
-  const refreshVisibility = useCallback(async () => {
+  // In-flight guard: timer / focus ticks skip while a run is active instead of
+  // stacking concurrent query batches. `pendingRef` re-runs once at the end so a
+  // state change landing mid-run is never dropped.
+  const inFlightRef = useRef(false)
+  const pendingRef = useRef(false)
+
+  // Plain function, deliberately not useCallback: it self-references (the
+  // `pendingRef` re-run in the finally block) and React Compiler rejects manual
+  // memoization it cannot preserve.
+  //
+  // The effect below must therefore NOT list it as a dependency. A plain
+  // function has a fresh identity on every render, so `[refreshVisibility]`
+  // would tear down and re-attach the interval + both listeners on every
+  // render — reintroducing exactly the churn the poll reduction removed. The
+  // function only touches refs and setState (both stable), so mounting the
+  // effect once is correct. `eslint-disable-next-line` documents the intent.
+  async function refreshVisibility() {
+    if (inFlightRef.current) {
+      pendingRef.current = true
+      return
+    }
+    inFlightRef.current = true
     try {
       const supabase = createClient()
       const { data: { user } } = await supabase.auth.getUser()
@@ -72,14 +102,37 @@ export function NudgeButton() {
       }
     } catch (err) {
       console.error('[NudgeButton] visibility refresh failed:', err)
+    } finally {
+      inFlightRef.current = false
+      // Re-run once if a tick arrived while this run was in flight.
+      if (pendingRef.current) {
+        pendingRef.current = false
+        void refreshVisibility()
+      }
     }
-  }, [])
+  }
 
   useEffect(() => {
-    refreshVisibility()
-    const id = setInterval(refreshVisibility, 30_000)
-    return () => clearInterval(id)
-  }, [refreshVisibility])
+    void refreshVisibility()
+    const id = setInterval(() => { void refreshVisibility() }, POLL_INTERVAL_MS)
+    const onFocus = () => { void refreshVisibility() }
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') void refreshVisibility()
+    }
+    window.addEventListener('focus', onFocus)
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => {
+      clearInterval(id)
+      window.removeEventListener('focus', onFocus)
+      document.removeEventListener('visibilitychange', onVisibility)
+    }
+    // Intentionally empty: refreshVisibility is a plain function (new identity
+    // every render). Including it would re-run this effect on every render and
+    // re-attach the interval + both listeners each time. It closes over only
+    // refs and setState setters, both of which are stable, so a once-only mount
+    // is correct. See the note on the function above.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // ── Click handler ─────────────────────────────────────────────────────────
   const handleClick = async () => {

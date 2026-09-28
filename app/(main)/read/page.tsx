@@ -1,6 +1,13 @@
 'use client'
 
-import { useEffect, useState, useCallback, useRef } from 'react'
+import {
+  useEffect,
+  useState,
+  useCallback,
+  useMemo,
+  useRef,
+  type CSSProperties,
+} from 'react'
 import { createClient } from '@/lib/supabase/client'
 import {
   markDayCompleteBatch,
@@ -189,7 +196,21 @@ export default function ReadPage() {
   // Scripture display
   const [chapters, setChapters] = useState<ChapterData[]>([])
   const [showVerseNumbers, setShowVerseNumbers] = useState(true)
-  const [fontSize, setFontSize] = useState(20)
+  // Font size is NOT component state: it is written straight onto the root
+  // element as the --read-font-size custom property, so an A+/A− tap costs one
+  // style recalc instead of a re-render + re-layout of every verse node
+  // (Psalm 119 alone is 176 verse rows). fontSizeRef only exists to clamp the
+  // next value, since the DOM is the single source of truth.
+  const fontSizeRef = useRef(20)
+  const rootRef = useRef<HTMLDivElement>(null)
+  const setFontSize = useCallback((next: number) => {
+    const clamped = Math.max(14, Math.min(36, next))
+    fontSizeRef.current = clamped
+    rootRef.current?.style.setProperty(
+      '--read-font-size',
+      `${clamped}px`,
+    )
+  }, [])
   const [scriptureLoading, setScriptureLoading] = useState(false)
 
   // Audio
@@ -408,7 +429,15 @@ export default function ReadPage() {
   // dashboard via ?today=1&refs=...) since they account for reading_order
   // (parallel/nt_then_ot/ot_then_nt) and per-testament start positions.
   // Fall back to enrollment+chapters_per_day replay only when no URL refs.
-  const todayRequiredRefs = (() => {
+  //
+  // Memoised: the fallback branch replays the plan day-by-day (O(dayOffset ×
+  // chapters_per_day) date arithmetic) and allocates a scopeBooks array, so it
+  // is not free on every render. Dependencies are exactly what it reads:
+  // autoLoadedRefs (early-return value), enrollment, books. Nothing else —
+  // `new Date()` is read deliberately so this stays correct if the tab is left
+  // open across HKT midnight; that costs at most one recompute per render
+  // change, and the loop is only reached when the URL refs are absent.
+  const todayRequiredRefs = useMemo<string[]>(() => {
     if (autoLoadedRefs && autoLoadedRefs.length > 0) return autoLoadedRefs
 
     if (!enrollment || books.length === 0) return []
@@ -476,15 +505,23 @@ export default function ReadPage() {
       }
     }
     return refs
-  })()
+  }, [autoLoadedRefs, enrollment, books])
 
-  // Whether loaded audio chapters cover all today's required reading
-  const loadedRefsSet = new Set(
-    audioQueue.map((item) => `${item.book.name} ${item.chapter}`),
-  )
-  const allRequiredLoaded =
-    todayRequiredRefs.length > 0 &&
-    todayRequiredRefs.every((ref) => loadedRefsSet.has(ref))
+  // Whether loaded audio chapters cover all today's required reading.
+  // Memoised on [audioQueue] — the Set is rebuilt from scratch on every
+  // render otherwise, and audioQueue is a stable reference between
+  // queue-setting events (setAudioQueue is only called from
+  // loadChapterQueue / handleDisplay), so this recomputes exactly when the
+  // queue changes rather than on every keystroke-sized state change.
+  const allRequiredLoaded = useMemo(() => {
+    const loadedRefsSet = new Set(
+      audioQueue.map((item) => `${item.book.name} ${item.chapter}`),
+    )
+    return (
+      todayRequiredRefs.length > 0 &&
+      todayRequiredRefs.every((ref) => loadedRefsSet.has(ref))
+    )
+  }, [audioQueue, todayRequiredRefs])
   // Show complete button only if: today NOT completed AND (auto-loaded all required OR user manually selected exactly today's refs)
   const showComplete =
     audioQueue.length > 0 && !todaySession && allRequiredLoaded
@@ -530,27 +567,40 @@ export default function ReadPage() {
     const startIdx = books.findIndex((b) => b.abbr === startBook.abbr)
     const endIdx = books.findIndex((b) => b.abbr === endBook.abbr)
 
-    const loaded: ChapterData[] = []
-    const queue: { book: BookMeta; chapter: number }[] = []
-
+    // Build the full (book, chapter) list first, then resolve the verses in
+    // bounded-concurrency batches. A single 1189-wide Promise.all would, on a
+    // cold cache, make every concurrent getChapter() miss loadBible()'s `_bibleCache`
+    // and issue 1189 simultaneous 4.2 MB /bible-data.json fetches. 50 keeps the
+    // warm-cache microtask path fast while capping the worst case.
+    const targets: { book: BookMeta; chapter: number }[] = []
     for (let bi = startIdx; bi <= endIdx; bi++) {
       const book = books[bi]
       const cStart = bi === startIdx ? startChapter : 1
       const cEnd = bi === endIdx ? endChapter : book.chapters
       for (let ch = cStart; ch <= cEnd; ch++) {
-        const verses = await getChapter(book.abbr, ch)
-        loaded.push({
-          bookAbbr: book.abbr,
-          bookName: book.name,
-          chapter: ch,
-          verses,
-        })
-        queue.push({ book, chapter: ch })
+        targets.push({ book, chapter: ch })
       }
     }
 
+    const CHUNK = 50
+    const loaded: ChapterData[] = []
+    for (let i = 0; i < targets.length; i += CHUNK) {
+      const batch = await Promise.all(
+        targets.slice(i, i + CHUNK).map(async ({ book, chapter }) => {
+          const verses = await getChapter(book.abbr, chapter)
+          return {
+            bookAbbr: book.abbr,
+            bookName: book.name,
+            chapter,
+            verses,
+          }
+        }),
+      )
+      loaded.push(...batch)
+    }
+
     setChapters(loaded)
-    setAudioQueue(queue)
+    setAudioQueue(targets)
     setCurrentChapterIdx(0)
     setIsPlaying(false)
     setScriptureLoading(false)
@@ -701,12 +751,18 @@ export default function ReadPage() {
 
   return (
     <div
-      style={{
-        minHeight: '100vh',
-        background: C.bgPrimary,
-        paddingTop: '72px',
-        paddingBottom: '90px',
-      }}
+      ref={rootRef}
+      style={
+        {
+          minHeight: '100vh',
+          background: C.bgPrimary,
+          paddingTop: '72px',
+          paddingBottom: '90px',
+          // Initial value; later A+/A− taps mutate this property in place via
+          // setProperty, bypassing React entirely.
+          '--read-font-size': '20px',
+        } as CSSProperties
+      }
     >
       <audio ref={audioRef} preload="auto" />
 
@@ -869,7 +925,7 @@ export default function ReadPage() {
 
         {/* Font size A− */}
         <button
-          onClick={() => setFontSize((f) => Math.max(14, f - 2))}
+          onClick={() => setFontSize(fontSizeRef.current - 2)}
           title="縮小字體"
           className="ab-font-dec ab-btn"
           style={{
@@ -895,7 +951,7 @@ export default function ReadPage() {
 
         {/* Font size A+ */}
         <button
-          onClick={() => setFontSize((f) => Math.min(36, f + 2))}
+          onClick={() => setFontSize(fontSizeRef.current + 2)}
           title="放大字體"
           className="ab-font-inc ab-btn"
           style={{
@@ -1471,16 +1527,24 @@ export default function ReadPage() {
               return (
                 <div
                   key={`${chapter.bookAbbr}-${chapter.chapter}`}
-                  style={{
-                    background: C.bgCard,
-                    borderRadius: '10px',
-                    padding: '20px',
-                    marginBottom: '20px',
-                    border: `1px solid ${C.borderLight}`,
-                    borderLeft: `4px solid ${C.accentGold}`,
-                    boxShadow: '0 2px 8px rgba(61,41,20,0.06)',
-                    position: 'relative',
-                  }}
+                  style={
+                    {
+                      background: C.bgCard,
+                      borderRadius: '10px',
+                      padding: '20px',
+                      marginBottom: '20px',
+                      border: `1px solid ${C.borderLight}`,
+                      borderLeft: `4px solid ${C.accentGold}`,
+                      boxShadow: '0 2px 8px rgba(61,41,20,0.06)',
+                      position: 'relative',
+                      // Each chapter is its own card, so off-screen cards can skip
+                      // layout/paint. `auto` in containIntrinsicSize lets the
+                      // browser learn the real size after first render, which
+                      // keeps the scrollbar honest.
+                      contentVisibility: 'auto',
+                      containIntrinsicSize: 'auto 700px',
+                    } as CSSProperties
+                  }
                 >
                   <span
                     style={{
@@ -1537,12 +1601,12 @@ export default function ReadPage() {
                           {num}
                         </span>
                       )}
-                      <span
-                        style={{
-                          flex: 1,
-                          color: C.textPrimary,
-                          lineHeight: 1.9,
-                          fontSize: `${fontSize}px`,
+                        <span
+                          style={{
+                            flex: 1,
+                            color: C.textPrimary,
+                            lineHeight: 1.9,
+                          fontSize: 'var(--read-font-size)',
                         }}
                       >
                         {text}
