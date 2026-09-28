@@ -14,7 +14,12 @@ export interface BookMeta {
   index: number
 }
 
-async function loadBible(): Promise<{ books: BookMeta[]; data: Record<string, Record<string, [number, string][]>> }> {
+/**
+ * Shared cached loader for bible-data.json. Export so callers that only need
+ * book metadata (e.g. the /read page) reuse this single fetch + parse instead
+ * of issuing a second 4.2 MB download.
+ */
+export async function loadBible(): Promise<{ books: BookMeta[]; data: Record<string, Record<string, [number, string][]>> }> {
   if (_bibleCache) return _bibleCache
   const res = await fetch('/bible-data.json')
   const json = await res.json()

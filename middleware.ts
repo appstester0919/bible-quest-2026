@@ -89,6 +89,10 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|api/auth/callback|/auth/callback).*)',
+    // Exclude CDN-served static assets: running Supabase auth on every mp3 /
+    // icon / manifest request costs a network round-trip per asset.
+    // /api/ is deliberately NOT excluded (only api/auth/callback is), so
+    // /api/push/* and all other API routes still hit this middleware.
+    '/((?!_next/static|_next/image|favicon.ico|api/auth/callback|/auth/callback|audio/|bible-data\\.json|icons/|manifest\\.json|manifest\\.webmanifest|sw\\.js).*)',
   ],
 }

@@ -25,6 +25,17 @@ const nextConfig = {
             value: 'strict-origin-when-cross-origin'
           }
         ]
+      },
+      {
+        // Content-stable filename, regenerated only when deliberately re-pushed.
+        // Allows the browser to reuse the 4.2 MB corpus across app opens.
+        source: '/bible-data.json',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'public, max-age=31536000, immutable'
+          }
+        ]
       }
     ];
   },

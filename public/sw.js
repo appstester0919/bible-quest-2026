@@ -1,6 +1,6 @@
 /* eslint-disable no-undef */
 
-const CACHE_NAME = 'bible-quest-v37' // bump v36→v37 (2026-09-18, Round-20): TTS_CHAR_MAP 矜→京 (ging1, HK habitual reading per user). 8 chapters regen (撒下1/代下25/詩90/賽13/耶23/耶50/番3/彼後2). Pure Lane-B — bible-data.json display text stays canonical 矜. Verse numbers: 撒下1:20, 代下25:19, 詩90:10, 賽13:3, 耶23:32, 耶50:36, 番3:11, 彼後2:18.
+const CACHE_NAME = 'bible-quest-v38' // bump v37→v38 (2026-09-28): perf batch #1-#4. sw.js now cache-firsts /bible-data.json (was network-only, re-downloaded 4.2 MB every app open); next.config.mjs gives it `immutable, max-age=31536000`. Also #1 /read no longer double-downloads the corpus (loadBible() shared cache), #3 middleware no longer does a Supabase auth round-trip per static asset, #4 audio preload + next-chapter prefetch. IMPORTANT: any future deliberate bible-data.json change MUST bump this CACHE_NAME or clients keep the stale corpus.
 // v24 added /vendor/ bypass, but a new SW only takes control after all old
 // clients close — so users with the page already open kept hitting the v23
 // cache-first .js rule and "Failed to fetch" persisted. Round-12 forces
@@ -105,6 +105,7 @@ self.addEventListener('fetch', (event) => {
     url.pathname.startsWith('/_next/static/') ||
     url.pathname.startsWith('/icons/') ||
     url.pathname.startsWith('/audio/') ||
+    url.pathname === '/bible-data.json' ||
     url.pathname.endsWith('.js') ||
     url.pathname.endsWith('.css') ||
     url.pathname.endsWith('.woff2') ||

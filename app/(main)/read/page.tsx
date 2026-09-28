@@ -8,7 +8,7 @@ import {
 } from '@/lib/actions'
 import { checkInAllMyGroups } from '@/lib/groupActions'
 import { useRouter } from 'next/navigation'
-import { getChapter, getBooksMeta, type BookMeta } from '@/lib/bible/lookup'
+import { getChapter, loadBible, type BookMeta } from '@/lib/bible/lookup'
 import { celebrate } from '@/lib/confetti'
 
 // ─── Bible Read Aloud color scheme ─────────────────────────────────────────
@@ -201,6 +201,8 @@ export default function ReadPage() {
   const [playbackRate, setPlaybackRate] = useState(1)
   // Ref mirrors playbackRate so we can read current value inside useEffect without adding it to the dep array
   const playbackRateRef = useRef(1)
+  // Detached Audio used only to warm the HTTP cache for the next chapter's mp3.
+  const prefetchRef = useRef<HTMLAudioElement | null>(null)
 
   // Today reading
   const [todaySession, setTodaySession] = useState<ReadingSession | null>(null)
@@ -243,10 +245,10 @@ export default function ReadPage() {
       const sessions = sessionsData?.data as ReadingSession[] | null
       if (sessions) setSessions(sessions)
 
-      // Load bible data
-      const res = await fetch('/bible-data.json')
-      const bibleJson = await res.json()
-      setBooks(getBooksMeta(bibleJson))
+      // Load bible data — reuse the shared cached loader so /bible-data.json is
+      // downloaded and parsed exactly once (getChapter() uses the same cache).
+      const bible = await loadBible()
+      setBooks(bible.books)
 
       // Parse URL params for auto-loading (?today=1&refs=創 1,創 2)
       if (typeof window !== 'undefined') {
@@ -377,6 +379,22 @@ export default function ReadPage() {
     audio.playbackRate = playbackRateRef.current
     if (isPlaying) {
       audio.play().catch(() => setIsPlaying(false))
+    }
+
+    // Best-effort warm of the next chapter's mp3 so `ended` → next src does not
+    // stall on a cold network. Never throws, never awaited, never blocks playback.
+    const next = audioQueue[currentChapterIdx + 1]
+    if (next) {
+      try {
+        prefetchRef.current?.removeAttribute('src')
+        prefetchRef.current?.load()
+        const p = new Audio()
+        p.preload = 'auto'
+        p.src = `/audio/${next.book.abbr}/${next.book.abbr}${next.chapter}.mp3`
+        prefetchRef.current = p
+      } catch {
+        /* prefetch is purely opportunistic */
+      }
     }
   }, [currentChapterIdx, audioQueue])
 
@@ -673,7 +691,7 @@ export default function ReadPage() {
         paddingBottom: '90px',
       }}
     >
-      <audio ref={audioRef} />
+      <audio ref={audioRef} preload="auto" />
 
       {/* ── Fixed Top Audio Bar ──────────────────────────────────────── */}
       <div
