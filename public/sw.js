@@ -1,6 +1,6 @@
 /* eslint-disable no-undef */
 
-const CACHE_NAME = 'bible-quest-v36' // bump v35→v36 (2026-09-18, Round-19): force client-bundle rebuild after Lane-A 伯 39:19 char fixes (浛→挲 + 𢔰(U+28970)→鬃, 2 chars, 1 chapter regen, F voice, 1.20 MB mp3). User kept 「他」 per chapter 39 corpus convention (722 hits, 0 牠 — corpus-consistency overrides fhl.net 牠 reading).
+const CACHE_NAME = 'bible-quest-v37' // bump v36→v37 (2026-09-18, Round-20): TTS_CHAR_MAP 矜→京 (ging1, HK habitual reading per user). 8 chapters regen (撒下1/代下25/詩90/賽13/耶23/耶50/番3/彼後2). Pure Lane-B — bible-data.json display text stays canonical 矜. Verse numbers: 撒下1:20, 代下25:19, 詩90:10, 賽13:3, 耶23:32, 耶50:36, 番3:11, 彼後2:18.
 // v24 added /vendor/ bypass, but a new SW only takes control after all old
 // clients close — so users with the page already open kept hitting the v23
 // cache-first .js rule and "Failed to fetch" persisted. Round-12 forces

@@ -172,6 +172,7 @@ Use `regen_tts_affected_chapters.py` after wiring this module in.
 # references/tts-char-substitution-2026-08-10.md for full audit + reverting
 # story.
 TTS_CHAR_MAP: dict[str, str] = {
+    '矜': '京',  # ging1 = 京 (HK habit) — added 2026-09-18 per user pick (Round-20). 矜 is NOT silent in edge TTS zh-HK (single-char probe 7920B / 1.32s) but reads with the wrong Cantonese (MISS = 莊重自持 gīng1 vs 矜誇 gīng6). All 9 corpus hits are 矜誇 / 矜誇高傲 = self-boast, so ging1 is the HK habitual reading. Display text stays canonical 矜 — sub applied only at generation time. Affects 8 chapters (撒下1 / 代下25 / 詩90 / 賽13 / 耶23 / 耶50 / 番3 / 彼後2).
     '轡': '臂',  # Cantonese pei3 = 臂 (arm/limb) — added 2026-09-17 per user Cantonese ear verify (Round-18). 轡 REJECTED by edge TTS zh-HK (NoAudioReceived, both voices) and MISREAD would be risk if read phonetically. User confirmed Cantonese dictionary: 轡 = 臂音. Display text stays canonical 轡 — sub applied only at generation time. Affects 3 verses in 3 chapters (伯30 v11 / 詩32 v9 / 箴26 v3) — all in compound 轡頭 (bridle).
     '櫺': '靈',  # líng
     '繙': '翻',  # fān
@@ -307,6 +308,7 @@ if __name__ == '__main__':
         ('為那兩隻羊拈鬮，一鬮歸與耶和華。', '為那兩隻羊拈鳩，一鳩歸與耶和華。'),
         ('我心裡也仔細省察捫心自問。', '我心裡也仔細省察悶心自問。'),
         ('他們用舌頭諂媚人。', '他們用舌頭闡媚人。'),  # Round-11 2026-08-28
+        ('但其中所矜誇的不過是勞苦愁煩，', '但其中所京誇的不過是勞苦愁煩，'),  # Round-20 2026-09-18 矜→京
         ('鬆開他們的繩索苦待我，在我面前脫去轡頭。', '鬆開他們的繩索苦待我，在我面前脫去臂頭。'),  # Round-18 2026-09-17 轡→臂
         ('（我沒有容口犯罪，咒詛他的生命；）', '（我沒有容口犯罪，咒詛他的生命；　）'),  # Round-18 ；）→；　）
         ('（從來我沒有容客旅在街上住宿，卻開門迎接行路的人；）', '（從來我沒有容客旅在街上住宿，卻開門迎接行路的人；　）'),
