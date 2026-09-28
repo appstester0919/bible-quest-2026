@@ -634,21 +634,38 @@ export default function ReadPage() {
         date_local: today,
       })
 
-      // Refresh local stats so XP/level/streak reflect the batch write
-      const fresh = await recalcUserStatsAfterCompletion(today)
-      if (fresh.success) {
+      // Refresh local stats from markDayCompleteBatch's authoritative return —
+      // it already scanned reading_sessions to update user_stats, so calling
+      // recalcUserStatsAfterCompletion() here would repeat that full-table
+      // scan (up to ~1189 rows) for identical numbers.
+      if (typeof result.totalXp === 'number' && typeof result.level === 'number') {
         setProfile((prev: any) =>
           prev
             ? {
                 ...prev,
-                total_xp: fresh.totalXp,
-                level: fresh.level,
-                current_streak: fresh.currentStreak,
+                total_xp: result.totalXp,
+                level: result.level,
+                current_streak: result.currentStreak ?? prev.current_streak,
               }
             : prev,
         )
       } else {
-        console.error('[handleComplete] stats recalc failed:', fresh.error)
+        // Fallback for the shape-only path (should not happen).
+        const fresh = await recalcUserStatsAfterCompletion(today)
+        if (fresh.success) {
+          setProfile((prev: any) =>
+            prev
+              ? {
+                  ...prev,
+                  total_xp: fresh.totalXp,
+                  level: fresh.level,
+                  current_streak: fresh.currentStreak,
+                }
+              : prev,
+          )
+        } else {
+          console.error('[handleComplete] stats recalc failed:', fresh.error)
+        }
       }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)

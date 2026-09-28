@@ -360,10 +360,12 @@ export async function checkInAllMyGroups(dateLocal: string): Promise<{ success: 
 }
 
 // ─── Get my groups with progress ──────────────────────────────────────────────
-export async function getMyGroups(): Promise<{ groups: GroupWithProgress[]; error?: string }> {
-  const { supabase, user } = await getAuthUser()
-  if (!user) return { groups: [], error: 'Not authenticated' }
-
+// Internal implementation — takes an already-authenticated supabase + user so
+// the dashboard can fetch all three group views with ONE auth round-trip.
+async function fetchMyGroupsFor(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  user: { id: string }
+): Promise<{ groups: GroupWithProgress[]; error?: string }> {
   // Step 1: get memberships (needed to know which group IDs to query)
   const { data: memberships } = await supabase
     .from('group_members').select('group_id, role').eq('user_id', user.id)
@@ -456,10 +458,11 @@ export async function getMyGroups(): Promise<{ groups: GroupWithProgress[]; erro
 }
 
 // ─── Get pending requests for groups I admin ─────────────────────────────────
-export async function getPendingRequestsForMyAdminGroups(): Promise<PendingRequestInfo[]> {
-  const { supabase, user } = await getAuthUser()
-  if (!user) return [] 
-
+// Internal implementation — reuses the caller's authenticated supabase + user.
+async function fetchPendingAdminRequestsFor(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  user: { id: string }
+): Promise<PendingRequestInfo[]> {
   // Find groups where I'm creator (admin)
   const { data: adminGroups } = await supabase.from('groups').select('id, name').eq('created_by', user.id)
   if (!adminGroups || adminGroups.length === 0) return []
@@ -484,10 +487,11 @@ export async function getPendingRequestsForMyAdminGroups(): Promise<PendingReque
 }
 
 // ─── Get my pending join requests ─────────────────────────────────────────────
-export async function getMyPendingRequests(): Promise<Array<{ id: string; group_id: string; group_name: string; created_at: string }>> {
-  const { supabase, user } = await getAuthUser()
-  if (!user) return []
-
+// Internal implementation — reuses the caller's authenticated supabase + user.
+async function fetchMyPendingRequestsFor(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  user: { id: string }
+): Promise<Array<{ id: string; group_id: string; group_name: string; created_at: string }>> {
   const { data: requests } = await supabase
     .from('group_join_requests')
     .select('id, group_id, created_at')
@@ -507,6 +511,55 @@ export async function getMyPendingRequests(): Promise<Array<{ id: string; group_
     group_name: nameById.get(r.group_id) || '',
     created_at: r.created_at,
   }))
+}
+
+// ─── Public wrappers (unchanged contracts) ───────────────────────────────────
+export async function getMyGroups(): Promise<{ groups: GroupWithProgress[]; error?: string }> {
+  const { supabase, user } = await getAuthUser()
+  if (!user) return { groups: [], error: 'Not authenticated' }
+  return fetchMyGroupsFor(supabase, user)
+}
+
+export async function getPendingRequestsForMyAdminGroups(): Promise<PendingRequestInfo[]> {
+  const { supabase, user } = await getAuthUser()
+  if (!user) return []
+  return fetchPendingAdminRequestsFor(supabase, user)
+}
+
+export async function getMyPendingRequests(): Promise<Array<{ id: string; group_id: string; group_name: string; created_at: string }>> {
+  const { supabase, user } = await getAuthUser()
+  if (!user) return []
+  return fetchMyPendingRequestsFor(supabase, user)
+}
+
+// ─── Dashboard combined group read ───────────────────────────────────────────
+// One 'use server' invocation = one supabase.auth.getUser() instead of three.
+// The three reads touch different tables (group_members/groups/group_checkins vs
+// group_join_requests) but are mutually independent once the user is known, so
+// they run in parallel and the result shape mirrors the three originals.
+export async function getMyGroupDashboardData(): Promise<{
+  groups: GroupWithProgress[]
+  groupsError?: string
+  pendingAdminRequests: PendingRequestInfo[]
+  myPendingRequests: Array<{ id: string; group_id: string; group_name: string; created_at: string }>
+}> {
+  const { supabase, user } = await getAuthUser()
+  if (!user) {
+    return { groups: [], groupsError: 'Not authenticated', pendingAdminRequests: [], myPendingRequests: [] }
+  }
+
+  const [gRes, aRes, pRes] = await Promise.all([
+    fetchMyGroupsFor(supabase, user),
+    fetchPendingAdminRequestsFor(supabase, user),
+    fetchMyPendingRequestsFor(supabase, user),
+  ])
+
+  return {
+    groups: gRes.groups,
+    groupsError: gRes.error,
+    pendingAdminRequests: aRes,
+    myPendingRequests: pRes,
+  }
 }
 
 // ─── Get group members (for admin management) ────────────────────────────────

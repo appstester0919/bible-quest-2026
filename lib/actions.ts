@@ -290,7 +290,18 @@ export async function markDayCompleteBatch(
   enrollmentId: string,
   refs: string[],
   dateLocal: string
-): Promise<{ success: boolean; insertedCount?: number; error?: string }> {
+): Promise<{
+  success: boolean
+  insertedCount?: number
+  error?: string
+  // Authoritative post-insert stats, already computed from the same SELECT
+  // that updates user_stats. Returned so callers can refresh local state
+  // without a second full-table reading_sessions scan.
+  totalXp?: number
+  level?: number
+  currentStreak?: number
+  longestStreak?: number
+}> {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { success: false, error: 'Not authenticated' }
@@ -385,7 +396,14 @@ export async function markDayCompleteBatch(
   // Revalidate dashboard so group check-in status reflects immediately
   revalidatePath('/dashboard')
 
-  return { success: true, insertedCount: refs.length }
+  return {
+    success: true,
+    insertedCount: refs.length,
+    totalXp,
+    level,
+    currentStreak: streak,
+    longestStreak: Math.max(longestStreak, streak),
+  }
 }
 
 /**

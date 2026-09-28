@@ -1,6 +1,91 @@
 /* eslint-disable no-undef */
 
-const CACHE_NAME = 'bible-quest-v38' // bump v37→v38 (2026-09-28): perf batch #1-#4. sw.js now cache-firsts /bible-data.json (was network-only, re-downloaded 4.2 MB every app open); next.config.mjs gives it `immutable, max-age=31536000`. Also #1 /read no longer double-downloads the corpus (loadBible() shared cache), #3 middleware no longer does a Supabase auth round-trip per static asset, #4 audio preload + next-chapter prefetch. IMPORTANT: any future deliberate bible-data.json change MUST bump this CACHE_NAME or clients keep the stale corpus.
+const CACHE_NAME = 'bible-quest-v39' // bump v38→v39 (2026-09-28): perf batch #5. Audio caching stays cache-first (offline listening is a product feature) but is now BOUNDED + self-healing: MAX_AUDIO_ENTRIES caps the chapter count and the oldest-inserted entries are evicted to make room, so a 1.5 GB /audio/ tree can no longer thrash the phone's storage quota. Also still covers v38's cache-first /bible-data.json + immutable Cache-Control, #1 /read shared corpus cache, #3 middleware static-asset bypass, #4 audio preload + next-chapter prefetch. IMPORTANT: any future deliberate bible-data.json change MUST bump this CACHE_NAME or clients keep the stale corpus.
+
+// Hard cap on cached audio chapters. public/audio/ holds 1189 mp3s totalling
+// 1.51 GB (measured: mean 1.30 MB/chapter, median 1.19 MB, p90 2.17 MB,
+// max 6.4 MB). Caching the whole tree is not viable on mobile. 120 entries ×
+// 1.30 MB mean ≈ 156 MB, which leaves comfortable headroom inside a typical
+// phone's storage budget while still covering ~10% of the corpus — a typical
+// user reads 1-2 chapters/day, so 120 entries is weeks of offline audio.
+const MAX_AUDIO_ENTRIES = 120
+
+// ─── Bounded, self-healing audio cache ───────────────────────────────────────
+// Audio is a /audio/*.mp3 request. `cache.put()` overwrites the stored response
+// but the Cache API preserves INSERTION ORDER across both `put()` (append) and
+// `put()` on an existing key (position unchanged), so `await cache.keys()` —
+// which resolves in insertion order — is a valid FIFO eviction queue. Oldest
+// first = evict from the front; the entry we are about to write is always at
+// the back, so it can never evict itself.
+//
+// Evicting is best-effort: any failure is swallowed, because the only thing
+// we lose is offline audio for old chapters — never the live response.
+async function evictOldestAudio(cache, toRemove) {
+  if (toRemove <= 0) return
+  try {
+    // Evict ONLY audio. `cache.keys()` spans every asset class in this bucket
+    // (js/css/icons/bible-data.json/mp3), so deleting its first N entries
+    // blindly would evict PWA icons and the 4.2 MB corpus while only audio is
+    // over budget. Filter to audio first, then take the oldest N of those —
+    // insertion order is preserved, so this is FIFO.
+    const audioKeys = (await cache.keys()).filter(
+      (k) => k.url.includes('/audio/') || k.url.endsWith('.mp3'),
+    )
+    for (let i = 0; i < toRemove && i < audioKeys.length; i++) {
+      try {
+        await cache.delete(audioKeys[i])
+      } catch {
+        /* single delete failed — keep going, we still want to free space */
+      }
+    }
+  } catch {
+    /* cache.keys() failed — skip eviction, the put() below still tries */
+  }
+}
+
+// Store a response in the cache, keeping the audio bucket under
+// MAX_AUDIO_ENTRIES. Only audio is bounded; every other asset type is small
+// and static. On QuotaExceededError we evict a batch and retry ONCE, and if it
+// still fails we give up silently — the response has already been handed to
+// the browser by the caller, so playback is never broken by a full cache.
+async function cacheWithAudioCap(cache, request, response) {
+  const isAudio =
+    request.url.includes('/audio/') || request.url.endsWith('.mp3')
+
+  try {
+    if (isAudio) {
+      const audioCount = (await cache.keys()).filter(
+        (k) => k.url.includes('/audio/') || k.url.endsWith('.mp3'),
+      ).length
+      // +1 for the entry about to be inserted.
+      await evictOldestAudio(
+        cache,
+        audioCount + 1 > MAX_AUDIO_ENTRIES
+          ? audioCount + 1 - MAX_AUDIO_ENTRIES
+          : 0,
+      )
+    }
+
+    await cache.put(request, response)
+  } catch {
+    // QuotaExceededError (or a transient Cache failure). Free a batch of the
+    // oldest audio and retry exactly once.
+    try {
+      if (isAudio) {
+        const audioCount = (await cache.keys()).filter(
+          (k) => k.url.includes('/audio/') || k.url.endsWith('.mp3'),
+        ).length
+        await evictOldestAudio(cache, Math.max(audioCount, 1))
+      }
+      await cache.put(request, response)
+    } catch {
+      // Still failing — drop it. The caller returns the network response
+      // regardless, so the user still hears the chapter; only offline replay
+      // of this one file is lost.
+    }
+  }
+}
+
 // v24 added /vendor/ bypass, but a new SW only takes control after all old
 // clients close — so users with the page already open kept hitting the v23
 // cache-first .js rule and "Failed to fetch" persisted. Round-12 forces
@@ -120,7 +205,13 @@ self.addEventListener('fetch', (event) => {
           // cannot cache; let the browser consume the streamed bytes directly.
           if (response.ok && response.status !== 206) {
             const clone = response.clone()
-            caches.open(CACHE_NAME).then((cache) => cache.put(request, clone))
+            // Background write — never awaited here, so a slow/failing cache
+            // op can't delay the response. Audio writes go through
+            // cacheWithAudioCap(), which keeps the bucket bounded; everything
+            // else is small enough to store as-is.
+            caches.open(CACHE_NAME).then((cache) =>
+              cacheWithAudioCap(cache, request, clone),
+            )
           }
           return response
         })

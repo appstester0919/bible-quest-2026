@@ -33,9 +33,13 @@
   --color-bq-ink-soft: #4b5563;
   --color-bq-line: #e5e7eb;
 
-  /* Typography stacks (not prefixed — Tailwind has no --font namespace) */
-  --font-sans: 'Nunito', 'Noto Sans TC', system-ui, sans-serif;
-  --font-serif: 'Noto Serif TC', 'Noto Serif', Georgia, serif;
+  /* Typography stacks (not prefixed — Tailwind has no --font namespace).
+   * Family names come from the next/font variables injected on <html> by
+   * app/layout.tsx (--font-nunito / --font-noto-sans-tc / --font-noto-serif-tc).
+   * next/font also emits a `__variable` fallback that resolves to the same
+   * family name, so these stacks still name the real face. */
+  --font-sans: var(--font-nunito), var(--font-noto-sans-tc), system-ui, sans-serif;
+  --font-serif: var(--font-noto-serif-tc), 'Noto Serif', Georgia, serif;
 
   /* Spacing tokens: scoped under --bq-spacing-*; existing Tailwind
    * spacing utilities (p-4, m-2, etc.) continue to use the default

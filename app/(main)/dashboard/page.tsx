@@ -7,9 +7,7 @@ import { getBooksMeta, type BookMeta } from '@/lib/bible/lookup'
 import { getRequiredDays, type Scope } from '@/lib/bible/scope'
 import { generateReadingPlan } from '@/lib/bible/planGenerator'
 import {
-  getMyGroups,
-  getPendingRequestsForMyAdminGroups,
-  getMyPendingRequests,
+  getMyGroupDashboardData,
   approveJoinRequest,
   rejectJoinRequest,
   cancelJoinRequest,
@@ -144,15 +142,35 @@ export default function DashboardPage() {
 
         const errors: string[] = []
 
-        const { data: profileData, error: profileErr } = await supabase
-          .from('profiles').select('*').eq('id', authUser.id).single()
+        // ── Parallel reads: profile, user_stats, enrollment, global_stats ───────
+        // All four are keyed only on authUser.id, so none feeds another's
+        // filter. sessions is NOT here: it needs enrollmentsData.id, so it stays
+        // sequential after this batch resolves.
+        const [profileRes, statsRes, enrollRes, gsRes] = await Promise.all([
+          supabase
+            .from('profiles').select('*').eq('id', authUser.id).single(),
+          supabase
+            .from('user_stats')
+            .select('current_streak, total_xp, level, completed_plans')
+            .eq('user_id', authUser.id)
+            .maybeSingle(),
+          supabase
+            .from('user_plan_enrollments')
+            .select('id, scope, chapters_per_day, total_days, status, started_at, reading_order, start_book_index, start_chapter, nt_start_book_index, ot_start_book_index, nt_start_chapter, ot_start_chapter')
+            .eq('user_id', authUser.id)
+            .eq('status', 'active')
+            .order('started_at', { ascending: false })
+            .limit(1)
+            .maybeSingle(),
+          supabase.from('global_stats').select('*').single(),
+        ])
+
+        const profileData = profileRes.data
+        const profileErr = profileRes.error
         if (profileErr) errors.push(`profiles: ${profileErr.message}`)
 
-        const { data: statsData, error: statsErr } = await supabase
-          .from('user_stats')
-          .select('current_streak, total_xp, level, completed_plans')
-          .eq('user_id', authUser.id)
-          .maybeSingle()
+        const statsData = statsRes.data
+        const statsErr = statsRes.error
         console.log('[dashboard] user_stats query result:', JSON.stringify({ statsData, statsErr }))
         if (statsErr) errors.push(`user_stats: ${statsErr.message}`)
 
@@ -168,14 +186,8 @@ export default function DashboardPage() {
           completed_plans: statsData?.completed_plans
         }))
 
-        const { data: enrollmentsData, error } = await supabase
-          .from('user_plan_enrollments')
-          .select('id, scope, chapters_per_day, total_days, status, started_at, reading_order, start_book_index, start_chapter, nt_start_book_index, ot_start_book_index, nt_start_chapter, ot_start_chapter')
-          .eq('user_id', authUser.id)
-          .eq('status', 'active')
-          .order('started_at', { ascending: false })
-          .limit(1)
-          .maybeSingle()
+        const enrollmentsData = enrollRes.data
+        const error = enrollRes.error
         if (error) errors.push(`enrollment: ${error.message}`)
         setEnrollment(error ? null : enrollmentsData)
 
@@ -186,7 +198,7 @@ export default function DashboardPage() {
         setSessions(sessionsData ?? [])
 
         // Use global_stats view for server-calculated values
-        const { data: gsData } = await supabase.from('global_stats').select('*').single()
+        const gsData = gsRes.data
         if (gsData) {
           setGlobalStats({
             total_chapters_read: gsData.total_chapters_read ?? 0,
@@ -242,14 +254,11 @@ export default function DashboardPage() {
   }, [router])
 
   async function refreshGroups() {
-    const [gRes, aRes, pRes] = await Promise.all([
-      getMyGroups(),
-      getPendingRequestsForMyAdminGroups(),
-      getMyPendingRequests(),
-    ])
-    if (!gRes.error) setMyGroups(gRes.groups)
-    setPendingAdminRequests(aRes)
-    setMyPendingRequests(pRes)
+    // One server action = one supabase.auth.getUser() instead of three.
+    const gRes = await getMyGroupDashboardData()
+    if (!gRes.groupsError) setMyGroups(gRes.groups)
+    setPendingAdminRequests(gRes.pendingAdminRequests)
+    setMyPendingRequests(gRes.myPendingRequests)
   }
 
   async function handleCreateGroup() {
