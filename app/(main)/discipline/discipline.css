@@ -400,6 +400,16 @@
   font-weight: 700;
   font-size: 0.75rem;
   color: var(--color-bq-primary);
+  /* The 6556364 overflow fix set .discipline-weekly-cell to
+   * align-items:stretch so the emoji row could fill the track. That rule
+   * applies to the header cells too, which previously relied on
+   * align-items:center from the base rule to centre their text. With
+   * stretch the <span>s fill the cell and their text defaults to
+   * text-align:start, so "SAT" sat 7.03px left of centre and "26" sat
+   * 11.16px left — the header row visibly disagreed with the emoji it
+   * labels. text-align:center restores it without touching the flex
+   * alignment the data cells depend on. */
+  text-align: center;
 }
 
 .discipline-weekly-cell {
