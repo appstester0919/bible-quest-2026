@@ -517,8 +517,18 @@
    * box-sizing:border-box matters because .discipline-weekly-cell uses
    * `padding: 2px 1px` and is itself border-box, so the cell's content
    * box is 31.8px while the cell is 33.8px. */
-  width: 100%;
-  min-width: 0;
+  /* !important is REQUIRED, not defensive. Tailwind v4 emits its whole
+   * stylesheet inside @layer, and any unlayered declaration beats every
+   * layered one regardless of specificity. Verified in the browser by
+   * injecting the identical rule twice:
+   *   unlayered              -> 31.8px  (correct, fills the cell)
+   *   inside @layer utilities -> 26.0px  (silently loses)
+   * Something in the Tailwind layer is setting an explicit width on this
+   * button. A plain width:100% here loses to it, which is why five
+   * separate fixes (8a312b3, 4f07666, 35ba8de, 6556364, a8f7518) all
+   * produced a source rule and no visual change. */
+  width: 100% !important;
+  min-width: 0 !important;
   box-sizing: border-box;
   height: 28px;
   border: none;
@@ -817,8 +827,8 @@
    * whole button. Stacked vertically per target (2026-09-28), so a
    * category with 2+ goals never widens its column. */
   .discipline-emoji-btn {
-    width: 100%;
-    min-width: 0;
+    width: 100% !important;
+    min-width: 0 !important;
     height: 24px;
     font-size: 1.25rem; /* shrink the visible emoji so it fits the smaller tap area */
   }
@@ -891,8 +901,8 @@
     font-size: 0.7rem;
   }
   .discipline-emoji-btn {
-    width: 100%;
-    min-width: 0;
+    width: 100% !important;
+    min-width: 0 !important;
     height: 24px;
     font-size: 1.15rem;
   }
