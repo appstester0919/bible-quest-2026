@@ -485,9 +485,14 @@
   align-items: stretch;
   justify-content: center;
   gap: 2px;
-  width: 100%;
+  /* No width/max-width here on purpose. .discipline-weekly-cell is
+   * align-items:stretch, so this row already fills the cell's content box
+   * (31.8px at 375px). Declaring width:100% here AND width:100% on the
+   * button made the two mutually dependent — button is 100% of row, row
+   * is 100% of cell — and lightningcss resolved the cycle by silently
+   * dropping the button's width from the built CSS. min-width:0 keeps the
+   * row shrinkable inside the grid track. */
   min-width: 0;
-  max-width: 100%;
 }
 
 .discipline-emoji-btn {
@@ -500,21 +505,19 @@
    * 28x28 — a 57% wider target for a thumb, which is the point of
    * stacking. height stays fixed so vertical rhythm per row is
    * unchanged and the cell grows taller instead. */
-  /* Deliberately NO width:100% here. The button is a flex child of
-   * .discipline-emoji-row (which is itself width:100%), so
-   * `align-items: stretch` on that row already sizes the button to the
-   * row's cross-size. Adding width:100% made the two mutually dependent —
-   * button:100%-of-row, row:100%-of-cell — and lightningcss resolved the
-   * cycle by DROPPING the button's width:100% from the built CSS
-   * entirely, leaving it at the inline-flex auto size (26px) with the
-   * glyph 2.92px left of the cell centre. Stretch does the same job
-   * without the cycle, so the rule survives minification.
+  /* width:100% + box-sizing:border-box, with NO explicit width on the
+   * parent .discipline-emoji-row base rule (its width:100% lives only in
+   * the media queries, so there is no minifier-collapsible cycle and the
+   * declaration survives into the built CSS — see the note on
+   * .discipline-emoji-row below). This is the only combination that
+   * actually fills the cell: align-self:stretch alone does nothing for a
+   * `display:inline-flex` element whose width is `auto`, which is why
+   * 35ba8de and 6556364 both left the button at 26px.
    *
-   * min-width:0 lets the stretch size win outright instead of being
-   * floored. box-sizing:border-box so the stretch measures against the
-   * cell's content box, which is not concentric with the cell because
-   * .discipline-weekly-cell uses padding: 2px 1px. */
-  align-self: stretch;
+   * box-sizing:border-box matters because .discipline-weekly-cell uses
+   * `padding: 2px 1px` and is itself border-box, so the cell's content
+   * box is 31.8px while the cell is 33.8px. */
+  width: 100%;
   min-width: 0;
   box-sizing: border-box;
   height: 28px;
@@ -814,7 +817,7 @@
    * whole button. Stacked vertically per target (2026-09-28), so a
    * category with 2+ goals never widens its column. */
   .discipline-emoji-btn {
-    align-self: stretch;
+    width: 100%;
     min-width: 0;
     height: 24px;
     font-size: 1.25rem; /* shrink the visible emoji so it fits the smaller tap area */
@@ -888,7 +891,7 @@
     font-size: 0.7rem;
   }
   .discipline-emoji-btn {
-    align-self: stretch;
+    width: 100%;
     min-width: 0;
     height: 24px;
     font-size: 1.15rem;
