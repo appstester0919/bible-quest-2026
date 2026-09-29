@@ -1,0 +1,1 @@
+-- 20260928000000_enable_rls_core_tables.sql (SUPERSEDED — DO NOT RUN)
