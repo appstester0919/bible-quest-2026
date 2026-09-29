@@ -408,7 +408,15 @@
   padding: 6px 4px;
   display: flex;
   flex-direction: column;
-  align-items: center;
+  /* align-items: stretch (not center) so .discipline-emoji-row fills the cell's
+   * content box and the emoji buttons can size to the full track width.
+   * With `center`, the row shrank to its content (26px) inside a 33.84px
+   * cell, which is what left the glyph 2.92px left of the cell centre —
+   * `align-self: stretch` on the button was correct but had no room to
+   * stretch into. Vertical centring is unaffected: on a column flex
+   * container the main axis is vertical, so justify-content: center
+   * still centres the cell's contents top-to-bottom. */
+  align-items: stretch;
   justify-content: center;
   gap: 4px;
   min-height: 60px;
