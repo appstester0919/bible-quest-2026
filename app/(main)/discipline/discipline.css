@@ -48,6 +48,20 @@
  *       day-en / day-num / cat-en 0.75rem → 0.6rem,
  *       cat-zh 1.05rem → 0.75rem,
  *       template-sub 0.85rem → 0.7rem.
+ *
+ * Round 22 (2026-09-29) — multi-goal horizontal-overflow fix:
+ *   - BUG: a category with 2 goals pushed 14 emoji cells across one
+ *     row, ~474px wide, flying off a 375px phone. Cause: the day
+ *     tracks were a bare `1fr` (= minmax(auto, 1fr), auto min =
+ *     min-content) and `.discipline-emoji-row` was `nowrap`, so each
+ *     day cell had a 2-button min-content floor.
+ *   - Day tracks are now `repeat(7, minmax(0, 1fr))` at every
+ *     breakpoint and cells are `min-width: 0`; the emoji row wraps,
+ *     so N goals STACK vertically inside their own day cell. Column
+ *     width is now the width of ONE button regardless of goal count.
+ *   - New @media (max-width: 360px) block trims the cat column
+ *     56px → 44px and the gap 2px → 1px so each day track is ≥ 30px
+ *     even at a 320px viewport.
  */
 
 .page-discipline,
@@ -359,9 +373,25 @@
   gap: 4px;
 }
 
+/* Round 22 (2026-09-29) — multi-goal overflow fix.
+ *
+ * ROOT CAUSE: the day tracks were declared `1fr`, which CSS expands to
+ * `minmax(auto, 1fr)`. The `auto` minimum resolved to the cell's
+ * min-content width, and `.discipline-emoji-row` was
+ * `flex-wrap: nowrap`, so a category with 2 goals gave each day cell a
+ * hard 2 × 28px + 2px gap = 58px min-content floor. Seven of those
+ * (56px cat col + 7×58px + gaps ≈ 474px) exceeded the ~307px available
+ * inside a 375px phone, so the row flew off-screen.
+ *
+ * FIX: `minmax(0, 1fr)` removes the min-content floor, and the emoji
+ * row wraps, so N goals stack vertically INSIDE the day cell. This is
+ * deliberately per-cell stacking rather than a day-list reflow: the
+ * whole card is the html2canvas export target, and the 5×8 worksheet
+ * shape must survive the PNG that gets WhatsApp'd to the mentor.
+ * Works for any goal count — no assumption of exactly 2. */
 .discipline-weekly-row {
   display: grid;
-  grid-template-columns: 90px repeat(7, 1fr);
+  grid-template-columns: 90px repeat(7, minmax(0, 1fr));
   gap: 4px;
 }
 
@@ -382,6 +412,7 @@
   justify-content: center;
   gap: 4px;
   min-height: 60px;
+  min-width: 0; /* Round 22: never let a cell's content widen its grid track */
 }
 
 .discipline-weekly-cell.is-checked {
@@ -424,18 +455,45 @@
 
 /* ─── Emoji status (Round 16) — replaces the old ✓ button + note input ─── */
 
+/* Round 22 / 2026-09-28 — goals stack VERTICALLY inside the day cell.
+ *
+ * Why column, not wrap: a category with N targets must never widen its
+ * column. At 375px the day cell is only
+ *   (375 - 56px cat col - 6*2px gaps) / 7 ≈ 44px.
+ * Two 24px buttons side by side + 2px gap = 50px, which overflows that
+ * cell — `flex-wrap: wrap` would break them onto two lines, but each
+ * button then collapses toward its content box and the tap target drops
+ * below the 56px floor this app targets for touch.
+ *
+ * `flex-direction: column` keeps each button a full 24x24 tap target on
+ * its own row; `width: 100%` makes the button fill the cell width so the
+ * tappable area is the whole cell, not just the glyph. `min-width: 0`
+ * lets the cell shrink inside the grid track instead of forcing it wider.
+ * Works for any N — a third or fourth target just makes the cell taller.
+ */
 .discipline-emoji-row {
   display: flex;
-  gap: 2px;
-  align-items: center;
+  flex-direction: column;
+  align-items: stretch;
   justify-content: center;
-  flex-wrap: nowrap;
+  gap: 2px;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .discipline-emoji-btn {
-  /* Large tap target (32px on mobile via media query below) with no
-   * visible border — the emoji itself is the affordance. */
-  width: 28px;
+  /* Large tap target with no visible border — the emoji is the
+   * affordance, but the whole button is the hit area.
+   *
+   * width: 100% (not the fixed 28px) so `align-items: stretch` on
+   * .discipline-emoji-row can widen the button to the full cell. The
+   * cell is ~44px wide at 375px, so the tap area is ~44x28 rather than
+   * 28x28 — a 57% wider target for a thumb, which is the point of
+   * stacking. height stays fixed so vertical rhythm per row is
+   * unchanged and the cell grows taller instead. */
+  width: 100%;
+  min-width: 28px;
   height: 28px;
   border: none;
   background: transparent;
@@ -698,27 +756,43 @@
     gap: 1px; /* was 4px — compress row gap so 5 rows + header stay tight */
   }
 
+  /* Round 22 — the day tracks MUST be minmax(0, 1fr). A bare `1fr`
+   * is minmax(auto, 1fr), whose auto floor is the cell's min-content
+   * width; with 2 goals per day that floor (2 × btn + gap) overflowed
+   * the card and pushed the last days off-screen. */
   .discipline-weekly-row {
-    grid-template-columns: 56px repeat(7, 1fr); /* was 90px ... — 56px cat label */
+    grid-template-columns: 56px repeat(7, minmax(0, 1fr)); /* was 90px ... — 56px cat label */
     gap: 2px; /* was 4px — compress cell gap */
   }
 
   .discipline-weekly-cell {
     padding: 2px 1px; /* was 6px 4px → 2px 1px */
     min-height: 44px; /* was 60px → 44px */
+    min-width: 0; /* Round 22 */
     gap: 2px;
   }
 
   .discipline-weekly-day {
     padding: 2px 0; /* tighter header-cell padding so day-en/day-num stack */
     min-height: auto;
+    overflow: hidden; /* Round 22: keep SAT/SUN from spilling out of a 34px track */
   }
 
-  /* Emoji touch targets: 24px square on phones. Still within the
-   * ~24px WCAG-friendly tap-target floor (a touch slop zone of 2-3px
-   * around the visible glyph makes misses rare). */
+  /* Day/goal emoji buttons: N targets STACK vertically inside the day
+   * cell, so the column width is the width of ONE button. */
+  .discipline-emoji-row {
+    gap: 2px;
+    width: 100%;
+  }
+
+  /* Emoji touch targets: 24px TALL on phones (the button now fills the
+   * cell horizontally, so the hit area is the full ~40px-wide track, not
+   * 24px). 24px is the visible-glyph size only; the tappable area is the
+   * whole button. Stacked vertically per target (2026-09-28), so a
+   * category with 2+ goals never widens its column. */
   .discipline-emoji-btn {
-    width: 24px;
+    width: 100%;
+    min-width: 24px;
     height: 24px;
     font-size: 1.25rem; /* shrink the visible emoji so it fits the smaller tap area */
   }
@@ -770,5 +844,30 @@
   /* Note input kept hidden — see Round 16 removal. */
   .discipline-note-input {
     display: none;
+  }
+}
+
+/* Round 22 — @media (max-width: 360px) narrowest phones (iPhone SE 1st
+ * gen, Galaxy Fold cover screen, 320px Android).
+ *
+ * At 360px the <600px block still left only ~(360 - 24 page - 28 card
+ * - 16 frame) 292px, minus the 56px cat column and 7×2px gaps
+ * = 222px / 7 ≈ 31px per day track — one hair under the 24px button
+ * plus its 1px cell padding. We claw back 12px from the cat column and
+ * 1px per gap so every day track is ≥ 30px and the grid provably fits
+ * at 320px too: (320-68-40)/7 ≈ 30px per track. */
+@media (max-width: 360px) {
+  .discipline-weekly-row {
+    grid-template-columns: 44px repeat(7, minmax(0, 1fr));
+    gap: 1px;
+  }
+  .discipline-cat-zh {
+    font-size: 0.7rem;
+  }
+  .discipline-emoji-btn {
+    width: 100%;
+    min-width: 24px;
+    height: 24px;
+    font-size: 1.15rem;
   }
 }
