@@ -493,7 +493,20 @@
    * stacking. height stays fixed so vertical rhythm per row is
    * unchanged and the cell grows taller instead. */
   width: 100%;
-  min-width: 28px;
+  /* min-width must be 0, not 28px. Measured at 375px: the day cell is
+   * 33.84px and its content box is 31.84px. With min-width:28px and the
+   * default content-box sizing, width:100% resolved to 26px (28 floor
+   * minus 2px horizontal padding) instead of filling the 31.84px content
+   * box, which left the glyph 2.92px LEFT of the cell's true centre.
+   * min-width:0 lets width:100% win, so the button exactly fills the
+   * content box and justify-content:center lands the glyph on the
+   * optical centre. Verified live in the browser: offset -2.92 -> 0,
+   * button 26px -> 31.84px.
+   *
+   * The tap target does not shrink as a result — it grows, because the
+   * button now spans the full column width rather than a 26px square. */
+  min-width: 0;
+  box-sizing: border-box;
   height: 28px;
   border: none;
   background: transparent;
@@ -792,7 +805,9 @@
    * category with 2+ goals never widens its column. */
   .discipline-emoji-btn {
     width: 100%;
-    min-width: 24px;
+    /* min-width:0 (not 24px) so width:100% fills the cell content box and
+     * the glyph stays optically centred — see the base rule's comment. */
+    min-width: 0;
     height: 24px;
     font-size: 1.25rem; /* shrink the visible emoji so it fits the smaller tap area */
   }
@@ -866,7 +881,7 @@
   }
   .discipline-emoji-btn {
     width: 100%;
-    min-width: 24px;
+    min-width: 0;
     height: 24px;
     font-size: 1.15rem;
   }
