@@ -789,22 +789,6 @@ export default function ReadPage() {
     }
   }
 
-  const goPrev = () => {
-    if (audioQueue.length === 0) return
-    const audio = audioRef.current
-    if (audio) audio.pause()
-    setCurrentChapterIdx((i) => Math.max(0, i - 1))
-    // Keep current play state so auto-play effect resumes playback
-  }
-
-  const goNext = () => {
-    if (audioQueue.length === 0) return
-    const audio = audioRef.current
-    if (audio) audio.pause()
-    setCurrentChapterIdx((i) => Math.min(audioQueue.length - 1, i + 1))
-    // Keep current play state so auto-play effect resumes playback
-  }
-
   // ─── Scroll-driven adjacent-chapter loading ─────────────────────────────
   // `chapters` is NOT a fetch cache — loadBible() already pulled the entire
   // 1189-chapter corpus into a module-scope cache before the user touched any
@@ -873,26 +857,26 @@ export default function ReadPage() {
 
   /** Append the canonical neighbour at one end. `dir=1` → end, `-1` → start. */
   const appendAdjacent = useCallback(
-    async (dir: 1 | -1) => {
+    async (dir: 1 | -1): Promise<boolean> => {
       // Rate limit: one append in flight at a time, and no closer together
       // than APPEND_COOLDOWN_MS.
-      if (appendBusyRef.current) return
+      if (appendBusyRef.current) return false
       const now = Date.now()
-      if (now - lastAppendAtRef.current < APPEND_COOLDOWN_MS) return
+      if (now - lastAppendAtRef.current < APPEND_COOLDOWN_MS) return false
       const list = chaptersRef.current
-      if (list.length === 0) return
+      if (list.length === 0) return false
       const edge = dir === 1 ? list[list.length - 1] : list[0]
       const target = canonicalNeighbour(
         { abbr: edge.bookAbbr, chapter: edge.chapter },
         dir,
       )
-      if (!target) return
+      if (!target) return false
       // De-dupe on the chapter KEY, not on list.length: appending at both ends
       // makes length useless as a "what is loaded" signal, and a guard that
       // only compared lengths would happily re-append a chapter that is already
       // on screen in the middle of the list.
       const key = chapterKey(target.book.abbr, target.chapter)
-      if (list.some((c) => chapterKey(c.bookAbbr, c.chapter) === key)) return
+      if (list.some((c) => chapterKey(c.bookAbbr, c.chapter) === key)) return false
 
       appendBusyRef.current = true
       lastAppendAtRef.current = now
@@ -948,6 +932,7 @@ export default function ReadPage() {
           // correct choice, and it is exactly what 「唔好折斷唔好停唔好跳」 demands.
           setCurrentChapterIdx((i) => i + 1)
         }
+        return true
       } finally {
         appendBusyRef.current = false
       }
@@ -972,6 +957,128 @@ export default function ReadPage() {
       ),
     }
   }, [chapters, canonicalNeighbour])
+
+  // ─── Chapter-step nav (◀ 上一章 / ▶ 下一章) ────────────────────────────────
+  // The loaded window `chapters` grows at BOTH ends, but the END side only
+  // grows from the end sentinel's IntersectionObserver (rootMargin 500px).
+  // A reader who walks forward with ▶ never scrolls, so the window's end never
+  // grows, and the old `Math.min(audioQueue.length - 1, i + 1)` clamp turned
+  // ▶ into a silent dead end — exactly the 「出3 之後播唔到落去」 report: the
+  // reader's earlier ◀ presses had only ever prepended at the HEAD, so nothing
+  // past 出3 was loaded. ◀ had the mirror defect at index 0 (silently nothing).
+  //
+  // Fix: step in-window when a loaded neighbour exists, otherwise load the
+  // canonical neighbour ON DEMAND through appendAdjacent — the same machinery
+  // the sentinels use, so canonical ordering, key de-dupe, rate limiting,
+  // audioQueue lockstep and the prepend index remap all stay in one place
+  // instead of growing a second, divergent copy of those invariants.
+  //
+  // pendingNavRef carries the chapter key we are stepping TO across the await
+  // inside appendAdjacent. The effect below moves currentChapterIdx the moment
+  // that entry exists in audioQueue. getChapter is an in-memory lookup against
+  // the corpus loadBible() already warmed (see the note above the scroll
+  // loader), so the await settles in a microtask and React batches the queue
+  // growth with the pointer move into one render — the button is never dead
+  // for a perceptible beat. Were the path ever cold, the pending target still
+  // lands correctly; it is merely later.
+  const pendingNavRef = useRef<{ dir: 1 | -1; key: string } | null>(null)
+  const navRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(
+    () => () => {
+      if (navRetryTimerRef.current) clearTimeout(navRetryTimerRef.current)
+    },
+    [],
+  )
+
+  const stepChapter = async (dir: 1 | -1) => {
+    if (audioQueue.length === 0) return
+    const audio = audioRef.current
+    if (audio) audio.pause()
+    // Keep current play state so the auto-play effect resumes playback
+    const i = currentChapterIdxRef.current
+    if (dir === 1 ? i < audioQueue.length - 1 : i > 0) {
+      // Ordinary in-window step. Clear any stale pending target so a later,
+      // unrelated append can never yank the pointer.
+      pendingNavRef.current = null
+      setCurrentChapterIdx((prev) =>
+        dir === 1
+          ? Math.min(audioQueue.length - 1, prev + 1)
+          : Math.max(0, prev - 1),
+      )
+      return
+    }
+    // At the end of the window. If there is no canonical neighbour at all we
+    // are at the true corpus boundary (創1 going back, 啟22 going forward) —
+    // a no-op, not an error and not a spin.
+    const edge = dir === 1 ? audioQueue[audioQueue.length - 1] : audioQueue[0]
+    if (!edge) return
+    const target = canonicalNeighbour(
+      { abbr: edge.book.abbr, chapter: edge.chapter },
+      dir,
+    )
+    if (!target) {
+      pendingNavRef.current = null
+      return
+    }
+    const key = chapterKey(target.book.abbr, target.chapter)
+    pendingNavRef.current = { dir, key }
+    if (await appendAdjacent(dir)) return
+    // appendAdjacent refused the call: its appendBusyRef lock is held or we
+    // are inside APPEND_COOLDOWN_MS. Retry on a short timer instead of
+    // swallowing the press — "never a dead end" is the whole point of this fix.
+    const retry = (attempt: number) => {
+      if (pendingNavRef.current?.key !== key) return
+      if (attempt > 6) {
+        pendingNavRef.current = null
+        return
+      }
+      navRetryTimerRef.current = setTimeout(() => {
+        void (async () => {
+          if (pendingNavRef.current?.key !== key) return
+          if (await appendAdjacent(dir)) return
+          retry(attempt + 1)
+        })()
+      }, APPEND_COOLDOWN_MS + 20)
+    }
+    retry(1)
+  }
+
+  const goPrev = () => {
+    void stepChapter(-1)
+  }
+
+  const goNext = () => {
+    void stepChapter(1)
+  }
+
+  // True when the button in this direction can do something at all. In-window
+  // it always can; at a window edge it can unless we are sitting on the true
+  // canonical boundary. Used for the `disabled` state so 創1/啟22 read as
+  // "no further content" instead of a button that spins.
+  const canStepChapter = (dir: 1 | -1) => {
+    if (audioQueue.length === 0) return false
+    const i = currentChapterIdx
+    if (dir === 1 ? i < audioQueue.length - 1 : i > 0) return true
+    const edge = dir === 1 ? audioQueue[audioQueue.length - 1] : audioQueue[0]
+    if (!edge) return false
+    return !!canonicalNeighbour({ abbr: edge.book.abbr, chapter: edge.chapter }, dir)
+  }
+
+  // Move the pointer onto the pending on-demand target as soon as the append
+  // has landed. Runs for both directions: for a prepend this fires AFTER
+  // appendAdjacent's own `setCurrentChapterIdx((i) => i + 1)` remap, and
+  // overwrites it with the absolute index of the requested chapter — so the
+  // net effect is the correct move, independent of the prepend remap.
+  useEffect(() => {
+    const pending = pendingNavRef.current
+    if (!pending) return
+    const idx = audioQueue.findIndex(
+      (e) => chapterKey(e.book.abbr, e.chapter) === pending.key,
+    )
+    if (idx < 0) return
+    pendingNavRef.current = null
+    setCurrentChapterIdx(idx)
+  }, [audioQueue, currentChapterIdx])
 
   // Sentinel observers. Two separate observers (not one callback branching on
   // direction) so the two ends get independent rootMargin and independent
@@ -1309,6 +1416,8 @@ export default function ReadPage() {
         {/* Prev — smaller icon button */}
         <button
           onClick={goPrev}
+          disabled={!canStepChapter(-1)}
+          aria-label="上一章"
           title="上一章"
           className="ab-prev ab-btn"
           style={{
@@ -1359,6 +1468,8 @@ export default function ReadPage() {
         {/* Next — smaller icon button */}
         <button
           onClick={goNext}
+          disabled={!canStepChapter(1)}
+          aria-label="下一章"
           title="下一章"
           className="ab-next ab-btn"
           style={{
@@ -1478,6 +1589,10 @@ export default function ReadPage() {
         .ab-play { background: ${C.bgCard} !important; border-color: ${C.borderColor} !important; color: ${C.textPrimary} !important; }
         .ab-font-dec, .ab-font-inc { background: ${C.bgCard} !important; font-size: 0.7rem !important; font-weight: 700 !important; }
         .ab-prev, .ab-next { background: transparent !important; font-size: 0.8rem !important; }
+        /* the "all: unset !important" above wipes the UA disabled styling, so
+           the at-boundary state (創1 / 啟22) would look identical to an enabled
+           button and give no affordance. Re-assert it explicitly. */
+        .ab-btn:disabled { opacity: 0.35 !important; cursor: default !important; pointer-events: none !important; }
         .ab-speed { border: 1px solid ${C.borderColor} !important; border-radius: 20px !important; padding: 5px 22px 5px 10px !important; font-size: 0.78rem !important; color: ${C.textPrimary} !important; cursor: pointer !important; text-align: center !important; flex-shrink: 0 !important; outline: none !important; }
       `}</style>
 
