@@ -333,6 +333,9 @@ export default function ReadPage() {
   const isPlayingRef = useRef(false)
   // Detached Audio used only to warm the HTTP cache for the next chapter's mp3.
   const prefetchRef = useRef<HTMLAudioElement | null>(null)
+  // Set by the `ended` handler immediately before it resets currentChapterIdx
+  // to 0 for a replay. Explicit intent, unlike a currentTime-vs-duration guess.
+  const replayAtEndRef = useRef(false)
 
   // Today reading
   const [todaySession, setTodaySession] = useState<ReadingSession | null>(null)
@@ -491,6 +494,13 @@ export default function ReadPage() {
         setCurrentChapterIdx((i) => i + 1)
       } else {
         setIsPlaying(false)
+        // Explicit replay intent. The src guard below compares resolved src
+        // against the element's current src, and for a full-circle queue the
+        // chapter we reset to is often the very one already loaded — so the
+        // comparison alone would skip the assignment and the user would get
+        // silence instead of a replay. This flag is the only thing that forces
+        // the reassignment.
+        replayAtEndRef.current = true
         setCurrentChapterIdx(0)
       }
     }
@@ -516,15 +526,15 @@ export default function ReadPage() {
     // warm below still runs either way — that is the part that genuinely needs
     // to re-run when the queue grows.
     //
-    // `atEnd` escape hatch: when the `ended` handler resets currentChapterIdx to
-    // 0 after the last chapter, the resolved src can be identical to the one
-    // already loaded, and the expected behaviour is a replay from 00:00. Replay
-    // only in that case — a chapter sitting at its end, not a chapter in flight.
-    const atEnd =
-      Number.isFinite(audio.duration) &&
-      audio.duration > 0 &&
-      audio.currentTime >= audio.duration - 0.25
-    if (audio.getAttribute('src') !== src || atEnd) {
+    // Replay escape hatch: only the `ended` handler's reset to 0 sets this flag.
+    // It must NOT be a currentTime-vs-duration heuristic — a prepend while
+    // playing re-runs this effect, and if the chapter being heard happens to be
+    // in its last fraction of a second, a timing-based hatch would reassign src
+    // and restart the very chapter we promised never to interrupt. Explicit
+    // intent cannot fire by accident.
+    const replayAtEnd = replayAtEndRef.current
+    replayAtEndRef.current = false
+    if (audio.getAttribute('src') !== src || replayAtEnd) {
       audio.src = src
       audio.playbackRate = playbackRateRef.current
       if (isPlayingRef.current) {
@@ -894,7 +904,6 @@ export default function ReadPage() {
           chapter: target.chapter,
           verses,
         }
-        const playing = isPlayingRef.current
         setChapters((prev) => {
           // Re-validate inside the updater: a slow getChapter() can resolve
           // after another append already landed at this end.
@@ -911,14 +920,32 @@ export default function ReadPage() {
             ? [...prev, target]
             : [{ book: target.book, chapter: target.chapter }, ...prev],
         )
-        if (dir === -1 && !playing) {
-          // Prepending shifts every existing index up by one. Remap the pointer
-          // to the SAME chapter so the audio bar / play button keep pointing at
-          // what the user last chose. When audio IS playing we deliberately skip
-          // this: bumping currentChapterIdx mid-playback would reload
-          // audio.src and cut the chapter off mid-sentence, which is precisely
-          // what the user asked us never to do. A prepend is therefore refused
-          // while playing (see the sentinel effect below).
+        // Prepending shifts every existing index up by one, so remap the
+        // pointer to the SAME chapter whether or not audio is playing.
+        // Appending at the end does NOT shift anything and must leave the
+        // pointer alone — bumping there would silently advance the chapter that
+        // is currently playing.
+        if (dir === -1) {
+          // Proof that this is safe mid-playback (this is the whole point of the
+          // fix — the old code refused to prepend while playing). Say the loaded
+          // window is [創47, 創48, 創49] and 創48 is playing at index 1. Both
+          // setAudioQueue and setCurrentChapterIdx below are called in the same
+          // async continuation, so React batches them into ONE render. After it:
+          //
+          //   audioQueue    = [創46, 創47, 創48, 創49]   (new head prepended)
+          //   currentIdx    = 2
+          //   audioQueue[2] = 創48                      ← the chapter being heard
+          //
+          // The [currentChapterIdx, audioQueue] effect then resolves 創48, whose
+          // src is byte-identical to the one already on the element, so the
+          // guard added in 4333546 skips the assignment: no src reassign, no
+          // pause/play, no currentTime reset, no skip. Playback is bit-for-bit
+          // untouched.
+          //
+          // The alternative — leaving the index at 1 while playing — resolves
+          // audioQueue[1] = 創47, the src guard does NOT save us (創47 ≠ 創48),
+          // the src is reassigned and the chapter jumps. So bumping is the ONLY
+          // correct choice, and it is exactly what 「唔好折斷唔好停唔好跳」 demands.
           setCurrentChapterIdx((i) => i + 1)
         }
       } finally {
@@ -948,7 +975,7 @@ export default function ReadPage() {
 
   // Sentinel observers. Two separate observers (not one callback branching on
   // direction) so the two ends get independent rootMargin and independent
-  // rate-limit state, and so a prepend is simply not wired up while playing.
+  // rate-limit state.
   useEffect(() => {
     const el = endSentinelRef.current
     if (!el || !hasNext) return
@@ -993,11 +1020,19 @@ export default function ReadPage() {
   // what let the negative-top case fire continuously.
   useEffect(() => {
     const el = startSentinelRef.current
-    // Refuse to prepend while audio is playing: prepending renumbers
-    // currentChapterIdx, and moving it mid-playback would reload audio.src and
-    // interrupt the chapter. Skipping the prepend is the only way to honour
-    // 「唔好折斷唔好停唔好跳」. Appending forward is index-safe and stays enabled.
-    if (!el || !hasPrev || isPlaying) return
+    // Attached whether or not audio is playing; isPlaying is deliberately NOT a
+    // dependency. The old `|| isPlaying` refusal was justified by a genuine
+    // hazard — a prepend renumbers currentChapterIdx — but its mitigation
+    // ("don't move the index") is exactly what makes the refactor below
+    // necessary, not a reason to refuse. The index is an index into a MOVING
+    // list, so it must move with the list; the src guard from 4333546 then
+    // makes the effect idempotent for the same chapter.
+    //
+    // Requirement 1 (backward loading works during playback) is therefore
+    // honoured by allowing the prepend unconditionally and letting
+    // appendAdjacent keep the index pointing at the chapter being heard. See
+    // the proof note in appendAdjacent for the chapter-by-chapter derivation.
+    if (!el || !hasPrev) return
 
     // Seed lastY with the position at attach time and DROP the first event, so
     // the very first scroll event after mount (restored scroll position, the
@@ -1024,7 +1059,10 @@ export default function ReadPage() {
     }
     window.addEventListener('scroll', check, { passive: true })
     return () => window.removeEventListener('scroll', check)
-  }, [appendAdjacent, hasPrev, isPlaying])
+    // isPlaying is intentionally absent: the listener must stay attached across
+    // play/pause transitions so the prepend direction test is not re-seeded
+    // (re-seeding drops the first event and would swallow one upward gesture).
+  }, [appendAdjacent, hasPrev])
 
   // ─── BEHAVIOUR 2: current chapter follows the scroll — audio IDLE only ───
   // Reads the topmost chapter card that is still visible in the reading band and
