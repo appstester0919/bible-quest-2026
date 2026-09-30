@@ -243,6 +243,11 @@ const END_SENTINEL_MARGIN = '500px 0px 0px 0px'
 // statement about where the sentinel IS, not about where the layout happens to
 // put it, and it is re-evaluated on every scroll event rather than only on
 // boundary crossings.
+// CAVEAT learned from shipping it: this constant only means anything as the
+// SECOND half of a direction test. On its own it is unsound, because the start
+// sentinel is the list's first child and its top goes NEGATIVE as soon as the
+// reader scrolls down past it — permanently under the line. Always pair it
+// with a scroll-up delta check; see the start-sentinel effect.
 const PREPEND_TRIGGER_PX = 72
 // Minimum gap between two appends. A fast flick-scroll on mobile can fire the
 // sentinel observer many times in a row (the list re-renders on every append),
@@ -957,24 +962,35 @@ export default function ReadPage() {
     return () => io.disconnect()
   }, [appendAdjacent, hasNext])
 
-  // Prepend the previous chapter from the sentinel's own on-screen position,
-  // not from an IntersectionObserver. See PREPEND_TRIGGER_PX for why.
+  // Prepend the previous chapter from a SCROLL-DIRECTION test, not from an
+  // IntersectionObserver and not from a bare position test. See
+  // PREPEND_TRIGGER_PX for the history of the two versions this replaced.
   //
-  // The handler is a plain position test: 「has the top edge of the start
-  // sentinel come up under the audio bar?」. Two properties matter.
+  // Why the position-only version was wrong (the reported 「揀咗創50，讀住讀住
+  // 畫面變咗創49」): the start sentinel is the FIRST child of the scripture
+  // list, so as soon as the reader scrolls down far enough to fill the viewport
+  // the sentinel leaves the viewport entirely and its getBoundingClientRect().top
+  // goes NEGATIVE. A negative top satisfies 「top <= PREPEND_TRIGGER_PX」 forever.
+  // The old `armed` latch could not save it: it armed on attach (top large then)
+  // and never disarmed, so every downward scroll event prepended 創49.
   //
-  // 1. It cannot fire on initial display. handleDisplay never scrolls the page,
-  //    and it deliberately does not reset scroll either: right after 顯示經文
-  //    the sentinel is still sitting below the (tall) selector block, so
-  //    getBoundingClientRect().top is far greater than PREPEND_TRIGGER_PX. The
-  //    attach-time check() below therefore only ARMS the handler (sets
-  //    armed = true) and returns without prepending. The next prepend requires a
-  //    scroll event that finds the sentinel already ABOVE the line — i.e. a
-  //    deliberate scroll upward, never a mount.
-  // 2. It is re-evaluated on every scroll, not only on a boundary crossing, so
-  //    it keeps prepending 創48, 創47 … as long as the user keeps scrolling up —
-  //    which is exactly what the IntersectionObserver version could not do once
-  //    the sentinel had already been counted as intersecting.
+  // The rule now implemented: a prepend requires BOTH
+  //   (a) direction — the current scroll event moves the page UP
+  //       (delta = y - lastY < 0), and
+  //   (b) deliberate arrival — the sentinel has come up under the trigger line
+  //       (rect.top <= PREPEND_TRIGGER_PX).
+  // (b) alone is not enough: the reader may have arrived there by scrolling
+  // DOWN, by a restored scroll position, or from a short list that never
+  // scrolled. (a) is what distinguishes an upward gesture from all of those,
+  // and scrolling down can never satisfy it at any scroll depth — including
+  // when the sentinel is off-screen above with a large negative top.
+  //
+  // Chaining (創48 → 創47 → 創46) needs no latch at all: the new card is
+  // inserted ABOVE the sentinel, so the sentinel's rect.top increases and
+  // condition (b) goes false, stopping the handler until the user keeps
+  // scrolling up and brings it back under the line. The latch has therefore
+  // been REPLACED (not patched) — a latch that stays armed forever is exactly
+  // what let the negative-top case fire continuously.
   useEffect(() => {
     const el = startSentinelRef.current
     // Refuse to prepend while audio is playing: prepending renumbers
@@ -983,23 +999,29 @@ export default function ReadPage() {
     // 「唔好折斷唔好停唔好跳」. Appending forward is index-safe and stays enabled.
     if (!el || !hasPrev || isPlaying) return
 
-    // Arming guard: the sentinel must first be observed to sit BELOW the trigger
-    // line, and only a later event that finds it above may prepend. Without
-    // this, a page already scrolled to the top (restored scroll position, or a
-    // short single-chapter list) would prepend on the very first scroll event —
-    // including the one that 顯示經文 itself may synthesise. Once armed it stays
-    // armed for the life of the effect, so repeated appends still chain.
-    let armed = false
+    // Seed lastY with the position at attach time and DROP the first event, so
+    // the very first scroll event after mount (restored scroll position, the
+    // event 顯示經文 may synthesise) can never be read as an upward gesture.
+    let lastY = window.scrollY
+    let primed = false
     const check = () => {
-      const top = el.getBoundingClientRect().top
-      if (top > PREPEND_TRIGGER_PX) {
-        armed = true
+      const y = window.scrollY
+      if (!primed) {
+        // First event: adopt its position as the baseline, never act on it.
+        primed = true
+        lastY = y
         return
       }
-      if (!armed) return
+      const delta = y - lastY
+      lastY = y
+      if (delta >= 0) return // scrolling DOWN (or a no-op / layout shift) — never prepend
+      if (el.getBoundingClientRect().top > PREPEND_TRIGGER_PX) return
+      // appendAdjacent is async and re-checks appendBusyRef / APPEND_COOLDOWN_MS
+      // itself, so a fast upward flick firing many events cannot queue several
+      // simultaneous prepends: the first one sets the busy flag and every later
+      // event in the same flick is dropped.
       void appendAdjacent(-1)
     }
-    check() // arm from the position the page is at when the effect attaches
     window.addEventListener('scroll', check, { passive: true })
     return () => window.removeEventListener('scroll', check)
   }, [appendAdjacent, hasPrev, isPlaying])
