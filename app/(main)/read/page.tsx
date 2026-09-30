@@ -277,6 +277,11 @@ export default function ReadPage() {
   const [playbackRate, setPlaybackRate] = useState(1)
   // Ref mirrors playbackRate so we can read current value inside useEffect without adding it to the dep array
   const playbackRateRef = useRef(1)
+  // Ref mirrors isPlaying for the same reason: the autoplay effect must NOT list
+  // isPlaying in its deps (that would restart playback on every pause), but it
+  // still needs the *current* value when it re-runs for another reason — namely
+  // when the scroll loader appends chapters and audioQueue grows.
+  const isPlayingRef = useRef(false)
   // Detached Audio used only to warm the HTTP cache for the next chapter's mp3.
   const prefetchRef = useRef<HTMLAudioElement | null>(null)
 
@@ -451,10 +456,31 @@ export default function ReadPage() {
     if (!item) return
     const audio = audioRef.current
     if (!audio) return
-    audio.src = `/audio/${item.book.abbr}/${item.book.abbr}${item.chapter}.mp3`
-    audio.playbackRate = playbackRateRef.current
-    if (isPlaying) {
-      audio.play().catch(() => setIsPlaying(false))
+    const src = `/audio/${item.book.abbr}/${item.book.abbr}${item.chapter}.mp3`
+    // ── Guard: only reassign src when the chapter actually changed. ──────────
+    // This effect also re-runs when the scroll loader appends chapters, which
+    // hands us a NEW audioQueue array reference for the very same chapter the
+    // user is listening to. Assigning the identical src restarts the mp3 from
+    // 00:00 mid-sentence. Compare the resolved src against what the element
+    // already has and skip the assignment when they match; playback then
+    // continues untouched (no pause/play, no currentTime reset). The prefetch
+    // warm below still runs either way — that is the part that genuinely needs
+    // to re-run when the queue grows.
+    //
+    // `atEnd` escape hatch: when the `ended` handler resets currentChapterIdx to
+    // 0 after the last chapter, the resolved src can be identical to the one
+    // already loaded, and the expected behaviour is a replay from 00:00. Replay
+    // only in that case — a chapter sitting at its end, not a chapter in flight.
+    const atEnd =
+      Number.isFinite(audio.duration) &&
+      audio.duration > 0 &&
+      audio.currentTime >= audio.duration - 0.25
+    if (audio.getAttribute('src') !== src || atEnd) {
+      audio.src = src
+      audio.playbackRate = playbackRateRef.current
+      if (isPlayingRef.current) {
+        audio.play().catch(() => setIsPlaying(false))
+      }
     }
 
     // Best-effort warm of the next chapter's mp3 so `ended` → next src does not
@@ -736,7 +762,8 @@ export default function ReadPage() {
   // values.
   const chaptersRef = useRef<ChapterData[]>(chapters)
   const currentChapterIdxRef = useRef(currentChapterIdx)
-  const isPlayingRef = useRef(isPlaying)
+  // isPlayingRef is declared up by the audio refs (line ~282) and mirrored here
+  // in the same every-render sync effect as the other refs.
   useEffect(() => {
     chaptersRef.current = chapters
     currentChapterIdxRef.current = currentChapterIdx
