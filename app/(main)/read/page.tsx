@@ -55,6 +55,31 @@ const CHAPTER_GRID_MINMAX = 'minmax(44px, 1fr)'
 // 15 rows. A 1-chapter book (單節書: 俄巴底亞書 etc.) renders one ~44px cell
 // inside this 280px box, so nothing is clipped and no scrollbar appears.
 const CHAPTER_GRID_MAX_HEIGHT = '280px'
+// Bottom padding INSIDE the scrollable chapter grid, sized to the fixed bottom
+// nav (72px + iOS safe area — the same figure app/(main)/layout.tsx reserves on
+// the page container).
+//
+// Why it must live inside the scroller and not on the page: the grid is an
+// INTERNAL scroller (maxHeight 280px), so the page's paddingBottom sits BELOW
+// the box and never moves the box's own visible area. The actual trap is
+// overscroll: `overscrollBehavior: 'contain'` means a finger dragged over the
+// grid scrolls the GRID to its end and then stops — the gesture never chains up
+// to the page, so the page cannot be scrolled to lift the box out from under
+// the fixed nav. The last rows of a long book therefore sat under the nav with
+// no way to reach them. With this padding the final row can always be scrolled
+// to rest a full nav-height above the box's bottom edge, i.e. clear of the
+// nav, without the page ever having to move. Small books are unaffected: the
+// grid's height is content-driven (maxHeight, not height), so a 1-chapter book
+// simply renders its cell plus this padding and no phantom empty box.
+// Deliberately NOT applied as a maxHeight on any ancestor, and the grid stays
+// scrollable — the 280px scroller is the user-approved design.
+const CHAPTER_GRID_SCROLL_PAD_BOTTOM =
+  'calc(72px + env(safe-area-inset-bottom, 0px))'
+// Same treatment for the two book dropdowns. They are also fixed-height
+// internal scrollers (maxHeight 300px) holding 66 books, so their last row
+// (啟示錄) hits exactly the same contain-overscroll trap when the dropdown
+// opens low on screen.
+const BOOK_GRID_SCROLL_PAD_BOTTOM = CHAPTER_GRID_SCROLL_PAD_BOTTOM
 
 // ─── Book categories ─────────────────────────────────────────────────────────
 const BOOK_CATEGORIES = {
@@ -194,12 +219,23 @@ const SPEEDS = [1, 1.25, 1.5, 1.75, 2] as const
 // whole 1189-chapter corpus is already in memory (loadBible) and getChapter is
 // an in-memory lookup, so an append costs a React state push, never a request.
 const END_SENTINEL_MARGIN = '500px 0px 0px 0px'
-// The start sentinel uses NO positive top margin on purpose. This page scrolls
-// the whole document (the range selector sits above the chapter list in the
-// same scroller), so any top margin would make the observer fire while the
-// reader is still looking at the selector — silently prepending chapters they
-// never scrolled back to. The start sentinel must actually be seen to trigger.
-const START_SENTINEL_MARGIN = '0px'
+// How far BEFORE the start sentinel reaches the top of the viewport we prepend
+// the previous chapter — the exact mirror of END_SENTINEL_MARGIN, so scrolling
+// up behaves like scrolling down (the chapter is already loaded by the time the
+// reader arrives at the top edge).
+//
+// Why the NEGATIVE top margin is safe here, when it was not before: the hazard
+// the old '0px' comment described was 「範圍選擇器共用 document scroller，所以任何
+// top margin 都會令佢喺用戶仍然望住範圍選擇器時 prepend」. That hazard only exists
+// while the start sentinel is mounted — and it is mounted ONLY when
+// `hasPrev` is true, i.e. only once at least one chapter card is rendered. In
+// that state the range selector is gone (handleDisplay clears every grid; the
+// selector card is a different branch of the JSX), so there is no selector for
+// the reader to still be looking at. '0px' overcorrected the feature into
+// never firing at all: the sentinel is 1px tall and sits flush against the
+// first chapter card, so in practice it is never observed as intersecting.
+// Negative, not positive, because we want it to fire BEFORE it is reached.
+const START_SENTINEL_MARGIN = '-500px 0px 0px 0px'
 // Minimum gap between two appends. A fast flick-scroll on mobile can fire the
 // sentinel observer many times in a row (the list re-renders on every append),
 // so this rate-limits the append path; together with the in-flight
@@ -1529,6 +1565,7 @@ export default function ReadPage() {
                       padding: '8px',
                       boxShadow: '0 4px 16px rgba(61,41,20,0.12)',
                       maxHeight: '300px',
+                      paddingBottom: BOOK_GRID_SCROLL_PAD_BOTTOM,
                       overflowY: 'auto',
                     }}
                   >
@@ -1650,6 +1687,7 @@ export default function ReadPage() {
                         padding: '8px',
                         boxShadow: '0 4px 16px rgba(61,41,20,0.12)',
                         maxHeight: '300px',
+                        paddingBottom: BOOK_GRID_SCROLL_PAD_BOTTOM,
                         overflowY: 'auto',
                       }}
                     >
@@ -1775,6 +1813,11 @@ export default function ReadPage() {
                   gridTemplateColumns: `repeat(auto-fill, ${CHAPTER_GRID_MINMAX})`,
                   gap: '4px',
                   maxHeight: CHAPTER_GRID_MAX_HEIGHT,
+                  // See CHAPTER_GRID_SCROLL_PAD_BOTTOM: the last chapter of a long
+                  // book must be scrollable to a resting position clear of the
+                  // fixed bottom nav, which overscrollBehavior:'contain' would
+                  // otherwise make unreachable.
+                  paddingBottom: CHAPTER_GRID_SCROLL_PAD_BOTTOM,
                   overflowY: 'auto',
                   WebkitOverflowScrolling: 'touch',
                   overscrollBehavior: 'contain',
@@ -1864,6 +1907,11 @@ export default function ReadPage() {
                   gridTemplateColumns: `repeat(auto-fill, ${CHAPTER_GRID_MINMAX})`,
                   gap: '4px',
                   maxHeight: CHAPTER_GRID_MAX_HEIGHT,
+                  // See CHAPTER_GRID_SCROLL_PAD_BOTTOM: the last chapter of a long
+                  // book must be scrollable to a resting position clear of the
+                  // fixed bottom nav, which overscrollBehavior:'contain' would
+                  // otherwise make unreachable.
+                  paddingBottom: CHAPTER_GRID_SCROLL_PAD_BOTTOM,
                   overflowY: 'auto',
                   WebkitOverflowScrolling: 'touch',
                   overscrollBehavior: 'contain',
