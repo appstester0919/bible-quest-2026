@@ -187,6 +187,35 @@ interface Profile {
 // ─── Speed options ────────────────────────────────────────────────────────────
 const SPEEDS = [1, 1.25, 1.5, 1.75, 2] as const
 
+// ─── Scroll-driven chapter loading constants ─────────────────────────────────
+// How far BEFORE the end sentinel becomes visible we append the next chapter.
+// 500px is roughly one phone screen, so a normal flick-scroll lands on readable
+// text rather than on an empty sentinel. NOTE: this appends text only — the
+// whole 1189-chapter corpus is already in memory (loadBible) and getChapter is
+// an in-memory lookup, so an append costs a React state push, never a request.
+const END_SENTINEL_MARGIN = '500px 0px 0px 0px'
+// The start sentinel uses NO positive top margin on purpose. This page scrolls
+// the whole document (the range selector sits above the chapter list in the
+// same scroller), so any top margin would make the observer fire while the
+// reader is still looking at the selector — silently prepending chapters they
+// never scrolled back to. The start sentinel must actually be seen to trigger.
+const START_SENTINEL_MARGIN = '0px'
+// Minimum gap between two appends. A fast flick-scroll on mobile can fire the
+// sentinel observer many times in a row (the list re-renders on every append),
+// so this rate-limits the append path; together with the in-flight
+// `appendBusyRef` flag it caps growth to one chapter per window and stops the
+// two ends from interleaving into a state thrash.
+const APPEND_COOLDOWN_MS = 180
+// The fixed audio bar is 52px tall, so from 72px down we treat everything as
+// "off the top". A chapter card that is the topmost one still visible in this
+// band is the chapter the reader is looking at. Deliberately not 0 — at 0 the
+// fixed bar's own edge would decide, and the top of a card is often flush with
+// it.
+const TOP_CHAPTER_BAND_PX = 130
+
+/** Stable identity for a chapter ref; used to de-duplicate appends at both ends. */
+const chapterKey = (abbr: string, chapter: number) => `${abbr}:${chapter}`
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function ReadPage() {
   const router = useRouter()
@@ -690,6 +719,247 @@ export default function ReadPage() {
     setCurrentChapterIdx((i) => Math.min(audioQueue.length - 1, i + 1))
     // Keep current play state so auto-play effect resumes playback
   }
+
+  // ─── Scroll-driven adjacent-chapter loading ─────────────────────────────
+  // `chapters` is NOT a fetch cache — loadBible() already pulled the entire
+  // 1189-chapter corpus into a module-scope cache before the user touched any
+  // selector, and getChapter() is an in-memory lookup against it. So "loading
+  // the next chapter" is a synchronous state push, not a network request; the
+  // only async in the append path is awaiting the already-warm promise.
+  //
+  // Latest-value mirrors for the observer callbacks below. IntersectionObserver
+  // callbacks are registered once per effect run and would otherwise close over
+  // a stale render's state. Synced in a no-dep effect rather than during render
+  // (the react-hooks/refs rule forbids the latter, and correctly so): IO
+  // notifications are dispatched after the layout/effect pass for a frame, so
+  // by the time any callback below fires, these refs already hold this render's
+  // values.
+  const chaptersRef = useRef<ChapterData[]>(chapters)
+  const currentChapterIdxRef = useRef(currentChapterIdx)
+  const isPlayingRef = useRef(isPlaying)
+  useEffect(() => {
+    chaptersRef.current = chapters
+    currentChapterIdxRef.current = currentChapterIdx
+    isPlayingRef.current = isPlaying
+  })
+
+  const startSentinelRef = useRef<HTMLDivElement>(null)
+  const endSentinelRef = useRef<HTMLDivElement>(null)
+  // Rate limiting: last append timestamp + in-flight flag. A flick-scroll can
+  // fire the sentinel observer repeatedly, and every append re-renders the
+  // list (and re-creates the observers), so without these the observer can
+  // append a burst of chapters from a single fast swipe.
+  const lastAppendAtRef = useRef(0)
+  const appendBusyRef = useRef(false)
+  // Chapter keys currently believed to be on screen, used by BEHAVIOUR 2 to
+  // pick the topmost visible card. Keyed by chapterKey (not array index)
+  // because prepending a previous chapter shifts every index below it.
+  const visibleChapterKeysRef = useRef<Set<string>>(new Set())
+
+  /**
+   * Canonical neighbour of a loaded chapter — the SAME ordering the ◀ ▶
+   * buttons, the `ended` handler and handleDisplay already use: `books` is the
+   * canonical book array in Bible order (each BookMeta carries `index` and
+   * `chapters`), and within a book chapters run 1..book.chapters. So "next"
+   * is chapter+1, or the first chapter of the next book in `books` when we run
+   * off the end of this one; "prev" mirrors that backwards. Returns null at
+   * 創1 / 啟22 so the sentinels can render as "no more content".
+   */
+  const canonicalNeighbour = useCallback(
+    (
+      from: { abbr: string; chapter: number },
+      dir: 1 | -1,
+    ): { book: BookMeta; chapter: number } | null => {
+      const bi = books.findIndex((b) => b.abbr === from.abbr)
+      if (bi < 0) return null
+      const book = books[bi]
+      const nextChapter = from.chapter + dir
+      if (nextChapter >= 1 && nextChapter <= book.chapters) {
+        return { book, chapter: nextChapter }
+      }
+      // Crossed a book boundary: step to the adjacent book in canonical order.
+      const nb = books[bi + dir]
+      if (!nb) return null
+      return { book: nb, chapter: dir === 1 ? 1 : nb.chapters }
+    },
+    [books],
+  )
+
+  /** Append the canonical neighbour at one end. `dir=1` → end, `-1` → start. */
+  const appendAdjacent = useCallback(
+    async (dir: 1 | -1) => {
+      // Rate limit: one append in flight at a time, and no closer together
+      // than APPEND_COOLDOWN_MS.
+      if (appendBusyRef.current) return
+      const now = Date.now()
+      if (now - lastAppendAtRef.current < APPEND_COOLDOWN_MS) return
+      const list = chaptersRef.current
+      if (list.length === 0) return
+      const edge = dir === 1 ? list[list.length - 1] : list[0]
+      const target = canonicalNeighbour(
+        { abbr: edge.bookAbbr, chapter: edge.chapter },
+        dir,
+      )
+      if (!target) return
+      // De-dupe on the chapter KEY, not on list.length: appending at both ends
+      // makes length useless as a "what is loaded" signal, and a guard that
+      // only compared lengths would happily re-append a chapter that is already
+      // on screen in the middle of the list.
+      const key = chapterKey(target.book.abbr, target.chapter)
+      if (list.some((c) => chapterKey(c.bookAbbr, c.chapter) === key)) return
+
+      appendBusyRef.current = true
+      lastAppendAtRef.current = now
+      try {
+        const verses = await getChapter(target.book.abbr, target.chapter)
+        const data: ChapterData = {
+          bookAbbr: target.book.abbr,
+          bookName: target.book.name,
+          chapter: target.chapter,
+          verses,
+        }
+        const playing = isPlayingRef.current
+        setChapters((prev) => {
+          // Re-validate inside the updater: a slow getChapter() can resolve
+          // after another append already landed at this end.
+          if (prev.some((c) => chapterKey(c.bookAbbr, c.chapter) === key)) {
+            return prev
+          }
+          return dir === 1 ? [...prev, data] : [data, ...prev]
+        })
+        // audioQueue is index-aligned with chapters, so it grows in lockstep.
+        // The existing [currentChapterIdx, audioQueue] effect will then warm
+        // the mp3 for the new tail entry exactly as it already does.
+        setAudioQueue((prev) =>
+          dir === 1
+            ? [...prev, target]
+            : [{ book: target.book, chapter: target.chapter }, ...prev],
+        )
+        if (dir === -1 && !playing) {
+          // Prepending shifts every existing index up by one. Remap the pointer
+          // to the SAME chapter so the audio bar / play button keep pointing at
+          // what the user last chose. When audio IS playing we deliberately skip
+          // this: bumping currentChapterIdx mid-playback would reload
+          // audio.src and cut the chapter off mid-sentence, which is precisely
+          // what the user asked us never to do. A prepend is therefore refused
+          // while playing (see the sentinel effect below).
+          setCurrentChapterIdx((i) => i + 1)
+        }
+      } finally {
+        appendBusyRef.current = false
+      }
+    },
+    [canonicalNeighbour],
+  )
+
+  // Whether a chapter exists beyond each end — drives whether the sentinels
+  // render at all (they must not imply more content at 創1 / 啟22).
+  const { hasPrev, hasNext } = useMemo(() => {
+    if (chapters.length === 0) return { hasPrev: false, hasNext: false }
+    const first = chapters[0]
+    const last = chapters[chapters.length - 1]
+    return {
+      hasPrev: !!canonicalNeighbour(
+        { abbr: first.bookAbbr, chapter: first.chapter },
+        -1,
+      ),
+      hasNext: !!canonicalNeighbour(
+        { abbr: last.bookAbbr, chapter: last.chapter },
+        1,
+      ),
+    }
+  }, [chapters, canonicalNeighbour])
+
+  // Sentinel observers. Two separate observers (not one callback branching on
+  // direction) so the two ends get independent rootMargin and independent
+  // rate-limit state, and so a prepend is simply not wired up while playing.
+  useEffect(() => {
+    const el = endSentinelRef.current
+    if (!el || !hasNext) return
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) void appendAdjacent(1)
+      },
+      { rootMargin: END_SENTINEL_MARGIN },
+    )
+    io.observe(el)
+    return () => io.disconnect()
+  }, [appendAdjacent, hasNext])
+
+  useEffect(() => {
+    const el = startSentinelRef.current
+    // Refuse to prepend while audio is playing: prepending renumbers
+    // currentChapterIdx, and moving it mid-playback would reload audio.src and
+    // interrupt the chapter. Skipping the prepend is the only way to honour
+    // 「唔好折斷唔好停唔好跳」. Appending forward is index-safe and stays enabled.
+    if (!el || !hasPrev || isPlaying) return
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) void appendAdjacent(-1)
+      },
+      { rootMargin: START_SENTINEL_MARGIN },
+    )
+    io.observe(el)
+    return () => io.disconnect()
+  }, [appendAdjacent, hasPrev, isPlaying])
+
+  // ─── BEHAVIOUR 2: current chapter follows the scroll — audio IDLE only ───
+  // Reads the topmost chapter card that is still visible in the reading band and
+  // points currentChapterIdx at it, so pressing ▶ starts from whatever chapter
+  // the user is looking at. When audio is playing we return before touching any
+  // state, so scrolling can never pause, skip or advance playback.
+  const syncCurrentChapterToTop = useCallback(() => {
+    if (isPlayingRef.current) return // audio playing → never touch the index
+    const list = chaptersRef.current
+    if (list.length === 0) return
+    // Smallest index still visible == topmost card in canonical order.
+    let topIdx = -1
+    for (let i = 0; i < list.length; i++) {
+      if (visibleChapterKeysRef.current.has(chapterKey(list[i].bookAbbr, list[i].chapter))) {
+        topIdx = i
+        break
+      }
+    }
+    if (topIdx < 0) return
+    // No-op when unchanged: React bails out on an identical value, and this is
+    // what stops a repeatedly-firing observer from looping.
+    if (topIdx === currentChapterIdxRef.current) return
+    setCurrentChapterIdx(topIdx)
+  }, [])
+
+  // Card visibility observer. rootMargin pulls the top edge down past the fixed
+  // audio bar (72px) plus a little breathing room, so a card counts as "the one
+  // you are looking at" only once it is clear of the bar. threshold 0 with
+  // integer-ish deltas keeps this to one notification per boundary crossing.
+  useEffect(() => {
+    if (chapters.length === 0) return
+    const nodes = Array.from(
+      document.querySelectorAll<HTMLElement>('[data-read-chapter]'),
+    )
+    if (nodes.length === 0) return
+    const io = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          const key = (entry.target as HTMLElement).dataset.readChapter
+          if (!key) continue
+          if (entry.isIntersecting) visibleChapterKeysRef.current.add(key)
+          else visibleChapterKeysRef.current.delete(key)
+        }
+        syncCurrentChapterToTop()
+      },
+      { rootMargin: `-${TOP_CHAPTER_BAND_PX}px 0px 0px 0px`, threshold: 0 },
+    )
+    nodes.forEach((n) => io.observe(n))
+    return () => io.disconnect()
+  }, [chapters, syncCurrentChapterToTop])
+
+  // When playback stops (⏸ or the queue ending), the visible set was frozen
+  // while playing, so re-derive the index from the CURRENT scroll position
+  // rather than waiting for the next intersection change.
+  useEffect(() => {
+    if (isPlaying) return
+    syncCurrentChapterToTop()
+  }, [isPlaying, syncCurrentChapterToTop])
 
   // ─── Complete today reading ──────────────────────────────────────────────
   const handleComplete = async () => {
@@ -1685,6 +1955,17 @@ export default function ReadPage() {
         {/* ── Scripture Display ─────────────────────────────────── */}
         {chapters.length > 0 && (
           <div>
+            {/* Start sentinel — appends the PREVIOUS canonical chapter. Rendered
+                only when a previous chapter actually exists, so scrolling to
+                創1 does not suggest content before 創1. */}
+            {hasPrev && (
+              <div
+                ref={startSentinelRef}
+                data-read-sentinel="start"
+                style={{ height: '1px', width: '100%' }}
+                aria-hidden="true"
+              />
+            )}
             {chapters.map((chapter, idx) => {
               // Detect testament by book category (NT = gospels/pauline/general, OT = everything else)
               const isNT = ['gospels', 'pauline', 'general'].includes(
@@ -1697,6 +1978,10 @@ export default function ReadPage() {
               return (
                 <div
                   key={`${chapter.bookAbbr}-${chapter.chapter}`}
+                  data-read-chapter={chapterKey(
+                    chapter.bookAbbr,
+                    chapter.chapter,
+                  )}
                   style={
                     {
                       background: C.bgCard,
@@ -1786,6 +2071,21 @@ export default function ReadPage() {
                 </div>
               )
             })}
+
+            {/* End sentinel — appends the NEXT canonical chapter. Positioned
+                after the last card but BEFORE the 完成讀經 button, so the
+                observer fires as the last card approaches the fold rather than
+                only after the reader scrolls past the CTA. Not rendered at the
+                final chapter of the final book, so it never implies content
+                that does not exist. */}
+            {hasNext && (
+              <div
+                ref={endSentinelRef}
+                data-read-sentinel="end"
+                style={{ height: '1px', width: '100%' }}
+                aria-hidden="true"
+              />
+            )}
 
             {/* Complete button — only show when all today's required chapters are loaded */}
             {audioQueue.length > 0 && (
