@@ -71,9 +71,19 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   width: "device-width",
+  // Pinch-zoom stays ENABLED. `maximumScale: 1` + `userScalable: false` are
+  // an accessibility regression, not a fix: they disable the one native
+  // gesture a low-vision reader has to magnify body text, and WCAG 1.4.4
+  // requires text to be resizable to 200% without loss of content. The app
+  // also has its own in-page text-size control (A− / A+ on the reading audio
+  // bar) for readers who prefer buttons to gestures, so the two do not
+  // conflict — that control mutates --read-font-size, and pinch-zoom scales
+  // whatever it renders.
+  //
+  // Note: browsers IGNORE user-scalable:false in iOS Safari 10+ anyway, so
+  // this change makes the declared intent match the actual behaviour rather
+  // than changing what most users already had.
   initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
   themeColor: "#58CC02",
 };
 
