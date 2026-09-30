@@ -219,23 +219,31 @@ const SPEEDS = [1, 1.25, 1.5, 1.75, 2] as const
 // whole 1189-chapter corpus is already in memory (loadBible) and getChapter is
 // an in-memory lookup, so an append costs a React state push, never a request.
 const END_SENTINEL_MARGIN = '500px 0px 0px 0px'
-// How far BEFORE the start sentinel reaches the top of the viewport we prepend
-// the previous chapter — the exact mirror of END_SENTINEL_MARGIN, so scrolling
-// up behaves like scrolling down (the chapter is already loaded by the time the
-// reader arrives at the top edge).
+// How close the start sentinel must get to the top of the VIEWPORT before we
+// prepend the previous chapter. The fixed audio bar is 52px tall, so 72px means
+// 「the sentinel has reached the reading area directly under the bar」 — the
+// reader has deliberately scrolled up to the start of what is loaded.
 //
-// Why the NEGATIVE top margin is safe here, when it was not before: the hazard
-// the old '0px' comment described was 「範圍選擇器共用 document scroller，所以任何
-// top margin 都會令佢喺用戶仍然望住範圍選擇器時 prepend」. That hazard only exists
-// while the start sentinel is mounted — and it is mounted ONLY when
-// `hasPrev` is true, i.e. only once at least one chapter card is rendered. In
-// that state the range selector is gone (handleDisplay clears every grid; the
-// selector card is a different branch of the JSX), so there is no selector for
-// the reader to still be looking at. '0px' overcorrected the feature into
-// never firing at all: the sentinel is 1px tall and sits flush against the
-// first chapter card, so in practice it is never observed as intersecting.
-// Negative, not positive, because we want it to fire BEFORE it is reached.
-const START_SENTINEL_MARGIN = '-500px 0px 0px 0px'
+// Why this is a number in px and NOT a rootMargin: the start sentinel is the
+// first element of the scripture list, and the whole selector block (今日功課
+// card, mode switch, book/chapter pickers, 顯示經文 button) sits ABOVE it. So
+// where the sentinel is on screen depends on the height of that block AND on
+// whatever scroll position the page was parked at when 顯示經文 was pressed.
+// Any rootMargin bakes an assumption about that layout, and the previous value
+// '-500px 0px 0px 0px' was wrong in BOTH directions:
+//   * it moved the observation band's top edge 500px DOWN the viewport, which
+//     still contains the sentinel at the moment of initial display, so the
+//     observer fired immediately and prepended 創49 before the user had
+//     scrolled at all (the reported 「選了創50但顯示創49」), and
+//   * an IntersectionObserver only reports a CHANGE of intersection state, so
+//     with the sentinel already counted as intersecting from that first fire,
+//     scrolling back up produced no new notification and no further prepend
+//     (the reported 「往上掃冇更之前的章」).
+// A rect.top comparison against the viewport has neither failure mode: it is a
+// statement about where the sentinel IS, not about where the layout happens to
+// put it, and it is re-evaluated on every scroll event rather than only on
+// boundary crossings.
+const PREPEND_TRIGGER_PX = 72
 // Minimum gap between two appends. A fast flick-scroll on mobile can fire the
 // sentinel observer many times in a row (the list re-renders on every append),
 // so this rate-limits the append path; together with the in-flight
@@ -949,6 +957,24 @@ export default function ReadPage() {
     return () => io.disconnect()
   }, [appendAdjacent, hasNext])
 
+  // Prepend the previous chapter from the sentinel's own on-screen position,
+  // not from an IntersectionObserver. See PREPEND_TRIGGER_PX for why.
+  //
+  // The handler is a plain position test: 「has the top edge of the start
+  // sentinel come up under the audio bar?」. Two properties matter.
+  //
+  // 1. It cannot fire on initial display. handleDisplay never scrolls the page,
+  //    and it deliberately does not reset scroll either: right after 顯示經文
+  //    the sentinel is still sitting below the (tall) selector block, so
+  //    getBoundingClientRect().top is far greater than PREPEND_TRIGGER_PX. The
+  //    attach-time check() below therefore only ARMS the handler (sets
+  //    armed = true) and returns without prepending. The next prepend requires a
+  //    scroll event that finds the sentinel already ABOVE the line — i.e. a
+  //    deliberate scroll upward, never a mount.
+  // 2. It is re-evaluated on every scroll, not only on a boundary crossing, so
+  //    it keeps prepending 創48, 創47 … as long as the user keeps scrolling up —
+  //    which is exactly what the IntersectionObserver version could not do once
+  //    the sentinel had already been counted as intersecting.
   useEffect(() => {
     const el = startSentinelRef.current
     // Refuse to prepend while audio is playing: prepending renumbers
@@ -956,14 +982,26 @@ export default function ReadPage() {
     // interrupt the chapter. Skipping the prepend is the only way to honour
     // 「唔好折斷唔好停唔好跳」. Appending forward is index-safe and stays enabled.
     if (!el || !hasPrev || isPlaying) return
-    const io = new IntersectionObserver(
-      (entries) => {
-        if (entries.some((e) => e.isIntersecting)) void appendAdjacent(-1)
-      },
-      { rootMargin: START_SENTINEL_MARGIN },
-    )
-    io.observe(el)
-    return () => io.disconnect()
+
+    // Arming guard: the sentinel must first be observed to sit BELOW the trigger
+    // line, and only a later event that finds it above may prepend. Without
+    // this, a page already scrolled to the top (restored scroll position, or a
+    // short single-chapter list) would prepend on the very first scroll event —
+    // including the one that 顯示經文 itself may synthesise. Once armed it stays
+    // armed for the life of the effect, so repeated appends still chain.
+    let armed = false
+    const check = () => {
+      const top = el.getBoundingClientRect().top
+      if (top > PREPEND_TRIGGER_PX) {
+        armed = true
+        return
+      }
+      if (!armed) return
+      void appendAdjacent(-1)
+    }
+    check() // arm from the position the page is at when the effect attaches
+    window.addEventListener('scroll', check, { passive: true })
+    return () => window.removeEventListener('scroll', check)
   }, [appendAdjacent, hasPrev, isPlaying])
 
   // ─── BEHAVIOUR 2: current chapter follows the scroll — audio IDLE only ───
