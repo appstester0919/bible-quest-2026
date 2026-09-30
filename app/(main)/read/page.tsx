@@ -36,6 +36,26 @@ const C = {
   success: '#16a34a',
 }
 
+// ─── Chapter-grid layout constants ─────────────────────────────────────────
+// The chapter grid used to be a fixed repeat(10, 1fr), which on a 375px phone
+// yields ~24.5px cells — far too small to hit. We now let the column count
+// adapt, with a hard 44px floor so a cell can never be narrower than a
+// thumb-friendly minimum on the narrowest phone we support:
+//
+//   available width ≈ 375 - 20 (card padding) - page padding ≈ 330px
+//   → 7 columns of 44px + 6 gaps of 4px = 332px  (the 8th would not fit)
+//   → cell width ≈ (330 - 24) / 7 ≈ 43.7px  ✔ ≥ 44px floor
+//
+// (The separate 56px+ touch-target task the user deferred would need a
+// ~58px floor, i.e. 5 columns; deliberately NOT done here.)
+const CHAPTER_GRID_MINMAX = 'minmax(44px, 1fr)'
+// Cells are ~44px tall + 4px gap ≈ 48px per row, so 280px shows ~5-6 rows.
+// That is enough to feel like a list you can scan by thumb while leaving the
+// 顯示經文 button within thumb reach instead of pushed off-screen by 詩篇's
+// 15 rows. A 1-chapter book (單節書: 俄巴底亞書 etc.) renders one ~44px cell
+// inside this 280px box, so nothing is clipped and no scrollbar appears.
+const CHAPTER_GRID_MAX_HEIGHT = '280px'
+
 // ─── Book categories ─────────────────────────────────────────────────────────
 const BOOK_CATEGORIES = {
   pentateuch: {
@@ -186,6 +206,12 @@ export default function ReadPage() {
   const [startChapter, setStartChapter] = useState<number | null>(null)
   const [endBook, setEndBook] = useState<BookMeta | null>(null)
   const [endChapter, setEndChapter] = useState<number | null>(null)
+  // Single-chapter jump (直接跳到) is the DEFAULT, because reading one chapter
+  // is the overwhelmingly common case. When rangeMode is false the end-selector
+  // is not rendered at all and handleDisplay reuses the exact start==end code
+  // path, so audio / prefetch / 完成讀經 are byte-for-byte identical to a
+  // 1-chapter range.
+  const [rangeMode, setRangeMode] = useState(false)
 
   // UI state
   const [showStartBookGrid, setShowStartBookGrid] = useState(false)
@@ -540,7 +566,24 @@ export default function ReadPage() {
   const handleStartChapterClick = (ch: number) => {
     setStartChapter(ch)
     setShowStartChapterGrid(false)
-    setSetShowEndBookGrid(true)
+    // In single-chapter mode there is no end selector, so do not force the
+    // end-book grid open (that was the extra "pick the book again" step).
+    if (rangeMode) setSetShowEndBookGrid(true)
+  }
+
+  // Turning range mode on/off invalidates the end selection, so clear it and
+  // collapse any open end dropdown rather than leaving a stale end half-shown.
+  const handleToggleRangeMode = () => {
+    setRangeMode((v) => {
+      const next = !v
+      if (!next) {
+        setEndBook(null)
+        setEndChapter(null)
+        setSetShowEndBookGrid(false)
+        setSetShowEndChapterGrid(false)
+      }
+      return next
+    })
   }
 
   const handleEndBookClick = (book: BookMeta) => {
@@ -561,11 +604,17 @@ export default function ReadPage() {
   }
 
   const handleDisplay = async () => {
-    if (!startBook || !startChapter || !endBook || !endChapter) return
+    if (!startBook || !startChapter) return
+    // Single-chapter mode: synthesise end = start and fall through to the very
+    // same loop below, so `chapters` / `audioQueue` are identical to a
+    // start==end range (one target, one chapter) and audio, prefetch, the
+    // 完成讀經 button and session tracking need no separate branch.
+    const effEndBook = rangeMode && endBook ? endBook : startBook
+    const effEndChapter = rangeMode && endChapter ? endChapter : startChapter
     setScriptureLoading(true)
 
     const startIdx = books.findIndex((b) => b.abbr === startBook.abbr)
-    const endIdx = books.findIndex((b) => b.abbr === endBook.abbr)
+    const endIdx = books.findIndex((b) => b.abbr === effEndBook.abbr)
 
     // Build the full (book, chapter) list first, then resolve the verses in
     // bounded-concurrency batches. A single 1189-wide Promise.all would, on a
@@ -576,7 +625,7 @@ export default function ReadPage() {
     for (let bi = startIdx; bi <= endIdx; bi++) {
       const book = books[bi]
       const cStart = bi === startIdx ? startChapter : 1
-      const cEnd = bi === endIdx ? endChapter : book.chapters
+      const cEnd = bi === endIdx ? effEndChapter : book.chapters
       for (let ch = cStart; ch <= cEnd; ch++) {
         targets.push({ book, chapter: ch })
       }
@@ -742,7 +791,19 @@ export default function ReadPage() {
     )
   }
 
-  const canDisplay = startBook && startChapter && endBook && endChapter
+  // In single-chapter mode the end half is not part of the selection at all.
+  const canDisplay = rangeMode
+    ? startBook && startChapter && endBook && endChapter
+    : startBook && startChapter
+  // Label: single mode reads 「顯示經文（詩篇53章）」; range mode keeps the
+  // existing two-half label so nothing a user is used to reading changes.
+  const displayLabel = !rangeMode
+    ? startBook && startChapter
+      ? `（${startBook.name}${startChapter}章）`
+      : ''
+    : startBook && startChapter && endBook && endChapter
+      ? `（${startBook.name}${startChapter}章${startBook.abbr !== endBook.abbr ? ` - ${endBook.name}${endChapter}章` : ` - 第${endChapter}章`}）`
+      : ''
   const catOf = (abbr: string) => bookToCategory[abbr] ?? null
   const catData = (abbr: string) => BOOK_CATEGORIES[catOf(abbr) ?? 'gospels']
 
@@ -1067,6 +1128,49 @@ export default function ReadPage() {
             )
           )}
 
+          {/* Read mode toggle: 直接跳到 (default) vs 範圍.
+              A real <button role="switch" aria-checked> with visible text and a
+              44px min-height — the deferred 56px touch-target upgrade is a
+              separate task, so this deliberately stops at 44px. */}
+          <button
+            type="button"
+            role="switch"
+            aria-checked={rangeMode}
+            onClick={handleToggleRangeMode}
+            style={{
+              width: '100%',
+              minHeight: '44px',
+              marginBottom: '16px',
+              padding: '10px 14px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '10px',
+              background: C.bgInput,
+              border: `1px solid ${rangeMode ? C.accentGold : C.borderColor}`,
+              borderRadius: '8px',
+              color: C.textPrimary,
+              fontSize: '0.95rem',
+              fontWeight: 500,
+              cursor: 'pointer',
+              WebkitTapHighlightColor: 'transparent',
+            }}
+          >
+            <span>{rangeMode ? '範圍' : '直接跳到'}</span>
+            <span style={{ fontSize: '0.78rem', color: C.textMuted }}>
+              {rangeMode ? '閱讀多章範圍' : '閱讀單一章節'}
+            </span>
+            <span
+              style={{
+                fontSize: '0.7rem',
+                color: C.accentGold,
+                fontWeight: 700,
+              }}
+            >
+              {rangeMode ? '切換至直接跳到 ▸' : '切換至範圍 ▸'}
+            </span>
+          </button>
+
           {/* Start selector */}
           <div style={{ marginBottom: '16px' }}>
             <div
@@ -1077,7 +1181,7 @@ export default function ReadPage() {
                 fontWeight: 500,
               }}
             >
-              起始書卷與章節
+              {rangeMode ? '起始書卷與章節' : '書卷與章節'}
             </div>
             <div style={{ display: 'flex', gap: '12px' }}>
               {/* Start book dropdown */}
@@ -1187,8 +1291,10 @@ export default function ReadPage() {
             </div>
           </div>
 
-          {/* End selector */}
-          {startBook && startChapter && (
+          {/* End selector — range mode only. In single-chapter mode this block
+              is not rendered at all, which is what removes the duplicated
+              "pick the book and chapter again" step. */}
+          {rangeMode && startBook && startChapter && (
             <div style={{ marginBottom: '16px' }}>
               <div
                 style={{
@@ -1352,11 +1458,29 @@ export default function ReadPage() {
               >
                 {startBook.name} — 選擇起始章節
               </div>
+              {/* Length hint so the user knows what they are scrolling into
+                  before they scroll. 詩篇 = 共 150 章. */}
               <div
                 style={{
+                  fontSize: '0.75rem',
+                  color: C.textMuted,
+                  textAlign: 'center',
+                  marginBottom: '6px',
+                }}
+              >
+                共 {startBook.chapters} 章
+              </div>
+              <div
+                role="group"
+                aria-label="章碼"
+                style={{
                   display: 'grid',
-                  gridTemplateColumns: 'repeat(10, 1fr)',
+                  gridTemplateColumns: `repeat(auto-fill, ${CHAPTER_GRID_MINMAX})`,
                   gap: '4px',
+                  maxHeight: CHAPTER_GRID_MAX_HEIGHT,
+                  overflowY: 'auto',
+                  WebkitOverflowScrolling: 'touch',
+                  overscrollBehavior: 'contain',
                 }}
               >
                 {Array.from(
@@ -1365,8 +1489,21 @@ export default function ReadPage() {
                 ).map((ch) => (
                   <div
                     key={ch}
+                    role="button"
+                    tabIndex={0}
+                    aria-pressed={startChapter === ch}
                     onClick={() => handleStartChapterClick(ch)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault()
+                        handleStartChapterClick(ch)
+                      }
+                    }}
                     style={{
+                      minHeight: '44px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
                       padding: '8px 4px',
                       textAlign: 'center',
                       borderRadius: '4px',
@@ -1414,9 +1551,25 @@ export default function ReadPage() {
               </div>
               <div
                 style={{
+                  fontSize: '0.75rem',
+                  color: C.textMuted,
+                  textAlign: 'center',
+                  marginBottom: '6px',
+                }}
+              >
+                共 {endBook.chapters} 章
+              </div>
+              <div
+                role="group"
+                aria-label="章碼"
+                style={{
                   display: 'grid',
-                  gridTemplateColumns: 'repeat(10, 1fr)',
+                  gridTemplateColumns: `repeat(auto-fill, ${CHAPTER_GRID_MINMAX})`,
                   gap: '4px',
+                  maxHeight: CHAPTER_GRID_MAX_HEIGHT,
+                  overflowY: 'auto',
+                  WebkitOverflowScrolling: 'touch',
+                  overscrollBehavior: 'contain',
                 }}
               >
                 {Array.from({ length: endBook.chapters }, (_, i) => i + 1).map(
@@ -1427,8 +1580,25 @@ export default function ReadPage() {
                     return (
                       <div
                         key={ch}
+                        role="button"
+                        tabIndex={0}
+                        aria-disabled={disabled}
+                        aria-pressed={!disabled && endChapter === ch}
                         onClick={() => !disabled && handleEndChapterClick(ch)}
+                        onKeyDown={(e) => {
+                          if (
+                            !disabled &&
+                            (e.key === 'Enter' || e.key === ' ')
+                          ) {
+                            e.preventDefault()
+                            handleEndChapterClick(ch)
+                          }
+                        }}
                         style={{
+                          minHeight: '44px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
                           padding: '8px 4px',
                           textAlign: 'center',
                           borderRadius: '4px',
@@ -1483,7 +1653,7 @@ export default function ReadPage() {
           >
             {scriptureLoading
               ? '載入經文中...'
-              : `📖 顯示經文${canDisplay ? `（${startBook?.name}${startChapter}章${startBook?.abbr !== endBook?.abbr ? ` - ${endBook?.name}${endChapter}章` : ` - 第${endChapter}章`}）` : ''}`}
+              : `📖 顯示經文${displayLabel}`}
           </button>
 
           {/* Verse number toggle */}
