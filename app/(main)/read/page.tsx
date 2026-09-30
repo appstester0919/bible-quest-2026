@@ -212,6 +212,33 @@ interface Profile {
 // ─── Speed options ────────────────────────────────────────────────────────────
 const SPEEDS = [1, 1.25, 1.5, 1.75, 2] as const
 
+// ─── Audio bar geometry ────────────────────────────────────────────────────────
+// The audio bar was ONE horizontally-scrolling row (overflowX:auto, 52px tall).
+// That scroller is exactly WHY its controls could stay tiny: on a 375px phone
+// everything does not fit in one row, so the font/speed controls lived off the
+// right edge and the user had to discover a sideways swipe INSIDE the bar to
+// reach them — easy to miss, and invisible evidence that they existed at all.
+// With the bar now two rows wide enough to hold everything, overflowX is gone
+// and no control is ever more than one thumb-reach away.
+//
+// Every interactive element below is a 44x44 CSS-px hit area (the WCAG/iOS
+// minimum), NOT a 44px-drawn circle. The visible glyph is drawn smaller and
+// centred inside the box, so the bar gains reachability without gaining
+// visual bulk. A single source of truth for the box size, so the inline styles
+// and the injected stylesheet can never disagree.
+const AUDIO_BAR_BTN = 44
+// Two 44px rows + the vertical gap between them + the bar's own vertical
+// padding. Not a magic number in two places: the bar's inline `height`, the
+// page's `paddingTop` and every scroll-related constant below are all derived
+// from this.
+const AUDIO_BAR_ROW_GAP = 4
+const AUDIO_BAR_PAD_Y = 6
+const AUDIO_BAR_H = AUDIO_BAR_BTN * 2 + AUDIO_BAR_ROW_GAP + AUDIO_BAR_PAD_Y * 2
+// How far below the bar's bottom edge the page must start, so no line of
+// scripture is ever hidden behind it. The old figures were 52px (the bar) and
+// 72px (the page padding); both are now derived.
+const AUDIO_BAR_CLEAR_PX = AUDIO_BAR_H + 6
+
 // ─── Scroll-driven chapter loading constants ─────────────────────────────────
 // How far BEFORE the end sentinel becomes visible we append the next chapter.
 // 500px is roughly one phone screen, so a normal flick-scroll lands on readable
@@ -220,7 +247,7 @@ const SPEEDS = [1, 1.25, 1.5, 1.75, 2] as const
 // an in-memory lookup, so an append costs a React state push, never a request.
 const END_SENTINEL_MARGIN = '500px 0px 0px 0px'
 // How close the start sentinel must get to the top of the VIEWPORT before we
-// prepend the previous chapter. The fixed audio bar is 52px tall, so 72px means
+// prepend the previous chapter. The value is the bar's clearance, so
 // 「the sentinel has reached the reading area directly under the bar」 — the
 // reader has deliberately scrolled up to the start of what is loaded.
 //
@@ -248,18 +275,19 @@ const END_SENTINEL_MARGIN = '500px 0px 0px 0px'
 // sentinel is the list's first child and its top goes NEGATIVE as soon as the
 // reader scrolls down past it — permanently under the line. Always pair it
 // with a scroll-up delta check; see the start-sentinel effect.
-const PREPEND_TRIGGER_PX = 72
+const PREPEND_TRIGGER_PX = AUDIO_BAR_CLEAR_PX
 // Minimum gap between two appends. A fast flick-scroll on mobile can fire the
 // sentinel observer many times in a row (the list re-renders on every append),
 // so this rate-limits the append path; together with the in-flight
 // `appendBusyRef` flag it caps growth to one chapter per window and stops the
 // two ends from interleaving into a state thrash.
 const APPEND_COOLDOWN_MS = 180
-// The fixed audio bar is 52px tall, so from 72px down we treat everything as
-// "off the top". A chapter card that is the topmost one still visible in this
-// band is the chapter the reader is looking at. Deliberately not 0 — at 0 the
-// fixed bar's own edge would decide, and the top of a card is often flush with
-// it.
+// The fixed audio bar is AUDIO_BAR_H tall (two rows of 44px hit targets), so
+// from AUDIO_BAR_CLEAR_PX down we treat everything as "off the top". A chapter
+// card that is the topmost one still visible in this band is the chapter the
+// reader is looking at. Deliberately not 0 — at 0 the fixed bar's own edge would
+// decide, and the top of a card is often flush with it.
+// 130 = AUDIO_BAR_CLEAR_PX (110) + 20px of breathing room.
 const TOP_CHAPTER_BAND_PX = 130
 
 /** Stable identity for a chapter ref; used to de-duplicate appends at both ends. */
@@ -1196,8 +1224,9 @@ export default function ReadPage() {
   }, [])
 
   // Card visibility observer. rootMargin pulls the top edge down past the fixed
-  // audio bar (72px) plus a little breathing room, so a card counts as "the one
-  // you are looking at" only once it is clear of the bar. threshold 0 with
+  // audio bar (AUDIO_BAR_CLEAR_PX) plus a little breathing room, so a card
+  // counts as "the one you are looking at" only once it is clear of the bar.
+  // threshold 0 with
   // integer-ish deltas keeps this to one notification per boundary crossing.
   useEffect(() => {
     if (chapters.length === 0) return
@@ -1355,7 +1384,7 @@ export default function ReadPage() {
         {
           minHeight: '100vh',
           background: C.bgPrimary,
-          paddingTop: '72px',
+          paddingTop: `${AUDIO_BAR_CLEAR_PX}px`,
           paddingBottom: '90px',
           // Initial value; later A+/A− taps mutate this property in place via
           // setProperty, bypassing React entirely.
@@ -1365,7 +1394,15 @@ export default function ReadPage() {
     >
       <audio ref={audioRef} preload="auto" />
 
-      {/* ── Fixed Top Audio Bar ──────────────────────────────────────── */}
+      {/* ── Fixed Top Audio Bar ────────────────────────────────────────────
+          Two rows, laid out with flex + gap, no horizontal scroller.
+            Row 1: chapter chip (takes the slack) | ◀ ⏸/▶ ▶ grouped as a
+                   transport cluster, the way a media player reads.
+            Row 2: A− A+ | speed pill, spread to the bar's two edges.
+          Every control below is a 44x44 hit area (AUDIO_BAR_BTN) with the
+          visible circular face drawn smaller and centred inside it, so the bar
+          is thumb-sized without looking chunky. Behaviour is untouched: same
+          handlers, same disabled logic, same --read-font-size setProperty. */}
       <div
         id="audioBar"
         style={{
@@ -1373,227 +1410,279 @@ export default function ReadPage() {
           top: 0,
           left: 0,
           right: 0,
-          height: '52px',
+          height: `${AUDIO_BAR_H}px`,
           background: 'rgba(245,240,232,0.97)',
           backdropFilter: 'blur(8px)',
           borderBottom: `1px solid ${C.borderColor}`,
           zIndex: 1000,
           boxShadow: '0 2px 12px rgba(61,41,20,0.06)',
           display: 'flex',
-          alignItems: 'center',
-          padding: '0 10px',
-          gap: '8px',
-          overflowX: 'auto',
-          overflowY: 'hidden',
-          WebkitOverflowScrolling: 'touch',
-          scrollbarWidth: 'none',
+          flexDirection: 'column',
+          alignItems: 'stretch',
+          justifyContent: 'center',
+          gap: `${AUDIO_BAR_ROW_GAP}px`,
+          padding: `${AUDIO_BAR_PAD_Y}px 8px`,
+          // Deliberately NOT overflowX:auto any more — that scroller is what
+          // hid the font/speed controls off the right edge on a narrow phone.
+          overflow: 'hidden',
         }}
       >
-        {/* Chapter display */}
+        {/* ── Row 1: chapter label + transport ─────────────────────────── */}
         <div
           style={{
-            minWidth: '72px',
-            maxWidth: '110px',
-            padding: '5px 10px',
-            background: C.bgSecondary,
-            border: `1px solid ${C.borderColor}`,
-            borderRadius: '6px',
-            fontFamily: 'Georgia, serif',
-            fontSize: '0.8rem',
-            color: C.textPrimary,
-            flexShrink: 0,
-            textAlign: 'center',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            height: `${AUDIO_BAR_BTN}px`,
+            minWidth: 0,
           }}
         >
-          {currentAudioItem
-            ? getAudioLabel(currentAudioItem.book, currentAudioItem.chapter)
-            : '太 1章'}
+          {/* Chapter display — takes the remaining width, truncates if needed */}
+          <div
+            style={{
+              flex: '1 1 auto',
+              minWidth: 0,
+              height: `${AUDIO_BAR_BTN}px`,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '0 10px',
+              background: C.bgSecondary,
+              border: `1px solid ${C.borderColor}`,
+              borderRadius: '8px',
+              boxSizing: 'border-box',
+              fontFamily: 'Georgia, serif',
+              fontSize: '0.9rem',
+              color: C.textPrimary,
+              textAlign: 'center',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {currentAudioItem
+              ? getAudioLabel(currentAudioItem.book, currentAudioItem.chapter)
+              : '太 1章'}
+          </div>
+
+          {/* Prev */}
+          <button
+            onClick={goPrev}
+            disabled={!canStepChapter(-1)}
+            aria-label="上一章"
+            title="上一章"
+            className="ab-prev ab-btn"
+            style={{
+              width: `${AUDIO_BAR_BTN}px`,
+              height: `${AUDIO_BAR_BTN}px`,
+              flexShrink: 0,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              boxSizing: 'border-box',
+              background: 'transparent',
+              border: 'none',
+              borderRadius: '50%',
+              cursor: 'pointer',
+              padding: 0,
+              transition: 'all 0.2s',
+            }}
+          >
+            <span className="ab-face" aria-hidden="true">
+              ◀
+            </span>
+          </button>
+
+          {/* Play/Pause — the one visually prominent control in the bar */}
+          <button
+            onClick={togglePlay}
+            aria-label={isPlaying ? '暫停' : '播放'}
+            title={isPlaying ? '暫停' : '播放'}
+            className="ab-play ab-btn"
+            style={{
+              width: `${AUDIO_BAR_BTN}px`,
+              height: `${AUDIO_BAR_BTN}px`,
+              flexShrink: 0,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              boxSizing: 'border-box',
+              background: 'transparent',
+              border: 'none',
+              borderRadius: '50%',
+              cursor: 'pointer',
+              padding: 0,
+              transition: 'all 0.2s',
+            }}
+          >
+            <span
+              className="ab-face ab-face-play"
+              style={{
+                background: isPlaying ? C.accentGold : C.bgCard,
+                borderColor: isPlaying ? C.accentGold : C.borderColor,
+                color: isPlaying ? 'white' : C.textPrimary,
+              }}
+              aria-hidden="true"
+            >
+              {isPlaying ? '⏸' : '▶'}
+            </span>
+          </button>
+
+          {/* Next */}
+          <button
+            onClick={goNext}
+            disabled={!canStepChapter(1)}
+            aria-label="下一章"
+            title="下一章"
+            className="ab-next ab-btn"
+            style={{
+              width: `${AUDIO_BAR_BTN}px`,
+              height: `${AUDIO_BAR_BTN}px`,
+              flexShrink: 0,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              boxSizing: 'border-box',
+              background: 'transparent',
+              border: 'none',
+              borderRadius: '50%',
+              cursor: 'pointer',
+              padding: 0,
+              transition: 'all 0.2s',
+            }}
+          >
+            <span className="ab-face" aria-hidden="true">
+              ▶
+            </span>
+          </button>
         </div>
 
-        {/* Prev — smaller icon button */}
-        <button
-          onClick={goPrev}
-          disabled={!canStepChapter(-1)}
-          aria-label="上一章"
-          title="上一章"
-          className="ab-prev ab-btn"
+        {/* ── Row 2: font size + speed, spread to the bar's edges ───────── */}
+        <div
           style={{
-            width: '28px',
-            height: '28px',
-            flexShrink: 0,
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'center',
-            background: 'transparent',
-            border: `1px solid ${C.borderColor}`,
-            borderRadius: '50%',
-            color: C.textSecondary,
-            cursor: 'pointer',
-            fontSize: '0.8rem',
-            transition: 'all 0.2s',
-            padding: 0,
+            justifyContent: 'space-between',
+            height: `${AUDIO_BAR_BTN}px`,
+            minWidth: 0,
           }}
         >
-          ◀
-        </button>
+          {/* Font size A− / A+ — pair kept together, setProperty unchanged */}
+          <button
+            onClick={() => setFontSize(fontSizeRef.current - 2)}
+            title="縮小字體"
+            aria-label="縮小字體"
+            className="ab-font-dec ab-btn"
+            style={{
+              width: `${AUDIO_BAR_BTN}px`,
+              height: `${AUDIO_BAR_BTN}px`,
+              flexShrink: 0,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              boxSizing: 'border-box',
+              background: 'transparent',
+              border: 'none',
+              borderRadius: '50%',
+              cursor: 'pointer',
+              padding: 0,
+              transition: 'all 0.2s',
+            }}
+          >
+            <span className="ab-face ab-face-font" aria-hidden="true">
+              A−
+            </span>
+          </button>
 
-        {/* Play/Pause */}
-        <button
-          onClick={togglePlay}
-          title={isPlaying ? '暫停' : '播放'}
-          className="ab-play ab-btn"
-          style={{
-            width: '38px',
-            height: '38px',
-            flexShrink: 0,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            background: isPlaying ? C.accentGold : C.bgCard,
-            border: `1px solid ${isPlaying ? C.accentGold : C.borderColor}`,
-            borderRadius: '50%',
-            color: isPlaying ? 'white' : C.textPrimary,
-            cursor: 'pointer',
-            fontSize: '1rem',
-            transition: 'all 0.2s',
-            padding: 0,
-          }}
-        >
-          {isPlaying ? '⏸' : '▶'}
-        </button>
+          <button
+            onClick={() => setFontSize(fontSizeRef.current + 2)}
+            title="放大字體"
+            aria-label="放大字體"
+            className="ab-font-inc ab-btn"
+            style={{
+              width: `${AUDIO_BAR_BTN}px`,
+              height: `${AUDIO_BAR_BTN}px`,
+              flexShrink: 0,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              boxSizing: 'border-box',
+              background: 'transparent',
+              border: 'none',
+              borderRadius: '50%',
+              cursor: 'pointer',
+              padding: 0,
+              transition: 'all 0.2s',
+            }}
+          >
+            <span className="ab-face ab-face-font" aria-hidden="true">
+              A+
+            </span>
+          </button>
 
-        {/* Next — smaller icon button */}
-        <button
-          onClick={goNext}
-          disabled={!canStepChapter(1)}
-          aria-label="下一章"
-          title="下一章"
-          className="ab-next ab-btn"
-          style={{
-            width: '28px',
-            height: '28px',
-            flexShrink: 0,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            background: 'transparent',
-            border: `1px solid ${C.borderColor}`,
-            borderRadius: '50%',
-            color: C.textSecondary,
-            cursor: 'pointer',
-            fontSize: '0.8rem',
-            transition: 'all 0.2s',
-            padding: 0,
-          }}
-        >
-          ▶
-        </button>
+          <div style={{ flex: '1 1 auto' }} />
 
-        {/* Speed dropdown */}
-        <select
-          value={playbackRate}
-          onChange={(e) => {
-            const rate = parseFloat(e.target.value)
-            setPlaybackRate(rate)
-            playbackRateRef.current = rate
-            if (audioRef.current) audioRef.current.playbackRate = rate
-          }}
-          className="ab-speed"
-          style={{
-            appearance: 'none',
-            WebkitAppearance: 'none',
-            background: `${C.bgCard} url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%236B5344' stroke-width='2.5'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E") no-repeat right 6px center`,
-            border: `1px solid ${C.borderColor}`,
-            borderRadius: '20px',
-            padding: '5px 22px 5px 10px',
-            fontSize: '0.78rem',
-            fontFamily: 'inherit',
-            color: C.textPrimary,
-            cursor: 'pointer',
-            minWidth: '54px',
-            textAlign: 'center',
-            flexShrink: 0,
-            outline: 'none',
-          }}
-        >
-          {SPEEDS.map((s) => (
-            <option key={s} value={s}>
-              {s}×
-            </option>
-          ))}
-        </select>
-
-        {/* Font size A− */}
-        <button
-          onClick={() => setFontSize(fontSizeRef.current - 2)}
-          title="縮小字體"
-          className="ab-font-dec ab-btn"
-          style={{
-            width: '26px',
-            height: '26px',
-            flexShrink: 0,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            background: C.bgCard,
-            border: `1px solid ${C.borderColor}`,
-            borderRadius: '50%',
-            color: C.textSecondary,
-            cursor: 'pointer',
-            fontSize: '0.7rem',
-            fontWeight: 700,
-            transition: 'all 0.2s',
-            padding: 0,
-          }}
-        >
-          A−
-        </button>
-
-        {/* Font size A+ */}
-        <button
-          onClick={() => setFontSize(fontSizeRef.current + 2)}
-          title="放大字體"
-          className="ab-font-inc ab-btn"
-          style={{
-            width: '26px',
-            height: '26px',
-            flexShrink: 0,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            background: C.bgCard,
-            border: `1px solid ${C.borderColor}`,
-            borderRadius: '50%',
-            color: C.textSecondary,
-            cursor: 'pointer',
-            fontSize: '0.8rem',
-            fontWeight: 700,
-            transition: 'all 0.2s',
-            padding: 0,
-          }}
-        >
-          A+
-        </button>
+          {/* Speed dropdown — also a 44px-tall target now */}
+          <select
+            value={playbackRate}
+            onChange={(e) => {
+              const rate = parseFloat(e.target.value)
+              setPlaybackRate(rate)
+              playbackRateRef.current = rate
+              if (audioRef.current) audioRef.current.playbackRate = rate
+            }}
+            aria-label="播放速度"
+            className="ab-speed"
+            style={{
+              appearance: 'none',
+              WebkitAppearance: 'none',
+              background: `${C.bgCard} url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%236B5344' stroke-width='2.5'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E") no-repeat right 10px center`,
+              border: `1px solid ${C.borderColor}`,
+              borderRadius: '22px',
+              boxSizing: 'border-box',
+              height: `${AUDIO_BAR_BTN}px`,
+              padding: '0 24px 0 14px',
+              fontSize: '0.82rem',
+              fontFamily: 'inherit',
+              color: C.textPrimary,
+              cursor: 'pointer',
+              minWidth: '64px',
+              textAlign: 'center',
+              flexShrink: 0,
+              outline: 'none',
+            }}
+          >
+            {SPEEDS.map((s) => (
+              <option key={s} value={s}>
+                {s}×
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
-      {/* Audio bar button size CSS — injected once, no Tailwind override possible */}
+      {/* Audio bar CSS — injected once, no Tailwind override possible.
+          Two jobs here, and the split is what makes 44px targets cheap:
+          the BUTTON is the 44x44 hit area (transparent, no border), and the
+          inner .ab-face span is the small circle that is actually drawn. The
+          hit area is therefore larger than the artwork at zero visual cost. */}
       <style>{`
         .ab-btn { all: unset !important; box-sizing: border-box !important; min-width: unset !important; min-height: unset !important; }
-        .ab-prev, .ab-next { width: 28px !important; height: 28px !important; }
-        .ab-play { width: 38px !important; height: 38px !important; }
-        .ab-font-dec, .ab-font-inc { width: 26px !important; height: 26px !important; }
-        .ab-btn { display: flex !important; align-items: center !important; justify-content: center !important; border-radius: 50% !important; border: 1px solid ${C.borderColor} !important; color: ${C.textSecondary} !important; cursor: pointer !important; transition: all 0.2s !important; padding: 0 !important; flex-shrink: 0 !important; }
-        .ab-play { background: ${C.bgCard} !important; border-color: ${C.borderColor} !important; color: ${C.textPrimary} !important; }
-        .ab-font-dec, .ab-font-inc { background: ${C.bgCard} !important; font-size: 0.7rem !important; font-weight: 700 !important; }
-        .ab-prev, .ab-next { background: transparent !important; font-size: 0.8rem !important; }
+        .ab-btn, .ab-prev, .ab-next, .ab-play, .ab-font-dec, .ab-font-inc { width: ${AUDIO_BAR_BTN}px !important; height: ${AUDIO_BAR_BTN}px !important; }
+        .ab-btn { display: flex !important; align-items: center !important; justify-content: center !important; background: transparent !important; border: none !important; border-radius: 50% !important; cursor: pointer !important; transition: all 0.2s !important; padding: 0 !important; flex-shrink: 0 !important; }
+        /* the drawn face: same circles as before, just centred in the hit box */
+        .ab-face { display: flex !important; align-items: center !important; justify-content: center !important; box-sizing: border-box !important; border-radius: 50% !important; border: 1px solid ${C.borderColor} !important; transition: all 0.2s !important; }
+        .ab-prev .ab-face, .ab-next .ab-face { width: 28px !important; height: 28px !important; background: transparent !important; color: ${C.textSecondary} !important; font-size: 0.8rem !important; }
+        .ab-play .ab-face { width: 38px !important; height: 38px !important; background: ${C.bgCard} !important; border-color: ${C.borderColor} !important; color: ${C.textPrimary} !important; font-size: 1rem !important; }
+        .ab-font-dec .ab-face, .ab-font-inc .ab-face { width: 28px !important; height: 28px !important; background: ${C.bgCard} !important; color: ${C.textSecondary} !important; font-size: 0.8rem !important; font-weight: 700 !important; }
         /* the "all: unset !important" above wipes the UA disabled styling, so
            the at-boundary state (創1 / 啟22) would look identical to an enabled
-           button and give no affordance. Re-assert it explicitly. */
-        .ab-btn:disabled { opacity: 0.35 !important; cursor: default !important; pointer-events: none !important; }
-        .ab-speed { border: 1px solid ${C.borderColor} !important; border-radius: 20px !important; padding: 5px 22px 5px 10px !important; font-size: 0.78rem !important; color: ${C.textPrimary} !important; cursor: pointer !important; text-align: center !important; flex-shrink: 0 !important; outline: none !important; }
+           button and give no affordance. Re-assert it explicitly, and dim the
+           drawn FACE (the button itself is now invisible) so the cue is still
+           visible at the corpus boundary. */
+        .ab-btn:disabled { cursor: default !important; pointer-events: none !important; }
+        .ab-btn:disabled .ab-face { opacity: 0.3 !important; }
+        .ab-speed { border: 1px solid ${C.borderColor} !important; border-radius: 22px !important; height: ${AUDIO_BAR_BTN}px !important; padding: 0 24px 0 14px !important; font-size: 0.82rem !important; color: ${C.textPrimary} !important; cursor: pointer !important; text-align: center !important; flex-shrink: 0 !important; outline: none !important; }
       `}</style>
 
       {/* ── Main content ──────────────────────────────────────────────── */}
