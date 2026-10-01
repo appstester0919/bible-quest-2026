@@ -58,6 +58,10 @@ const DEFAULT_OT_START_BOOK = 0
 const DEFAULT_START_CHAPTER = 1
 
 function toHKDateString(date: Date): string {
+  // Plain HKT calendar date, no reading-day cutoff: this formats a Date that
+  // the generator is walking day-by-day, so it must NOT roll back at 05:00 —
+  // the cutoff is applied once, by readingDate(), when deciding which day is
+  // "now". Applying it here would shift every plan day key twice.
   return date.toLocaleDateString('en-CA', { timeZone: 'Asia/Hong_Kong' })
 }
 

@@ -2,11 +2,14 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
+import { readingDate, addDays } from '@/lib/readingDate'
 
 // ─── Date helpers (HKT-only, avoids .toISOString() UTC offset bug) ─────────────
 function getHKTDateStr(date: Date = new Date()): string {
-  // en-CA with HKT gives YYYY-MM-DD directly in Hong Kong time
-  return date.toLocaleDateString('en-CA', { timeZone: 'Asia/Hong_Kong' })
+  // Reading date with the shared 05:00 HKT cutoff — streak grouping and
+  // "did I read today" must resolve to the SAME date markLessonComplete wrote,
+  // otherwise the two disagree inside the 00:00–05:00 window.
+  return readingDate(date)
 }
 
 // ─── Future-date guard (public launch: cannot mark future dates complete) ──────
@@ -20,10 +23,17 @@ export async function markLessonComplete(
   enrollmentId: string,
   chapterRef: string,
   xpEarned: number,
-  dateLocalOverride?: string
-): Promise<{ success: boolean; sessionId?: string; error?: string; errorDetails?: unknown }> {
+  dateLocalOverride?: string,
+): Promise<{
+  success: boolean
+  sessionId?: string
+  error?: string
+  errorDetails?: unknown
+}> {
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
 
   if (!user) {
     return { success: false, error: 'Not authenticated' }
@@ -38,7 +48,13 @@ export async function markLessonComplete(
     return { success: false, error: 'cannot mark a future date as complete' }
   }
 
-  console.log('[markLessonComplete]', { user_id: user.id, enrollment_id: enrollmentId, chapter_ref: chapterRef, xp_earned: xpEarned, date_local: dateLocal })
+  console.log('[markLessonComplete]', {
+    user_id: user.id,
+    enrollment_id: enrollmentId,
+    chapter_ref: chapterRef,
+    xp_earned: xpEarned,
+    date_local: dateLocal,
+  })
 
   // Parse "創 1" or "太 2:1" → book_zh="創", chapter=1
   const parts = chapterRef.trim().split(/\s+/)
@@ -73,7 +89,9 @@ export async function markLessonComplete(
  * Recalculate user_stats after one or more chapters are inserted in a batch.
  * Call this ONCE after all markLessonComplete calls are done — NOT inside each one.
  */
-export async function recalcUserStatsAfterCompletion(dateLocal: string): Promise<{
+export async function recalcUserStatsAfterCompletion(
+  dateLocal: string,
+): Promise<{
   success: boolean
   totalXp: number
   level: number
@@ -82,8 +100,18 @@ export async function recalcUserStatsAfterCompletion(dateLocal: string): Promise
   error?: string
 }> {
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { success: false, totalXp: 0, level: 0, currentStreak: 0, longestStreak: 0, error: 'Not authenticated' }
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user)
+    return {
+      success: false,
+      totalXp: 0,
+      level: 0,
+      currentStreak: 0,
+      longestStreak: 0,
+      error: 'Not authenticated',
+    }
 
   const { data: allSessions } = await supabase
     .from('reading_sessions')
@@ -91,23 +119,33 @@ export async function recalcUserStatsAfterCompletion(dateLocal: string): Promise
     .eq('user_id', user.id)
     .order('date_local', { ascending: true })
 
-  const uniqueDates = [...new Set((allSessions ?? []).map(r => r.date_local))].sort()
+  const uniqueDates = [
+    ...new Set((allSessions ?? []).map((r) => r.date_local)),
+  ].sort()
 
   const todayStr = getHKTDateStr()
-  const todayHKT = new Date(new Date().toLocaleString('en-CA', { timeZone: 'Asia/Hong_Kong' }))
-  const yesterdayStr = getHKTDateStr(new Date(todayHKT.getTime() - 86400000))
+  // Yesterday is derived from the same reading date, not from wall-clock
+  // arithmetic — otherwise "yesterday" could be a day the user doesn't count.
+  const yesterdayStr = addDays(todayStr, -1)
 
   let streak = 0
   if (uniqueDates.length > 0) {
     let lastValidIdx = uniqueDates.length - 1
     for (let i = uniqueDates.length - 1; i >= 0; i--) {
-      if (uniqueDates[i] <= todayStr) { lastValidIdx = i; break }
+      if (uniqueDates[i] <= todayStr) {
+        lastValidIdx = i
+        break
+      }
     }
     const lastDate = uniqueDates[lastValidIdx]
     if (lastDate === todayStr || lastDate === yesterdayStr) {
       streak = 1
       for (let i = lastValidIdx - 1; i >= 0; i--) {
-        const diffDays = Math.round((new Date(uniqueDates[i + 1]).getTime() - new Date(uniqueDates[i]).getTime()) / 86400000)
+        const diffDays = Math.round(
+          (new Date(uniqueDates[i + 1]).getTime() -
+            new Date(uniqueDates[i]).getTime()) /
+            86400000,
+        )
         if (diffDays === 1) streak++
         else break
       }
@@ -115,17 +153,26 @@ export async function recalcUserStatsAfterCompletion(dateLocal: string): Promise
   }
 
   // XP model: sum of xp_earned across all reading_sessions.
-// Currently each chapter is worth 10 XP (set in calendar handleCompleteDay).
-// Level = floor(sqrt(total_xp / 100)) + 1 → 100/400/900/1600... for L2/L3/L4/L5
-  const totalXp = (allSessions ?? []).reduce((sum, s) => sum + (s.xp_earned || 0), 0)
+  // Currently each chapter is worth 10 XP (set in calendar handleCompleteDay).
+  // Level = floor(sqrt(total_xp / 100)) + 1 → 100/400/900/1600... for L2/L3/L4/L5
+  const totalXp = (allSessions ?? []).reduce(
+    (sum, s) => sum + (s.xp_earned || 0),
+    0,
+  )
   const level = Math.floor(Math.sqrt(totalXp / 100)) + 1
 
   let longestStreak = streak
   let currentRun = 1
   for (let i = 1; i < uniqueDates.length; i++) {
-    const diffDays = Math.round((new Date(uniqueDates[i]).getTime() - new Date(uniqueDates[i - 1]).getTime()) / 86400000)
-    if (diffDays === 1) { currentRun++; longestStreak = Math.max(longestStreak, currentRun) }
-    else currentRun = 1
+    const diffDays = Math.round(
+      (new Date(uniqueDates[i]).getTime() -
+        new Date(uniqueDates[i - 1]).getTime()) /
+        86400000,
+    )
+    if (diffDays === 1) {
+      currentRun++
+      longestStreak = Math.max(longestStreak, currentRun)
+    } else currentRun = 1
   }
 
   const { error: statsError } = await supabase
@@ -135,16 +182,32 @@ export async function recalcUserStatsAfterCompletion(dateLocal: string): Promise
       level,
       current_streak: streak,
       longest_streak: Math.max(longestStreak, streak),
-      last_completed_date: uniqueDates.length > 0 ? uniqueDates[uniqueDates.length - 1] : null,
+      last_completed_date:
+        uniqueDates.length > 0 ? uniqueDates[uniqueDates.length - 1] : null,
     })
     .eq('user_id', user.id)
 
   if (statsError) {
-    console.error('[recalcUserStatsAfterCompletion] stats update failed:', statsError)
-    return { success: false, totalXp, level, currentStreak: streak, longestStreak, error: statsError.message }
+    console.error(
+      '[recalcUserStatsAfterCompletion] stats update failed:',
+      statsError,
+    )
+    return {
+      success: false,
+      totalXp,
+      level,
+      currentStreak: streak,
+      longestStreak,
+      error: statsError.message,
+    }
   }
 
-  console.log('[recalcUserStatsAfterCompletion] ok:', { totalXp, level, streak, longestStreak })
+  console.log('[recalcUserStatsAfterCompletion] ok:', {
+    totalXp,
+    level,
+    streak,
+    longestStreak,
+  })
   return { success: true, totalXp, level, currentStreak: streak, longestStreak }
 }
 
@@ -155,16 +218,22 @@ export async function recalcUserStatsAfterCompletion(dateLocal: string): Promise
  */
 export async function unmarkDayComplete(
   enrollmentId: string,
-  dateLocal: string
+  dateLocal: string,
 ): Promise<{ success: boolean; error?: string }> {
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
 
   if (!user) {
     return { success: false, error: 'Not authenticated' }
   }
 
-  console.log('[unmarkDayComplete]', { enrollment_id: enrollmentId, date_local: dateLocal, user_id: user.id })
+  console.log('[unmarkDayComplete]', {
+    enrollment_id: enrollmentId,
+    date_local: dateLocal,
+    user_id: user.id,
+  })
 
   // 1. Delete ALL sessions for this user on this date, regardless of which
   // enrollment they belong to (enrollment_id may be stale after re-enrollment).
@@ -175,7 +244,10 @@ export async function unmarkDayComplete(
     .eq('date_local', dateLocal)
 
   if (deleteError) {
-    console.error('[unmarkDayComplete] DELETE failed:', JSON.stringify(deleteError))
+    console.error(
+      '[unmarkDayComplete] DELETE failed:',
+      JSON.stringify(deleteError),
+    )
     return { success: false, error: deleteError.message }
   }
 
@@ -189,17 +261,23 @@ export async function unmarkDayComplete(
     .order('date_local', { ascending: true })
 
   if (fetchError) {
-    console.error('[unmarkDayComplete] fetch for recalc failed:', JSON.stringify(fetchError))
+    console.error(
+      '[unmarkDayComplete] fetch for recalc failed:',
+      JSON.stringify(fetchError),
+    )
     return { success: false, error: fetchError.message }
   }
 
   // Collect unique completion dates in order
-  const uniqueDates = [...new Set((remaining ?? []).map(r => r.date_local))].sort()
+  const uniqueDates = [
+    ...new Set((remaining ?? []).map((r) => r.date_local)),
+  ].sort()
 
   // Calculate streak — FIX: use en-CA+HKT throughout
   const todayStr = getHKTDateStr()
-  const todayHKT = new Date(new Date().toLocaleString('en-CA', { timeZone: 'Asia/Hong_Kong' }))
-  const yesterdayStr = getHKTDateStr(new Date(todayHKT.getTime() - 86400000))
+  // Yesterday is derived from the same reading date, not from wall-clock
+  // arithmetic — otherwise "yesterday" could be a day the user doesn't count.
+  const yesterdayStr = addDays(todayStr, -1)
 
   let streak = 0
   if (uniqueDates.length > 0) {
@@ -220,10 +298,20 @@ export async function unmarkDayComplete(
   }
 
   // XP = sum of xp_earned across all remaining reading_sessions
-  const totalXp = (remaining ?? []).reduce((sum, s) => sum + (s.xp_earned || 0), 0)
+  const totalXp = (remaining ?? []).reduce(
+    (sum, s) => sum + (s.xp_earned || 0),
+    0,
+  )
   const level = Math.floor(Math.sqrt(totalXp / 100)) + 1
 
-  console.log('[unmarkDayComplete] recalculated:', { uniqueDates, streak, totalXp, level, todayStr, yesterdayStr })
+  console.log('[unmarkDayComplete] recalculated:', {
+    uniqueDates,
+    streak,
+    totalXp,
+    level,
+    todayStr,
+    yesterdayStr,
+  })
 
   // Find longest streak
   let longestStreak = streak
@@ -248,12 +336,16 @@ export async function unmarkDayComplete(
       level,
       current_streak: streak,
       longest_streak: Math.max(longestStreak, streak),
-      last_completed_date: uniqueDates.length > 0 ? uniqueDates[uniqueDates.length - 1] : null,
+      last_completed_date:
+        uniqueDates.length > 0 ? uniqueDates[uniqueDates.length - 1] : null,
     })
     .eq('user_id', user.id)
 
   if (updateError) {
-    console.error('[unmarkDayComplete] stats update failed:', JSON.stringify(updateError))
+    console.error(
+      '[unmarkDayComplete] stats update failed:',
+      JSON.stringify(updateError),
+    )
     return { success: false, error: updateError.message }
   }
 
@@ -270,9 +362,15 @@ export async function unmarkDayComplete(
       .eq('user_id', user.id)
       .eq('date_local', dateLocal)
     if (grpErr) {
-      console.error('[unmarkDayComplete] group_checkins delete failed:', JSON.stringify(grpErr))
+      console.error(
+        '[unmarkDayComplete] group_checkins delete failed:',
+        JSON.stringify(grpErr),
+      )
     } else {
-      console.log('[unmarkDayComplete] group_checkins removed for date', dateLocal)
+      console.log(
+        '[unmarkDayComplete] group_checkins removed for date',
+        dateLocal,
+      )
     }
   } catch (e) {
     console.error('[unmarkDayComplete] group cleanup error:', e)
@@ -289,7 +387,7 @@ export async function unmarkDayComplete(
 export async function markDayCompleteBatch(
   enrollmentId: string,
   refs: string[],
-  dateLocal: string
+  dateLocal: string,
 ): Promise<{
   success: boolean
   insertedCount?: number
@@ -303,9 +401,12 @@ export async function markDayCompleteBatch(
   longestStreak?: number
 }> {
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
   if (!user) return { success: false, error: 'Not authenticated' }
-  if (!refs || refs.length === 0) return { success: false, error: 'No refs provided' }
+  if (!refs || refs.length === 0)
+    return { success: false, error: 'No refs provided' }
 
   // Future-date guard (public launch): cannot mark a future day as complete
   if (isFutureDate(dateLocal)) {
@@ -314,7 +415,7 @@ export async function markDayCompleteBatch(
 
   // ── Step 1: Bulk INSERT all chapters in ONE round-trip ──────────────────────
   const now = new Date()
-  const rows = refs.map(ref => {
+  const rows = refs.map((ref) => {
     const parts = ref.trim().split(/\s+/)
     const bookZh = parts[0]
     // Handle "創 1" or "創1" or "創 1:3"
@@ -347,39 +448,61 @@ export async function markDayCompleteBatch(
     .select('date_local, xp_earned')
     .eq('user_id', user.id)
 
-  const uniqueDates = [...new Set((allSessions ?? []).map((r: { date_local: string }) => r.date_local))].sort()
+  const uniqueDates = [
+    ...new Set(
+      (allSessions ?? []).map((r: { date_local: string }) => r.date_local),
+    ),
+  ].sort()
 
   const todayStr = getHKTDateStr()
-  const todayHKT = new Date(new Date().toLocaleString('en-CA', { timeZone: 'Asia/Hong_Kong' }))
-  const yesterdayStr = getHKTDateStr(new Date(todayHKT.getTime() - 86400000))
+  // Yesterday is derived from the same reading date, not from wall-clock
+  // arithmetic — otherwise "yesterday" could be a day the user doesn't count.
+  const yesterdayStr = addDays(todayStr, -1)
 
   let streak = 0
   if (uniqueDates.length > 0) {
     let lastValidIdx = uniqueDates.length - 1
     for (let i = uniqueDates.length - 1; i >= 0; i--) {
-      if (uniqueDates[i] <= todayStr) { lastValidIdx = i; break }
+      if (uniqueDates[i] <= todayStr) {
+        lastValidIdx = i
+        break
+      }
     }
     const lastDate = uniqueDates[lastValidIdx]
     if (lastDate === todayStr || lastDate === yesterdayStr) {
       streak = 1
       for (let i = lastValidIdx - 1; i >= 0; i--) {
-        const diffDays = Math.round((new Date(uniqueDates[i + 1]).getTime() - new Date(uniqueDates[i]).getTime()) / 86400000)
+        const diffDays = Math.round(
+          (new Date(uniqueDates[i + 1]).getTime() -
+            new Date(uniqueDates[i]).getTime()) /
+            86400000,
+        )
         if (diffDays === 1) streak++
         else break
       }
     }
   }
 
-  const totalXp = (allSessions ?? []).reduce((sum: number, s: { xp_earned?: number }) => sum + (s.xp_earned ?? 0), 0)
+  const totalXp = (allSessions ?? []).reduce(
+    (sum: number, s: { xp_earned?: number }) => sum + (s.xp_earned ?? 0),
+    0,
+  )
   const level = Math.floor(Math.sqrt(totalXp / 100)) + 1
-  const lastDateVal = uniqueDates.length > 0 ? uniqueDates[uniqueDates.length - 1] : null
+  const lastDateVal =
+    uniqueDates.length > 0 ? uniqueDates[uniqueDates.length - 1] : null
 
   let longestStreak = streak
   let currentRun = 1
   for (let i = 1; i < uniqueDates.length; i++) {
-    const diffDays = Math.round((new Date(uniqueDates[i]).getTime() - new Date(uniqueDates[i - 1]).getTime()) / 86400000)
-    if (diffDays === 1) { currentRun++; longestStreak = Math.max(longestStreak, currentRun) }
-    else currentRun = 1
+    const diffDays = Math.round(
+      (new Date(uniqueDates[i]).getTime() -
+        new Date(uniqueDates[i - 1]).getTime()) /
+        86400000,
+    )
+    if (diffDays === 1) {
+      currentRun++
+      longestStreak = Math.max(longestStreak, currentRun)
+    } else currentRun = 1
   }
 
   await supabase
@@ -410,9 +533,13 @@ export async function markDayCompleteBatch(
  * Mark a plan enrollment as completed.
  * Called when user finishes all days in a plan.
  */
-export async function markPlanComplete(enrollmentId: string): Promise<{ success: boolean; error?: string }> {
+export async function markPlanComplete(
+  enrollmentId: string,
+): Promise<{ success: boolean; error?: string }> {
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
   if (!user) return { success: false, error: 'Not authenticated' }
 
   // Update enrollment status
@@ -430,7 +557,10 @@ export async function markPlanComplete(enrollmentId: string): Promise<{ success:
 
   // Increment completed_plans in user_stats
   const { data: stats } = await supabase
-    .from('user_stats').select('completed_plans').eq('user_id', user.id).single()
+    .from('user_stats')
+    .select('completed_plans')
+    .eq('user_id', user.id)
+    .single()
 
   const newCount = (stats?.completed_plans ?? 0) + 1
   const { error: statsError } = await supabase

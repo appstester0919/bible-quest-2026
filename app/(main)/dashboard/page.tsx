@@ -19,6 +19,7 @@ import {
   type PendingRequestInfo,
 } from '@/lib/groupActions'
 import { NudgeButton } from '@/components/NudgeButton'
+import { readingDate } from '@/lib/readingDate'
 
 interface Profile {
   id: string
@@ -59,12 +60,11 @@ interface GlobalStats {
   total_plans_completed: number
 }
 
+// Reading date with the shared 05:00 HKT cutoff. Must be the SAME value
+// markLessonComplete writes, or "did I finish today" disagrees with the row
+// that was just inserted.
 function getHKTDate(): string {
-  // en-CA + HKT gives YYYY-MM-DD directly without a UTC round-trip.
-  // The previous en-US + toISOString() pattern returned YESTERDAY's date when
-  // the browser was in HKT and the local instant was between 00:00 and 08:00
-  // (client-side round-trip parsed the date string in browser-local TZ, not HKT).
-  return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Hong_Kong' })
+  return readingDate()
 }
 
 function getScopeLabel(scope: string) {
@@ -74,11 +74,11 @@ function getScopeLabel(scope: string) {
 }
 
 function getRateColor(rate: number): string {
-  if (rate === 0) return '#9CA3AF'      // 灰色
-  if (rate <= 0.25) return '#F59E0B'    // 橙黃
-  if (rate <= 0.5) return '#84CC16'     // 淺綠
-  if (rate <= 0.75) return '#22C55E'    // 深綠
-  return '#10B981'                       // 亮綠
+  if (rate === 0) return '#9CA3AF' // 灰色
+  if (rate <= 0.25) return '#F59E0B' // 橙黃
+  if (rate <= 0.5) return '#84CC16' // 淺綠
+  if (rate <= 0.75) return '#22C55E' // 深綠
+  return '#10B981' // 亮綠
 }
 
 function getGreeting(): string {
@@ -93,10 +93,13 @@ function getGreeting(): string {
 // Uses shared generateReadingPlan() so dashboard's today link matches the
 // actual plan schedule (especially for nt_ot with per-testament start
 // books/chapters and parallel/nt_then_ot/ot_then_nt reading orders).
-function computeTodayHref(enrollment: Enrollment | null, books: BookMeta[]): string {
+function computeTodayHref(
+  enrollment: Enrollment | null,
+  books: BookMeta[],
+): string {
   if (!enrollment || books.length === 0) return '#'
   const planMap = generateReadingPlan(enrollment, books, 730)
-  const hkt = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Hong_Kong' })
+  const hkt = readingDate()
   const todayRefs = planMap.get(hkt) ?? []
   if (todayRefs.length === 0) return '#'
   const refsParam = encodeURIComponent(todayRefs.join(','))
@@ -110,7 +113,9 @@ export default function DashboardPage() {
   const [enrollment, setEnrollment] = useState<Enrollment | null>(null)
   const [sessions, setSessions] = useState<ReadingSession[]>([])
   const [globalStats, setGlobalStats] = useState<GlobalStats>({
-    total_chapters_read: 0, active_readers: 0, total_plans_completed: 0,
+    total_chapters_read: 0,
+    active_readers: 0,
+    total_plans_completed: 0,
   })
   const [books, setBooks] = useState<BookMeta[]>([])
   // Computed client-side only — avoids SSR hydration mismatch
@@ -122,22 +127,43 @@ export default function DashboardPage() {
   // Group feature state
   const [myGroups, setMyGroups] = useState<GroupWithProgress[]>([])
   const [groupFontSize, setGroupFontSize] = useState<number>(14)
-  const [pendingAdminRequests, setPendingAdminRequests] = useState<PendingRequestInfo[]>([])
-  const [myPendingRequests, setMyPendingRequests] = useState<Array<{ id: string; group_id: string; group_name: string; created_at: string }>>([])
-  const [renameFor, setRenameFor] = useState<{ id: string; name: string } | null>(null)
+  const [pendingAdminRequests, setPendingAdminRequests] = useState<
+    PendingRequestInfo[]
+  >([])
+  const [myPendingRequests, setMyPendingRequests] = useState<
+    Array<{
+      id: string
+      group_id: string
+      group_name: string
+      created_at: string
+    }>
+  >([])
+  const [renameFor, setRenameFor] = useState<{
+    id: string
+    name: string
+  } | null>(null)
   const [renameDraft, setRenameDraft] = useState('')
   const [renaming, setRenaming] = useState(false)
   const [showCreateGroup, setShowCreateGroup] = useState(false)
   const [newGroupName, setNewGroupName] = useState('')
   const [creatingGroup, setCreatingGroup] = useState(false)
-  const [showInviteFor, setShowInviteFor] = useState<{ id: string; code: string; name: string } | null>(null)
+  const [showInviteFor, setShowInviteFor] = useState<{
+    id: string
+    code: string
+    name: string
+  } | null>(null)
   const [pendingAction, setPendingAction] = useState<string | null>(null)
   useEffect(() => {
     const fetchData = async () => {
       try {
         const supabase = createClient()
-        const { data: { user: authUser } } = await supabase.auth.getUser()
-        if (!authUser) { router.push('/login'); return }
+        const {
+          data: { user: authUser },
+        } = await supabase.auth.getUser()
+        if (!authUser) {
+          router.push('/login')
+          return
+        }
         setUser(authUser)
 
         const errors: string[] = []
@@ -147,8 +173,7 @@ export default function DashboardPage() {
         // filter. sessions is NOT here: it needs enrollmentsData.id, so it stays
         // sequential after this batch resolves.
         const [profileRes, statsRes, enrollRes, gsRes] = await Promise.all([
-          supabase
-            .from('profiles').select('*').eq('id', authUser.id).single(),
+          supabase.from('profiles').select('*').eq('id', authUser.id).single(),
           supabase
             .from('user_stats')
             .select('current_streak, total_xp, level, completed_plans')
@@ -156,7 +181,9 @@ export default function DashboardPage() {
             .maybeSingle(),
           supabase
             .from('user_plan_enrollments')
-            .select('id, scope, chapters_per_day, total_days, status, started_at, reading_order, start_book_index, start_chapter, nt_start_book_index, ot_start_book_index, nt_start_chapter, ot_start_chapter')
+            .select(
+              'id, scope, chapters_per_day, total_days, status, started_at, reading_order, start_book_index, start_chapter, nt_start_book_index, ot_start_book_index, nt_start_chapter, ot_start_chapter',
+            )
             .eq('user_id', authUser.id)
             .eq('status', 'active')
             .order('started_at', { ascending: false })
@@ -171,20 +198,31 @@ export default function DashboardPage() {
 
         const statsData = statsRes.data
         const statsErr = statsRes.error
-        console.log('[dashboard] user_stats query result:', JSON.stringify({ statsData, statsErr }))
+        console.log(
+          '[dashboard] user_stats query result:',
+          JSON.stringify({ statsData, statsErr }),
+        )
         if (statsErr) errors.push(`user_stats: ${statsErr.message}`)
 
         if (profileData || statsData) {
-          setProfile({ id: authUser.id, email: profileData?.email || authUser.email || '', ...profileData, ...statsData } as Profile)
+          setProfile({
+            id: authUser.id,
+            email: profileData?.email || authUser.email || '',
+            ...profileData,
+            ...statsData,
+          } as Profile)
         }
 
-        console.log('[dashboard] merged profile:', JSON.stringify({
-          id: authUser.id,
-          current_streak: statsData?.current_streak,
-          total_xp: statsData?.total_xp,
-          level: statsData?.level,
-          completed_plans: statsData?.completed_plans
-        }))
+        console.log(
+          '[dashboard] merged profile:',
+          JSON.stringify({
+            id: authUser.id,
+            current_streak: statsData?.current_streak,
+            total_xp: statsData?.total_xp,
+            level: statsData?.level,
+            completed_plans: statsData?.completed_plans,
+          }),
+        )
 
         const enrollmentsData = enrollRes.data
         const error = enrollRes.error
@@ -192,7 +230,10 @@ export default function DashboardPage() {
         setEnrollment(error ? null : enrollmentsData)
 
         const { data: sessionsData, error: sessionsErr } = enrollmentsData
-          ? await supabase.from('reading_sessions').select('id, chapter_ref, date_local').eq('enrollment_id', enrollmentsData.id)
+          ? await supabase
+              .from('reading_sessions')
+              .select('id, chapter_ref, date_local')
+              .eq('enrollment_id', enrollmentsData.id)
           : { data: null, error: null }
         if (sessionsErr) errors.push(`sessions: ${sessionsErr.message}`)
         setSessions(sessionsData ?? [])
@@ -215,8 +256,12 @@ export default function DashboardPage() {
 
         // Compute today's reading href from enrollment + books (all client-side, no SSR mismatch)
         const href = computeTodayHref(error ? null : enrollmentsData, booksMeta)
-  console.log('[dashboard] computeTodayHref:', { enrollmentsData, booksLen: booksMeta.length, href })
-  setTodayHref(href)
+        console.log('[dashboard] computeTodayHref:', {
+          enrollmentsData,
+          booksLen: booksMeta.length,
+          href,
+        })
+        setTodayHref(href)
 
         // Count today's refs for display
         if (!error && enrollmentsData && booksMeta.length > 0) {
@@ -224,7 +269,7 @@ export default function DashboardPage() {
           // see the SAME chapter schedule — especially for nt_ot plans with
           // parallel / nt_then_ot / ot_then_nt reading orders.
           const planMap = generateReadingPlan(enrollmentsData, booksMeta, 400)
-          const hkt = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Hong_Kong' })
+          const hkt = readingDate()
           setTodayRefsCount((planMap.get(hkt) ?? []).length)
           setTotalPlanDays(planMap.size)
         }
@@ -325,7 +370,12 @@ export default function DashboardPage() {
   }
 
   async function handleDeleteGroup(groupId: string, groupName: string) {
-    if (!confirm(`⚠️ 確定刪除「${groupName}」？\n\n此操作無法復原。所有組員、check-in 記錄將一併刪除。`)) return
+    if (
+      !confirm(
+        `⚠️ 確定刪除「${groupName}」？\n\n此操作無法復原。所有組員、check-in 記錄將一併刪除。`,
+      )
+    )
+      return
     if (!confirm(`再確認：刪除群組「${groupName}」？`)) return
     const res = await deleteGroup(groupId)
     if (!res.success) {
@@ -375,15 +425,28 @@ export default function DashboardPage() {
   //   total_xp_for_level(N) = (N-1)² × 100
   // So XP needed to reach the NEXT level = (level)² × 100
   const xpForNextLevel = profile ? profile.level * profile.level * 100 : 100
-  const xpForCurrentLevel = profile ? (profile.level - 1) * (profile.level - 1) * 100 : 0
+  const xpForCurrentLevel = profile
+    ? (profile.level - 1) * (profile.level - 1) * 100
+    : 0
   const xpInCurrent = profile ? profile.total_xp - xpForCurrentLevel : 0
   const xpNeeded = xpForNextLevel - xpForCurrentLevel
   const hktToday = getHKTDate()
-  const todayCompleted = sessions.some(s => s.date_local === hktToday)
-  const totalDays = totalPlanDays > 0 ? totalPlanDays : (enrollment ? getRequiredDays(enrollment.scope as Scope, enrollment.chapters_per_day) : 0)
-  const completedDays = new Set(sessions.map(s => s.date_local)).size
-  const planProgress = totalDays > 0 ? Math.round((completedDays / totalDays) * 100) : 0
-  const userInitial = (profile?.email || user?.email || '?').charAt(0).toUpperCase()
+  const todayCompleted = sessions.some((s) => s.date_local === hktToday)
+  const totalDays =
+    totalPlanDays > 0
+      ? totalPlanDays
+      : enrollment
+        ? getRequiredDays(
+            enrollment.scope as Scope,
+            enrollment.chapters_per_day,
+          )
+        : 0
+  const completedDays = new Set(sessions.map((s) => s.date_local)).size
+  const planProgress =
+    totalDays > 0 ? Math.round((completedDays / totalDays) * 100) : 0
+  const userInitial = (profile?.email || user?.email || '?')
+    .charAt(0)
+    .toUpperCase()
 
   return (
     <div className="min-h-screen bg-[var(--color-background)] pb-24">
@@ -419,7 +482,9 @@ export default function DashboardPage() {
               ⚠️ 載入錯誤 ({fetchErrors.length})
             </p>
             <ul className="text-xs text-[var(--color-danger)]/90 space-y-1 font-mono">
-              {fetchErrors.map((e, i) => <li key={i}>• {e}</li>)}
+              {fetchErrors.map((e, i) => (
+                <li key={i}>• {e}</li>
+              ))}
             </ul>
             <p className="text-xs text-[var(--color-muted)] mt-2">
               請重新登入或聯絡管理員
@@ -433,16 +498,21 @@ export default function DashboardPage() {
             <div className="flex items-center gap-3">
               <span className="text-4xl animate-flame">🔥</span>
               <div>
-                <p className="text-xs opacity-90 uppercase tracking-wider font-bold">連續學習</p>
+                <p className="text-xs opacity-90 uppercase tracking-wider font-bold">
+                  連續學習
+                </p>
                 <p className="text-3xl font-extrabold leading-none mt-1">
-                  {profile?.current_streak ?? 0}<span className="text-lg ml-1 opacity-90">日</span>
+                  {profile?.current_streak ?? 0}
+                  <span className="text-lg ml-1 opacity-90">日</span>
                 </p>
               </div>
             </div>
             {profile && profile.completed_plans > 0 && (
               <div className="text-right">
                 <p className="text-xs opacity-90">已完成計劃</p>
-                <p className="text-2xl font-extrabold">🏆 {profile.completed_plans}</p>
+                <p className="text-2xl font-extrabold">
+                  🏆 {profile.completed_plans}
+                </p>
               </div>
             )}
           </div>
@@ -470,7 +540,9 @@ export default function DashboardPage() {
               {!todayCompleted && enrollment && todayRefsCount > 0 && (
                 <p className="text-xs opacity-90 mt-1">
                   {getScopeLabel(enrollment.scope)} · {todayRefsCount}章
-                  {enrollment.chapters_per_day > todayRefsCount ? ` · 目標${enrollment.chapters_per_day}章` : ''}
+                  {enrollment.chapters_per_day > todayRefsCount
+                    ? ` · 目標${enrollment.chapters_per_day}章`
+                    : ''}
                 </p>
               )}
             </div>
@@ -488,14 +560,23 @@ export default function DashboardPage() {
                   {getScopeLabel(enrollment.scope)}
                 </p>
               </div>
-              <span className="badge badge-success">{enrollment.chapters_per_day}章/日</span>
+              <span className="badge badge-success">
+                {enrollment.chapters_per_day}章/日
+              </span>
             </div>
             <div className="progress-track">
-              <div className="progress-fill" style={{ width: `${planProgress}%` }} />
+              <div
+                className="progress-fill"
+                style={{ width: `${planProgress}%` }}
+              />
             </div>
             <div className="flex justify-between mt-2">
-              <span className="text-xs text-muted">{completedDays} / {totalDays} 天</span>
-              <span className="text-xs font-bold text-success">{planProgress}%</span>
+              <span className="text-xs text-muted">
+                {completedDays} / {totalDays} 天
+              </span>
+              <span className="text-xs font-bold text-success">
+                {planProgress}%
+              </span>
             </div>
           </div>
         )}
@@ -507,10 +588,16 @@ export default function DashboardPage() {
               <span className="font-extrabold">等級 {profile.level}</span>
               <span className="font-extrabold">{profile.total_xp} XP</span>
             </div>
-            <div className="progress-track" style={{ backgroundColor: 'rgba(0,0,0,0.15)' }}>
+            <div
+              className="progress-track"
+              style={{ backgroundColor: 'rgba(0,0,0,0.15)' }}
+            >
               <div
                 className="progress-fill"
-                style={{ width: `${(xpInCurrent / xpNeeded) * 100}%`, background: '#1F2937' }}
+                style={{
+                  width: `${(xpInCurrent / xpNeeded) * 100}%`,
+                  background: '#1F2937',
+                }}
               />
             </div>
             <p className="text-xs mt-2 opacity-80 text-right">
@@ -523,19 +610,39 @@ export default function DashboardPage() {
         <div className="card-gem">
           <div className="flex items-center gap-2 mb-3">
             <span className="text-2xl">🌍</span>
-            <p className="h-section" style={{ color: 'white' }}>社群統計</p>
+            <p className="h-section" style={{ color: 'white' }}>
+              社群統計
+            </p>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(3, 1fr)',
+              gap: 12,
+            }}
+          >
             <div className="text-center">
-              <p className="text-2xl font-extrabold">{globalStats.total_chapters_read.toLocaleString()}</p>
+              <p className="text-2xl font-extrabold">
+                {globalStats.total_chapters_read.toLocaleString()}
+              </p>
               <p className="text-xs opacity-80 mt-1">總章數</p>
             </div>
-            <div className="text-center" style={{ borderLeft: '1px solid rgba(255,255,255,0.25)', borderRight: '1px solid rgba(255,255,255,0.25)' }}>
-              <p className="text-2xl font-extrabold">{globalStats.active_readers}</p>
+            <div
+              className="text-center"
+              style={{
+                borderLeft: '1px solid rgba(255,255,255,0.25)',
+                borderRight: '1px solid rgba(255,255,255,0.25)',
+              }}
+            >
+              <p className="text-2xl font-extrabold">
+                {globalStats.active_readers}
+              </p>
               <p className="text-xs opacity-80 mt-1">活躍讀者</p>
             </div>
             <div className="text-center">
-              <p className="text-2xl font-extrabold">{globalStats.total_plans_completed}</p>
+              <p className="text-2xl font-extrabold">
+                {globalStats.total_plans_completed}
+              </p>
               <p className="text-xs opacity-80 mt-1">完成計劃</p>
             </div>
           </div>
@@ -550,15 +657,19 @@ export default function DashboardPage() {
             </div>
             <div className="flex items-center gap-2">
               <button
-                onClick={() => setGroupFontSize(s => Math.max(12, s - 2))}
+                onClick={() => setGroupFontSize((s) => Math.max(12, s - 2))}
                 title="縮小字體"
                 className="w-7 h-7 rounded-full bg-gray-100 text-gray-700 font-bold text-xs flex items-center justify-center"
-              >A−</button>
+              >
+                A−
+              </button>
               <button
-                onClick={() => setGroupFontSize(s => Math.min(24, s + 2))}
+                onClick={() => setGroupFontSize((s) => Math.min(24, s + 2))}
                 title="放大字體"
                 className="w-7 h-7 rounded-full bg-gray-100 text-gray-700 font-bold text-xs flex items-center justify-center"
-              >A+</button>
+              >
+                A+
+              </button>
               <button
                 onClick={() => setShowCreateGroup(true)}
                 className="text-xs px-3 py-1.5 bg-[var(--color-primary)] text-white rounded-full font-bold"
@@ -581,10 +692,16 @@ export default function DashboardPage() {
               </p>
               <div className="space-y-2">
                 {pendingAdminRequests.map((req) => (
-                  <div key={req.request_id} className="flex items-center justify-between text-sm bg-white p-2 rounded-lg">
+                  <div
+                    key={req.request_id}
+                    className="flex items-center justify-between text-sm bg-white p-2 rounded-lg"
+                  >
                     <div className="flex-1 min-w-0">
                       <span className="font-bold">{req.display_name}</span>
-                      <span className="text-xs text-muted"> 想加入 {req.group_name}</span>
+                      <span className="text-xs text-muted">
+                        {' '}
+                        想加入 {req.group_name}
+                      </span>
                     </div>
                     <div className="flex gap-1">
                       <button
@@ -616,10 +733,15 @@ export default function DashboardPage() {
               </p>
               <div className="space-y-2">
                 {myPendingRequests.map((req) => (
-                  <div key={req.id} className="flex items-center justify-between text-sm bg-white p-2 rounded-lg">
+                  <div
+                    key={req.id}
+                    className="flex items-center justify-between text-sm bg-white p-2 rounded-lg"
+                  >
                     <span>
                       <span className="font-bold">{req.group_name}</span>
-                      <span className="text-xs text-muted ml-2">等待組長批准</span>
+                      <span className="text-xs text-muted ml-2">
+                        等待組長批准
+                      </span>
                     </span>
                     <button
                       onClick={() => handleCancelRequest(req.id)}
@@ -637,22 +759,33 @@ export default function DashboardPage() {
           {/* My groups list */}
           {myGroups.length === 0 ? (
             <p className="text-sm text-muted text-center py-4">
-              尚未加入任何群組<br/>
+              尚未加入任何群組
+              <br />
               <span className="text-xs">點擊「+ 建立」或從邀請連結加入</span>
             </p>
           ) : (
             <div className="space-y-3">
               {myGroups.map((g) => (
-                <div key={g.id} className="border border-gray-100 rounded-xl p-3" style={{ fontSize: groupFontSize }}>
+                <div
+                  key={g.id}
+                  className="border border-gray-100 rounded-xl p-3"
+                  style={{ fontSize: groupFontSize }}
+                >
                   <div className="flex items-start justify-between mb-2">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1">
                         <p className="font-bold text-[var(--color-primary)] truncate">
-                          {g.name} {g.my_role === 'admin' && <span className="text-xs ml-1">⭐</span>}
+                          {g.name}{' '}
+                          {g.my_role === 'admin' && (
+                            <span className="text-xs ml-1">⭐</span>
+                          )}
                         </p>
                         {g.my_role === 'admin' && (
                           <button
-                            onClick={() => { setRenameFor({ id: g.id, name: g.name }); setRenameDraft(g.name) }}
+                            onClick={() => {
+                              setRenameFor({ id: g.id, name: g.name })
+                              setRenameDraft(g.name)
+                            }}
                             className="text-xs px-1.5 py-0.5 text-gray-500 hover:text-[var(--color-primary)]"
                             title="更改群組名稱"
                           >
@@ -661,14 +794,24 @@ export default function DashboardPage() {
                         )}
                       </div>
                       <p className="text-xs text-muted mt-0.5">
-                        今日 <span className="font-bold text-[var(--color-primary)]">{g.today_count}</span>/{g.today_total}
+                        今日{' '}
+                        <span className="font-bold text-[var(--color-primary)]">
+                          {g.today_count}
+                        </span>
+                        /{g.today_total}
                         {g.member_count < g.today_total && (
                           <span className="ml-1">· {g.member_count} 組員</span>
                         )}
                       </p>
                     </div>
                     <button
-                      onClick={() => setShowInviteFor({ id: g.id, code: g.invite_code, name: g.name })}
+                      onClick={() =>
+                        setShowInviteFor({
+                          id: g.id,
+                          code: g.invite_code,
+                          name: g.name,
+                        })
+                      }
                       className="text-xs px-2 py-1 bg-gray-100 text-gray-700 rounded-lg"
                       title="邀請連結"
                     >
@@ -694,18 +837,23 @@ export default function DashboardPage() {
                     {g.member_status.map((m, idx) => (
                       <span key={m.user_id} className={idx > 0 ? 'ml-1' : ''}>
                         {idx > 0 && '、'}
-                        <span className={m.completed_today
-                          ? 'text-[var(--color-success)] font-bold'
-                          : 'text-gray-500'
-                        }>
-                          {m.display_name}{m.completed_today ? ' ✅' : ' ⏳'}
+                        <span
+                          className={
+                            m.completed_today
+                              ? 'text-[var(--color-success)] font-bold'
+                              : 'text-gray-500'
+                          }
+                        >
+                          {m.display_name}
+                          {m.completed_today ? ' ✅' : ' ⏳'}
                         </span>
                       </span>
                     ))}
                   </div>
                   {g.today_completed_names.length > 0 && (
                     <p className="text-xs text-[var(--color-success)] mt-1">
-                      ✓ 已完成 ({g.today_completed_names.length}/{g.member_count})
+                      ✓ 已完成 ({g.today_completed_names.length}/
+                      {g.member_count})
                     </p>
                   )}
                   {/* Leave / Delete group buttons */}
@@ -734,7 +882,9 @@ export default function DashboardPage() {
 
           {/* Join group via link */}
           <div className="mt-4 pt-3 border-t border-gray-100">
-            <p className="text-xs text-muted mb-2 text-center">或從邀請連結加入：</p>
+            <p className="text-xs text-muted mb-2 text-center">
+              或從邀請連結加入：
+            </p>
             <input
               type="text"
               placeholder="輸入邀請碼"
@@ -756,7 +906,9 @@ export default function DashboardPage() {
         <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center">
           <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full max-w-sm p-6">
             <h3 className="text-lg font-bold mb-3">更改群組名稱</h3>
-            <p className="text-xs text-muted mb-3">只有組長（⭐）可以更改群組名稱</p>
+            <p className="text-xs text-muted mb-3">
+              只有組長（⭐）可以更改群組名稱
+            </p>
             <input
               type="text"
               value={renameDraft}
@@ -771,7 +923,10 @@ export default function DashboardPage() {
             />
             <div className="flex gap-2">
               <button
-                onClick={() => { setRenameFor(null); setRenameDraft('') }}
+                onClick={() => {
+                  setRenameFor(null)
+                  setRenameDraft('')
+                }}
                 className="flex-1 px-4 py-2 bg-gray-100 rounded-lg font-medium"
               >
                 取消
@@ -793,7 +948,9 @@ export default function DashboardPage() {
         <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center">
           <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full max-w-sm p-6">
             <h3 className="text-lg font-bold mb-3">建立新群組</h3>
-            <p className="text-xs text-muted mb-3">為你和你的好友建立讀經群組</p>
+            <p className="text-xs text-muted mb-3">
+              為你和你的好友建立讀經群組
+            </p>
             <input
               type="text"
               value={newGroupName}
@@ -805,7 +962,10 @@ export default function DashboardPage() {
             />
             <div className="flex gap-2">
               <button
-                onClick={() => { setShowCreateGroup(false); setNewGroupName('') }}
+                onClick={() => {
+                  setShowCreateGroup(false)
+                  setNewGroupName('')
+                }}
                 className="flex-1 px-4 py-2 bg-gray-100 rounded-lg font-medium"
               >
                 取消
@@ -831,7 +991,9 @@ export default function DashboardPage() {
               分享以下連結給朋友，他們加入後你可以批准：
             </p>
             <div className="bg-gray-50 rounded-lg p-3 mb-3 break-all font-mono text-sm">
-              {typeof window !== 'undefined' ? `${window.location.origin}/join/${showInviteFor.code}` : `/join/${showInviteFor.code}`}
+              {typeof window !== 'undefined'
+                ? `${window.location.origin}/join/${showInviteFor.code}`
+                : `/join/${showInviteFor.code}`}
             </div>
             <div className="flex gap-2">
               <button

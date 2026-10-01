@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { getIncompleteGroupMembersToday } from '@/lib/groupActions'
+import { readingDate } from '@/lib/readingDate'
 import { NudgeDialog } from './NudgeDialog'
 
 /**
@@ -34,7 +35,9 @@ export function NudgeButton() {
   const [hasMembership, setHasMembership] = useState(false)
   const [senderName, setSenderName] = useState('')
   const [showDialog, setShowDialog] = useState(false)
-  const [members, setMembers] = useState<Array<{ user_id: string; display_name: string; group_id: string }>>([])
+  const [members, setMembers] = useState<
+    Array<{ user_id: string; display_name: string; group_id: string }>
+  >([])
   const [loadingMembers, setLoadingMembers] = useState(false)
   const [inlineMessage, setInlineMessage] = useState<string | null>(null)
 
@@ -63,7 +66,9 @@ export function NudgeButton() {
     inFlightRef.current = true
     try {
       const supabase = createClient()
-      const { data: { user } } = await supabase.auth.getUser()
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
       if (!user) {
         setHasCompletedToday(false)
         setQuotaUsed(false)
@@ -71,22 +76,41 @@ export function NudgeButton() {
         return
       }
 
-      // Check if user completed today's reading using HKT date_local.
-      // Uses date_local (not created_at) to match markDayCompleteBatch's insert
-      // date, which is the HKT calendar day — timezone-safe, no grace window
-      // edge cases.
-      // ── Parallel reads for: today's reading, quota, membership, profile ──────────
-      const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Hong_Kong' })
+      // Check if user completed today's reading. Must resolve to the SAME reading
+      // date markLessonComplete wrote (05:00 HKT cutoff), otherwise a night-owl
+      // reader who finished at 02:00 is still shown a nudge.
+      const today = readingDate()
       const [
         { data: todaySession },
         { data: nudgeRow },
         { data: memberRow },
         { data: profile },
       ] = await Promise.all([
-        supabase.from('reading_sessions').select('id').eq('user_id', user.id).eq('date_local', today).limit(1).maybeSingle(),
-        supabase.from('group_nudges').select('id').eq('sender_id', user.id).eq('nudge_date_local', today).limit(1).maybeSingle(),
-        supabase.from('group_members').select('group_id').eq('user_id', user.id).limit(1).maybeSingle(),
-        supabase.from('profiles').select('display_name').eq('id', user.id).maybeSingle(),
+        supabase
+          .from('reading_sessions')
+          .select('id')
+          .eq('user_id', user.id)
+          .eq('date_local', today)
+          .limit(1)
+          .maybeSingle(),
+        supabase
+          .from('group_nudges')
+          .select('id')
+          .eq('sender_id', user.id)
+          .eq('nudge_date_local', today)
+          .limit(1)
+          .maybeSingle(),
+        supabase
+          .from('group_members')
+          .select('group_id')
+          .eq('user_id', user.id)
+          .limit(1)
+          .maybeSingle(),
+        supabase
+          .from('profiles')
+          .select('display_name')
+          .eq('id', user.id)
+          .maybeSingle(),
       ])
 
       setHasCompletedToday(!!todaySession)
@@ -114,8 +138,12 @@ export function NudgeButton() {
 
   useEffect(() => {
     void refreshVisibility()
-    const id = setInterval(() => { void refreshVisibility() }, POLL_INTERVAL_MS)
-    const onFocus = () => { void refreshVisibility() }
+    const id = setInterval(() => {
+      void refreshVisibility()
+    }, POLL_INTERVAL_MS)
+    const onFocus = () => {
+      void refreshVisibility()
+    }
     const onVisibility = () => {
       if (document.visibilityState === 'visible') void refreshVisibility()
     }
@@ -143,7 +171,10 @@ export function NudgeButton() {
     try {
       const res = await getIncompleteGroupMembersToday()
       if (res.error) {
-        console.error('[NudgeButton] getIncompleteGroupMembersToday:', res.error)
+        console.error(
+          '[NudgeButton] getIncompleteGroupMembersToday:',
+          res.error,
+        )
         setInlineMessage('⚠️ 載入失敗，請稍後再試')
         return
       }
@@ -201,8 +232,12 @@ export function NudgeButton() {
             className="bg-white rounded-2xl shadow-2xl p-6 max-w-sm w-full text-center"
             onClick={(e) => e.stopPropagation()}
           >
-            <p className="text-2xl mb-2">{inlineMessage.startsWith('⚠️') ? '⚠️' : '🎉'}</p>
-            <p className="text-base font-bold text-[var(--color-primary)]">{inlineMessage.replace(/^[⚠️🎉]\s*/, '')}</p>
+            <p className="text-2xl mb-2">
+              {inlineMessage.startsWith('⚠️') ? '⚠️' : '🎉'}
+            </p>
+            <p className="text-base font-bold text-[var(--color-primary)]">
+              {inlineMessage.replace(/^[⚠️🎉]\s*/, '')}
+            </p>
             <button
               onClick={handleDialogClose}
               className="mt-4 w-full px-4 py-2 bg-[var(--color-primary)] text-white rounded-xl font-bold"
@@ -224,13 +259,16 @@ export function NudgeButton() {
       )}
 
       {/* Main dialog */}
-      {showDialog && !inlineMessage && !loadingMembers && members.length > 0 && (
-        <NudgeDialog
-          members={members}
-          senderName={senderName}
-          onClose={handleDialogClose}
-        />
-      )}
+      {showDialog &&
+        !inlineMessage &&
+        !loadingMembers &&
+        members.length > 0 && (
+          <NudgeDialog
+            members={members}
+            senderName={senderName}
+            onClose={handleDialogClose}
+          />
+        )}
     </>
   )
 }

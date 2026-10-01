@@ -17,6 +17,7 @@ import { checkInAllMyGroups } from '@/lib/groupActions'
 import { useRouter } from 'next/navigation'
 import { getChapter, loadBible, type BookMeta } from '@/lib/bible/lookup'
 import { celebrate } from '@/lib/confetti'
+import { readingDate } from '@/lib/readingDate'
 
 // ─── Bible Read Aloud color scheme ─────────────────────────────────────────
 const C = {
@@ -433,12 +434,9 @@ export default function ReadPage() {
 
       // Today session
       if (enrollmentData && sessionsData) {
-        // en-CA + HKT gives YYYY-MM-DD directly without a UTC round-trip.
-        // The previous en-US + toISOString() pattern returned YESTERDAY's date
-        // when the browser was in HKT between 00:00 and 08:00.
-        const dateLocal = new Date().toLocaleDateString('en-CA', {
-          timeZone: 'Asia/Hong_Kong',
-        })
+        // Shared reading date (05:00 HKT cutoff) — must match the value
+        // markLessonComplete writes, or a completed session is invisible here.
+        const dateLocal = readingDate()
         setTodaySession(
           (sessions ?? []).find(
             (s: ReadingSession) => s.date_local === dateLocal,
@@ -634,9 +632,7 @@ export default function ReadPage() {
         : enrollment.scope === 'ot'
           ? books.filter((_, i) => i < 39)
           : books
-    const hktToday = new Date().toLocaleDateString('en-CA', {
-      timeZone: 'Asia/Hong_Kong',
-    })
+    const hktToday = readingDate()
     let start: Date
     if (enrollment.started_at) {
       const [y, m, d] = enrollment.started_at
@@ -1313,9 +1309,7 @@ export default function ReadPage() {
       // Use markDayCompleteBatch: single round-trip, server-side XP sum
       // (10 XP per chapter). The previous per-chapter markLessonComplete
       // approach awarded only 10 XP for the first chapter and 0 for the rest.
-      const today = new Date().toLocaleDateString('en-CA', {
-        timeZone: 'Asia/Hong_Kong',
-      })
+      const today = readingDate()
       const refs = audioQueue.map((item) => `${item.book.name} ${item.chapter}`)
       const result = await markDayCompleteBatch(enrollment.id, refs, today)
       if (!result.success) {
