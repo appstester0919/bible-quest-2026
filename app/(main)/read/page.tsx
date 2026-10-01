@@ -478,6 +478,19 @@ export default function ReadPage() {
     setEndBook(queue[queue.length - 1].book)
     setEndChapter(queue[queue.length - 1].chapter)
 
+    // A plan is a FIXED list of chapters — 「兩章新約、六章舊約」 spans a
+    // book boundary and is generally non-contiguous. Nothing may be appended
+    // beyond it in either direction, so it must enter range mode.
+    //
+    // Without this, rangeMode stayed false and the sentinel guard added in
+    // 41ec4ad never applied: scrolling past the NT block kept loading more
+    // NT, and — since 完成讀經 renders after the list — the complete button
+    // could never be scrolled to. Reported as 「仍然是無限往上下擴展」.
+    //
+    // Setting it here (not only in the picker handler) because the plan
+    // arrives as a URL param and must be bounded from the moment it loads.
+    setRangeMode(true)
+
     loadChapterQueue(queue)
   }, [autoLoadedRefs, books])
 
