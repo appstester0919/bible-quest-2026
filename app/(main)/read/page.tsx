@@ -1959,7 +1959,13 @@ export default function ReadPage() {
                                 textAlign: 'center',
                                 borderRadius: '5px',
                                 cursor: 'pointer',
-                                fontSize: '0.8rem',
+                                // 0.8rem -> 1.1rem. See the note above: the
+                                // 6-column grid leaves 48.7px of usable width
+                                // per cell, so two CJK glyphs at 1.1rem use
+                                // 72% of it, and the cell grows from 35.2px to
+                                // 42.4px — reaching the 44px touch target the
+                                // old size fell short of.
+                                fontSize: '1.1rem',
                                 fontWeight: 500,
                                 background: data.bg,
                                 color: data.text,
@@ -2097,7 +2103,7 @@ export default function ReadPage() {
                                       cursor: disabled
                                         ? 'not-allowed'
                                         : 'pointer',
-                                      fontSize: '0.8rem',
+                                      fontSize: '1.1rem',
                                       fontWeight: 500,
                                       background: disabled
                                         ? C.bgSecondary
@@ -2207,7 +2213,7 @@ export default function ReadPage() {
                       background:
                         startChapter === ch ? C.accentGold : C.bgSecondary,
                       color: startChapter === ch ? 'white' : C.textPrimary,
-                      fontSize: '0.88rem',
+                      fontSize: '1.05rem',
                       transition: 'all 0.15s',
                       border:
                         startChapter === ch
@@ -2314,7 +2320,7 @@ export default function ReadPage() {
                             : endChapter === ch
                               ? 'white'
                               : C.textPrimary,
-                          fontSize: '0.88rem',
+                          fontSize: '1.05rem',
                           transition: 'all 0.15s',
                           opacity: disabled ? 0.4 : 1,
                           border:
