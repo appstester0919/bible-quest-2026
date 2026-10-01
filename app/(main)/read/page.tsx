@@ -347,10 +347,7 @@ export default function ReadPage() {
   const setFontSize = useCallback((next: number) => {
     const clamped = Math.max(14, Math.min(36, next))
     fontSizeRef.current = clamped
-    rootRef.current?.style.setProperty(
-      '--read-font-size',
-      `${clamped}px`,
-    )
+    rootRef.current?.style.setProperty('--read-font-size', `${clamped}px`)
   }, [])
   const [scriptureLoading, setScriptureLoading] = useState(false)
 
@@ -913,7 +910,8 @@ export default function ReadPage() {
       // only compared lengths would happily re-append a chapter that is already
       // on screen in the middle of the list.
       const key = chapterKey(target.book.abbr, target.chapter)
-      if (list.some((c) => chapterKey(c.bookAbbr, c.chapter) === key)) return false
+      if (list.some((c) => chapterKey(c.bookAbbr, c.chapter) === key))
+        return false
 
       appendBusyRef.current = true
       lastAppendAtRef.current = now
@@ -979,8 +977,19 @@ export default function ReadPage() {
 
   // Whether a chapter exists beyond each end — drives whether the sentinels
   // render at all (they must not imply more content at 創1 / 啟22).
+  //
+  // 範圍模式 is a HARD boundary, not a soft one. The picked span is the whole
+  // document for that session: no sentinel, therefore no observer, therefore no
+  // scroll-driven load in either direction. Before this guard, hasPrev/hasNext
+  // ignored rangeMode entirely, so scrolling past the picked span kept
+  // appending canonical neighbours and the list grew without limit — which
+  // pushed the 完成讀經 button (rendered after the list) permanently out of
+  // reach, and could satisfy allRequiredLoaded with chapters the reader never
+  // assigned to today's plan.
   const { hasPrev, hasNext } = useMemo(() => {
     if (chapters.length === 0) return { hasPrev: false, hasNext: false }
+    // Range mode: the span is fixed. Nothing may be loaded beyond either end.
+    if (rangeMode) return { hasPrev: false, hasNext: false }
     const first = chapters[0]
     const last = chapters[chapters.length - 1]
     return {
@@ -993,7 +1002,7 @@ export default function ReadPage() {
         1,
       ),
     }
-  }, [chapters, canonicalNeighbour])
+  }, [chapters, canonicalNeighbour, rangeMode])
 
   // ─── Chapter-step nav (◀ 上一章 / ▶ 下一章) ────────────────────────────────
   // The loaded window `chapters` grows at BOTH ends, but the END side only
@@ -1098,7 +1107,10 @@ export default function ReadPage() {
     if (dir === 1 ? i < audioQueue.length - 1 : i > 0) return true
     const edge = dir === 1 ? audioQueue[audioQueue.length - 1] : audioQueue[0]
     if (!edge) return false
-    return !!canonicalNeighbour({ abbr: edge.book.abbr, chapter: edge.chapter }, dir)
+    return !!canonicalNeighbour(
+      { abbr: edge.book.abbr, chapter: edge.chapter },
+      dir,
+    )
   }
 
   // Move the pointer onto the pending on-demand target as soon as the append
@@ -1220,7 +1232,11 @@ export default function ReadPage() {
     // Smallest index still visible == topmost card in canonical order.
     let topIdx = -1
     for (let i = 0; i < list.length; i++) {
-      if (visibleChapterKeysRef.current.has(chapterKey(list[i].bookAbbr, list[i].chapter))) {
+      if (
+        visibleChapterKeysRef.current.has(
+          chapterKey(list[i].bookAbbr, list[i].chapter),
+        )
+      ) {
         topIdx = i
         break
       }
@@ -1313,7 +1329,10 @@ export default function ReadPage() {
       // it already scanned reading_sessions to update user_stats, so calling
       // recalcUserStatsAfterCompletion() here would repeat that full-table
       // scan (up to ~1189 rows) for identical numbers.
-      if (typeof result.totalXp === 'number' && typeof result.level === 'number') {
+      if (
+        typeof result.totalXp === 'number' &&
+        typeof result.level === 'number'
+      ) {
         setProfile((prev: any) =>
           prev
             ? {
@@ -1902,7 +1921,13 @@ export default function ReadPage() {
                       ? `${startBook.name}${startChapter ? ` 第${startChapter}章` : ''}`
                       : '選擇起始書卷'}
                   </span>
-                  <span style={{ fontSize: '0.7rem', color: C.textMuted, flexShrink: 0 }}>
+                  <span
+                    style={{
+                      fontSize: '0.7rem',
+                      color: C.textMuted,
+                      flexShrink: 0,
+                    }}
+                  >
                     ▼
                   </span>
                 </div>
@@ -2358,9 +2383,7 @@ export default function ReadPage() {
                 : 'none',
             }}
           >
-            {scriptureLoading
-              ? '載入經文中...'
-              : `📖 顯示經文${displayLabel}`}
+            {scriptureLoading ? '載入經文中...' : `📖 顯示經文${displayLabel}`}
           </button>
 
           {/* Verse number toggle */}
@@ -2512,11 +2535,11 @@ export default function ReadPage() {
                           {num}
                         </span>
                       )}
-                        <span
-                          style={{
-                            flex: 1,
-                            color: C.textPrimary,
-                            lineHeight: 1.9,
+                      <span
+                        style={{
+                          flex: 1,
+                          color: C.textPrimary,
+                          lineHeight: 1.9,
                           fontSize: 'var(--read-font-size)',
                         }}
                       >
