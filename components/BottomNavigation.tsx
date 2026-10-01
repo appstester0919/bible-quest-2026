@@ -168,19 +168,90 @@ export default function BottomNavigation() {
   }, [sheetOpen])
 
   // Hide-on-scroll-down / show-on-scroll-up (keeps scripture reading clean)
+  //
+  // Why this needs hysteresis. The read page in 「直接跳到」 mode prepends a
+  // chapter as soon as the top sentinel approaches, and that prepend does NOT
+  // scroll-compensate: the DOM grows above the viewport, so the browser's own
+  // scroll anchoring shifts scrollY by a whole chapter. The old test —
+  // `if (delta > 8) hide; else if (delta < -8) show` — read every one of those
+  // jumps as a gesture, so a single upward flick produced a burst of
+  // contradictory deltas and the bar flickered instead of settling. The user
+  // saw it as 「很難令它停留，總是很快又隱藏起來」.
+  //
+  // Two independent guards, both cheap and both on the passive listener:
+  //
+  //   1. DIRECTION DEBOUNCE — a new state is only committed after the same
+  //      direction has been seen twice AND the accumulated travel in that
+  //      direction exceeds 16px. A layout-induced jump is a single reversed
+  //      event, so it can never satisfy "twice in a row" and is ignored.
+  //
+  //   2. MINIMUM VISIBLE TIME — once the bar is shown it stays shown for
+  //      SHOW_HOLD_MS. Without this, the last upward event of a flick could
+  //      show the bar and a trailing layout jump could hide it again a few
+  //      milliseconds later, before the reader's finger even lifted.
   useEffect(() => {
+    const SHOW_HOLD_MS = 900
+    const TRAVEL_PX = 16
+    const DIRECTION_EVENTS = 2
+
     lastScrollY.current = window.scrollY
+    let dir = 0            // +1 scrolling down, -1 up, 0 none yet
+    let travel = 0         // accumulated |delta| in the current direction
+    let events = 0         // consecutive scroll events in that direction
+    let shownAt = 0        // timestamp the bar last became visible
+    let hidden = false     // mirrors navHidden so the hold window is honoured
+
+    const show = () => {
+      if (!hidden) {
+        shownAt = Date.now()
+        return
+      }
+      hidden = false
+      shownAt = Date.now()
+      setNavHidden(false)
+    }
+    const hide = () => {
+      // Never hide again within the hold window: this is what lets the reader
+      // lift their finger and actually tap a tab.
+      if (Date.now() - shownAt < SHOW_HOLD_MS) return
+      if (hidden) return
+      hidden = true
+      setNavHidden(true)
+    }
+
     const onScroll = () => {
       const y = window.scrollY
       const delta = y - lastScrollY.current
       lastScrollY.current = y
+
       if (y < 96) {
-        setNavHidden(false)
+        // Top of the document: the bar is always shown and no debounce applies.
+        dir = 0; travel = 0; events = 0
+        show()
         return
       }
-      if (delta > 8) setNavHidden(true)
-      else if (delta < -8) setNavHidden(false)
+
+      if (delta > 0) {
+        if (dir !== 1) { dir = 1; travel = 0; events = 0 }
+        travel += delta
+        events += 1
+      } else if (delta < 0) {
+        if (dir !== -1) { dir = -1; travel = 0; events = 0 }
+        travel += -delta
+        events += 1
+      } else {
+        return
+      }
+
+      if (travel < TRAVEL_PX || events < DIRECTION_EVENTS) return
+      // Committed: reset the accumulator so the next gesture must prove itself
+      // again rather than riding on this one's momentum.
+      travel = 0
+      events = 0
+      if (dir > 0) hide()
+      else show()
     }
+
     window.addEventListener('scroll', onScroll, { passive: true })
     return () => window.removeEventListener('scroll', onScroll)
   }, [])
