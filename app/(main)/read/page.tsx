@@ -1728,7 +1728,13 @@ export default function ReadPage() {
 
       {/* ── Main content ──────────────────────────────────────────────── */}
       <div
-        style={{ maxWidth: '900px', margin: '0 auto', padding: '20px 16px' }}
+        // Horizontal padding was 16 (page) + 20 (card) = 36px per side, which
+        // on a 360px phone left only 288px of text — 14 CJK chars per line.
+        // The card already carries a border + shadow, so the outer padding was
+        // pure dead air. Now 0 + 14 = 14px per side → 332px of text (~18% more
+        // per screen). Vertical padding is unchanged; the bottom tab bar needs
+        // its own clearance and that is handled separately.
+        style={{ maxWidth: '900px', margin: '0 auto', padding: '20px 10px' }}
       >
         {/* ── Range Selector ─────────────────────────────────────── */}
         <div
@@ -2404,7 +2410,12 @@ export default function ReadPage() {
                     {
                       background: C.bgCard,
                       borderRadius: '10px',
-                      padding: '20px',
+                      // 20px → 14px. See the note on the page wrapper: the
+                      // card's own inset was the bigger half of the wasted
+                      // space, and the text does not need 20px of breathing
+                      // room to stay readable — the 4px gold left accent
+                      // already separates the card from the page.
+                      padding: '18px 14px',
                       marginBottom: '20px',
                       border: `1px solid ${C.borderLight}`,
                       borderLeft: `4px solid ${C.accentGold}`,
@@ -2442,7 +2453,10 @@ export default function ReadPage() {
                       color: C.chapterTitle,
                       marginBottom: '16px',
                       paddingBottom: '10px',
-                      paddingRight: '90px', // leave room for badge
+                      // Matches the badge's real width (top:12/right:12,
+                      // ~86px). It was 90px, which is fine on a wide screen
+                      // but cost a quarter of the heading line on a 360px one.
+                      paddingRight: '92px',
                       borderBottom: `1px solid ${C.borderColor}`,
                     }}
                   >
@@ -2454,7 +2468,7 @@ export default function ReadPage() {
                       style={{
                         marginBottom: '12px',
                         display: 'flex',
-                        gap: '12px',
+                        gap: '8px',
                         alignItems: 'flex-start',
                       }}
                     >
@@ -2465,7 +2479,11 @@ export default function ReadPage() {
                             color: C.verseNumber,
                             fontWeight: 500,
                             fontSize: '0.75em',
-                            minWidth: '2.5em',
+                            // 2.5em reserved room for up to 3 digits (119),
+                            // but 90% of verses are 1-2 digits. `minWidth` with
+                            // flexShrink:0 still allows the column to be just
+                            // wide enough, so this is a floor not a hard lock.
+                            minWidth: '1.8em',
                             textAlign: 'right',
                             flexShrink: 0,
                             paddingTop: '2px',
