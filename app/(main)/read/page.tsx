@@ -1438,7 +1438,7 @@ export default function ReadPage() {
           flexDirection: 'row',
           alignItems: 'center',
           justifyContent: 'flex-start',
-          gap: '4px',
+          gap: '8px',
           padding: `${AUDIO_BAR_PAD_Y}px 8px`,
           // Last-resort escape hatch. On a 375px+ phone nothing scrolls; on a
           // 360px Android the label has already shrunk to its 60px floor and
@@ -1454,7 +1454,9 @@ export default function ReadPage() {
           style={{
             display: 'flex',
             alignItems: 'center',
-            gap: '4px',
+            // 2px within a control group, 10px between groups (the outer gap).
+            // Transport reads as one cluster, font+speed as another.
+            gap: '2px',
             height: `${AUDIO_BAR_BTN}px`,
             minWidth: 0,
             width: '100%',
@@ -1480,7 +1482,10 @@ export default function ReadPage() {
               borderRadius: '8px',
               boxSizing: 'border-box',
               fontFamily: 'Georgia, serif',
-              fontSize: '0.9rem',
+              // The one thing the reader looks at on every open: which chapter
+              // is playing. 0.9rem in a 100px chip read as an afterthought.
+              fontSize: '1rem',
+              fontWeight: 600,
               color: C.textPrimary,
               textAlign: 'center',
               overflow: 'hidden',
@@ -1692,7 +1697,7 @@ export default function ReadPage() {
       <style>{`
         .ab-btn { all: unset !important; box-sizing: border-box !important; min-width: unset !important; min-height: unset !important; }
         .ab-btn, .ab-prev, .ab-next, .ab-font-dec, .ab-font-inc { width: ${AUDIO_BAR_BTN}px !important; height: ${AUDIO_BAR_BTN}px !important; }
-        .ab-play { width: ${AUDIO_BAR_PLAY}px !important; height: ${AUDIO_BAR_PLAY}px !important; }
+        .ab-play { width: ${AUDIO_BAR_PLAY}px !important; height: ${AUDIO_BAR_PLAY}px !important; border: none !important; background: transparent !important; }
         /* Design language copied from the Bible read aloud project (index.css
            .player-bar): rounded RECTANGLES, not circles. A 34px circle and a
            34px rounded square share a bounding box, but the square reads as
@@ -1703,7 +1708,7 @@ export default function ReadPage() {
         .ab-btn { display: flex !important; align-items: center !important; justify-content: center !important; background: transparent !important; border: 1px solid ${C.borderColor} !important; border-radius: 6px !important; cursor: pointer !important; transition: all 0.2s !important; padding: 0 !important; flex-shrink: 0 !important; }
         .ab-face { display: flex !important; align-items: center !important; justify-content: center !important; box-sizing: border-box !important; transition: all 0.2s !important; }
         .ab-prev .ab-face, .ab-next .ab-face { background: transparent !important; color: ${C.textSecondary} !important; font-size: 0.8rem !important; }
-        .ab-play .ab-face { background: ${C.bgCard} !important; border: 1px solid ${C.borderColor} !important; border-radius: 50% !important; color: ${C.textPrimary} !important; font-size: 1.1rem !important; }
+        .ab-play .ab-face { width: ${AUDIO_BAR_PLAY}px !important; height: ${AUDIO_BAR_PLAY}px !important; background: ${C.bgCard} !important; border: 1px solid ${C.borderColor} !important; border-radius: 50% !important; color: ${C.textPrimary} !important; font-size: 1.2rem !important; }
         .ab-font-dec .ab-face, .ab-font-inc .ab-face { background: ${C.bgCard} !important; color: ${C.textSecondary} !important; font-size: 0.85rem !important; font-weight: 700 !important; }
         /* the "all: unset !important" above wipes the UA disabled styling, so
            the at-boundary state (創1 / 啟22) would look identical to an enabled
