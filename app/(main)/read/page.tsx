@@ -227,13 +227,18 @@ const SPEEDS = [1, 1.25, 1.5, 1.75, 2] as const
 // visual bulk. A single source of truth for the box size, so the inline styles
 // and the injected stylesheet can never disagree.
 const AUDIO_BAR_BTN = 44
-// Two 44px rows + the vertical gap between them + the bar's own vertical
-// padding. Not a magic number in two places: the bar's inline `height`, the
-// page's `paddingTop` and every scroll-related constant below are all derived
-// from this.
-const AUDIO_BAR_ROW_GAP = 4
-const AUDIO_BAR_PAD_Y = 6
-const AUDIO_BAR_H = AUDIO_BAR_BTN * 2 + AUDIO_BAR_ROW_GAP + AUDIO_BAR_PAD_Y * 2
+// The circle the user actually sees, and the whole touch target. They are the
+// SAME box now. A first attempt (a 44px transparent button wrapping an
+// unchanged 28px circle) satisfied the letter of the 44px rule while looking
+// to the user like nothing had changed — and forced the bar to two rows / 104px
+// to fit the invisible padding, which is precisely what the user rejected as
+// 「新不如舊」. Equalising face and target is what makes the button genuinely
+// look bigger AND keeps the bar on one row.
+const AUDIO_BAR_FACE = AUDIO_BAR_BTN
+// One 44px row + the bar's own vertical padding.
+const AUDIO_BAR_ROW_GAP = 0
+const AUDIO_BAR_PAD_Y = 4
+const AUDIO_BAR_H = AUDIO_BAR_BTN + AUDIO_BAR_ROW_GAP + AUDIO_BAR_PAD_Y * 2
 // How far below the bar's bottom edge the page must start, so no line of
 // scripture is ever hidden behind it. The old figures were 52px (the bar) and
 // 72px (the page padding); both are now derived.
@@ -1395,14 +1400,16 @@ export default function ReadPage() {
       <audio ref={audioRef} preload="auto" />
 
       {/* ── Fixed Top Audio Bar ────────────────────────────────────────────
-          Two rows, laid out with flex + gap, no horizontal scroller.
-            Row 1: chapter chip (takes the slack) | ◀ ⏸/▶ ▶ grouped as a
-                   transport cluster, the way a media player reads.
-            Row 2: A− A+ | speed pill, spread to the bar's two edges.
-          Every control below is a 44x44 hit area (AUDIO_BAR_BTN) with the
-          visible circular face drawn smaller and centred inside it, so the bar
-          is thumb-sized without looking chunky. Behaviour is untouched: same
-          handlers, same disabled logic, same --read-font-size setProperty. */}
+          ONE row, back to its original footprint. An intermediate version
+          split it into two rows / 104px tall to give room for invisible 44px
+          padding around an unchanged 28px circle — the reader's verdict was
+          「button沒有大多少，佔據空間卻大了一倍，新不如舊」, which is exactly
+          what happened: same-looking buttons, double the bar.
+          So now the drawn circle IS the 44x44 target (AUDIO_BAR_FACE), the bar
+          is one row again, and the buttons genuinely look bigger.
+          Contents: chapter chip (takes the slack) | ◀ ⏸/▶ ▶ | A− A+ | speed.
+          Behaviour is untouched: same handlers, same disabled logic, same
+          --read-font-size setProperty. */}
       <div
         id="audioBar"
         style={{
@@ -1417,24 +1424,27 @@ export default function ReadPage() {
           zIndex: 1000,
           boxShadow: '0 2px 12px rgba(61,41,20,0.06)',
           display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'stretch',
-          justifyContent: 'center',
-          gap: `${AUDIO_BAR_ROW_GAP}px`,
+          // Single row again. The two-row / 104px version existed only to give
+          // room for invisible 44px padding around 28px artwork; now that the
+          // drawn circle IS the 44px target, one row holds everything and the
+          // bar is back to its original footprint.
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'flex-start',
+          gap: '6px',
           padding: `${AUDIO_BAR_PAD_Y}px 8px`,
-          // Deliberately NOT overflowX:auto any more — that scroller is what
-          // hid the font/speed controls off the right edge on a narrow phone.
           overflow: 'hidden',
         }}
       >
-        {/* ── Row 1: chapter label + transport ─────────────────────────── */}
+        {/* ── Row: chapter label + transport + font/speed ─────────────── */}
         <div
           style={{
             display: 'flex',
             alignItems: 'center',
-            gap: '8px',
+            gap: '6px',
             height: `${AUDIO_BAR_BTN}px`,
             minWidth: 0,
+            width: '100%',
           }}
         >
           {/* Chapter display — takes the remaining width, truncates if needed */}
@@ -1555,18 +1565,6 @@ export default function ReadPage() {
               ▶
             </span>
           </button>
-        </div>
-
-        {/* ── Row 2: font size + speed, spread to the bar's edges ───────── */}
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            height: `${AUDIO_BAR_BTN}px`,
-            minWidth: 0,
-          }}
-        >
           {/* Font size A− / A+ — pair kept together, setProperty unchanged */}
           <button
             onClick={() => setFontSize(fontSizeRef.current - 2)}
@@ -1662,19 +1660,27 @@ export default function ReadPage() {
       </div>
 
       {/* Audio bar CSS — injected once, no Tailwind override possible.
-          Two jobs here, and the split is what makes 44px targets cheap:
-          the BUTTON is the 44x44 hit area (transparent, no border), and the
-          inner .ab-face span is the small circle that is actually drawn. The
-          hit area is therefore larger than the artwork at zero visual cost. */}
+          The button and its inner .ab-face are now the SAME 44px box: the
+          circle the reader sees is the circle they aim at. An earlier version
+          kept a 28px circle inside a 44px transparent button, which technically
+          met the touch-target rule but looked unchanged to the user while
+          forcing the bar to two rows — rejected as 「新不如舊」. */}
       <style>{`
         .ab-btn { all: unset !important; box-sizing: border-box !important; min-width: unset !important; min-height: unset !important; }
         .ab-btn, .ab-prev, .ab-next, .ab-play, .ab-font-dec, .ab-font-inc { width: ${AUDIO_BAR_BTN}px !important; height: ${AUDIO_BAR_BTN}px !important; }
         .ab-btn { display: flex !important; align-items: center !important; justify-content: center !important; background: transparent !important; border: none !important; border-radius: 50% !important; cursor: pointer !important; transition: all 0.2s !important; padding: 0 !important; flex-shrink: 0 !important; }
-        /* the drawn face: same circles as before, just centred in the hit box */
+        /* The drawn face IS the touch target. A first attempt kept the artwork
+           at its old 28/38px and only widened an invisible 44px hit box
+           around it — which looked like nothing had changed while doubling
+           the bar's height, because the user still saw 28px circles floating
+           in 44px of empty air. Doubling the bar to hide an unchanged button
+           is not a fix. So the face now grows to a real 40px (44px for play)
+           and the bar goes back to a single 52px row: the button genuinely
+           looks bigger AND fits on one line. */
         .ab-face { display: flex !important; align-items: center !important; justify-content: center !important; box-sizing: border-box !important; border-radius: 50% !important; border: 1px solid ${C.borderColor} !important; transition: all 0.2s !important; }
-        .ab-prev .ab-face, .ab-next .ab-face { width: 28px !important; height: 28px !important; background: transparent !important; color: ${C.textSecondary} !important; font-size: 0.8rem !important; }
-        .ab-play .ab-face { width: 38px !important; height: 38px !important; background: ${C.bgCard} !important; border-color: ${C.borderColor} !important; color: ${C.textPrimary} !important; font-size: 1rem !important; }
-        .ab-font-dec .ab-face, .ab-font-inc .ab-face { width: 28px !important; height: 28px !important; background: ${C.bgCard} !important; color: ${C.textSecondary} !important; font-size: 0.8rem !important; font-weight: 700 !important; }
+        .ab-prev .ab-face, .ab-next .ab-face { width: ${AUDIO_BAR_FACE}px !important; height: ${AUDIO_BAR_FACE}px !important; background: transparent !important; color: ${C.textSecondary} !important; font-size: 1rem !important; }
+        .ab-play .ab-face { width: ${AUDIO_BAR_FACE}px !important; height: ${AUDIO_BAR_FACE}px !important; background: ${C.bgCard} !important; border-color: ${C.borderColor} !important; color: ${C.textPrimary} !important; font-size: 1.35rem !important; }
+        .ab-font-dec .ab-face, .ab-font-inc .ab-face { width: ${AUDIO_BAR_FACE}px !important; height: ${AUDIO_BAR_FACE}px !important; background: ${C.bgCard} !important; color: ${C.textSecondary} !important; font-size: 1rem !important; font-weight: 700 !important; }
         /* the "all: unset !important" above wipes the UA disabled styling, so
            the at-boundary state (創1 / 啟22) would look identical to an enabled
            button and give no affordance. Re-assert it explicitly, and dim the
