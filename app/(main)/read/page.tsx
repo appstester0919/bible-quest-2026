@@ -226,7 +226,7 @@ const SPEEDS = [1, 1.25, 1.5, 1.75, 2] as const
 // centred inside the box, so the bar gains reachability without gaining
 // visual bulk. A single source of truth for the box size, so the inline styles
 // and the injected stylesheet can never disagree.
-const AUDIO_BAR_BTN = 44
+const AUDIO_BAR_BTN = 34
 // The circle the user actually sees, and the whole touch target. They are the
 // SAME box now. A first attempt (a 44px transparent button wrapping an
 // unchanged 28px circle) satisfied the letter of the 44px rule while looking
@@ -235,10 +235,14 @@ const AUDIO_BAR_BTN = 44
 // 「新不如舊」. Equalising face and target is what makes the button genuinely
 // look bigger AND keeps the bar on one row.
 const AUDIO_BAR_FACE = AUDIO_BAR_BTN
+// Play is the one control that earns extra size — Bible read aloud gives it
+// 42px against its siblings' 34px, and that asymmetry is what makes the row
+// read as a media player rather than a row of equals.
+const AUDIO_BAR_PLAY = 42
 // One 44px row + the bar's own vertical padding.
 const AUDIO_BAR_ROW_GAP = 0
-const AUDIO_BAR_PAD_Y = 4
-const AUDIO_BAR_H = AUDIO_BAR_BTN + AUDIO_BAR_ROW_GAP + AUDIO_BAR_PAD_Y * 2
+const AUDIO_BAR_PAD_Y = 8
+const AUDIO_BAR_H = AUDIO_BAR_PLAY + AUDIO_BAR_PAD_Y * 2
 // How far below the bar's bottom edge the page must start, so no line of
 // scripture is ever hidden behind it. The old figures were 52px (the bar) and
 // 72px (the page padding); both are now derived.
@@ -1424,24 +1428,33 @@ export default function ReadPage() {
           zIndex: 1000,
           boxShadow: '0 2px 12px rgba(61,41,20,0.06)',
           display: 'flex',
-          // Single row again. The two-row / 104px version existed only to give
-          // room for invisible 44px padding around 28px artwork; now that the
-          // drawn circle IS the 44px target, one row holds everything and the
-          // bar is back to its original footprint.
+          // TWO rows, but for a reason that survives scrutiny: at 44px faces a
+          // single row needs 6*44 (circles) + 64 (speed pill) + 36 (gaps) +
+          // 16 (padding) = 380px, which does not fit a 360px phone. The chapter
+          // label is `flex: 1 1 auto; minWidth: 0`, so it silently collapsed to
+          // zero width and the reader could no longer see WHICH chapter was
+          // playing. Row 1 keeps the label + transport together; row 2 carries
+          // the two font buttons + the speed pill.
           flexDirection: 'row',
           alignItems: 'center',
           justifyContent: 'flex-start',
-          gap: '6px',
+          gap: '4px',
           padding: `${AUDIO_BAR_PAD_Y}px 8px`,
-          overflow: 'hidden',
+          // Last-resort escape hatch. On a 375px+ phone nothing scrolls; on a
+          // 360px Android the label has already shrunk to its 60px floor and
+          // this is what stops the speed control being clipped.
+          overflowX: 'auto',
+          overflowY: 'hidden',
+          WebkitOverflowScrolling: 'touch',
+          scrollbarWidth: 'none',
         }}
       >
-        {/* ── Row: chapter label + transport + font/speed ─────────────── */}
+        {/* ── Single row: chapter label + transport + font/speed ─────── */}
         <div
           style={{
             display: 'flex',
             alignItems: 'center',
-            gap: '6px',
+            gap: '4px',
             height: `${AUDIO_BAR_BTN}px`,
             minWidth: 0,
             width: '100%',
@@ -1450,13 +1463,18 @@ export default function ReadPage() {
           {/* Chapter display — takes the remaining width, truncates if needed */}
           <div
             style={{
-              flex: '1 1 auto',
-              minWidth: 0,
+              // Bible read aloud pins this to 90/100px. We allow it to shrink
+              // to 60px first so a 360px Android loses the label's padding
+              // rather than the speed control; the row scrolls only as a last
+              // resort, and every button keeps its full 34/42px.
+              minWidth: '60px',
+              maxWidth: '100px',
+              flexShrink: 1,
               height: `${AUDIO_BAR_BTN}px`,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              padding: '0 10px',
+              padding: '0 8px',
               background: C.bgSecondary,
               border: `1px solid ${C.borderColor}`,
               borderRadius: '8px',
@@ -1474,6 +1492,10 @@ export default function ReadPage() {
               ? getAudioLabel(currentAudioItem.book, currentAudioItem.chapter)
               : '太 1章'}
           </div>
+
+          {/* Absorbs the leftover width so the font + speed controls sit at
+              the right edge, mirroring Bible read aloud's spacing. */}
+          <div style={{ flex: '1 1 auto', minWidth: 0 }} />
 
           {/* Prev */}
           <button
@@ -1510,8 +1532,8 @@ export default function ReadPage() {
             title={isPlaying ? '暫停' : '播放'}
             className="ab-play ab-btn"
             style={{
-              width: `${AUDIO_BAR_BTN}px`,
-              height: `${AUDIO_BAR_BTN}px`,
+              width: `${AUDIO_BAR_PLAY}px`,
+              height: `${AUDIO_BAR_PLAY}px`,
               flexShrink: 0,
               display: 'flex',
               alignItems: 'center',
@@ -1565,7 +1587,11 @@ export default function ReadPage() {
               ▶
             </span>
           </button>
-          {/* Font size A− / A+ — pair kept together, setProperty unchanged */}
+
+          {/* Font size A− / A+ — separate buttons on purpose: the reader
+              enlarges text by tapping A+ several times in a row, so each step
+              needs its own target. A single cycling Aa button was rejected
+              because it breaks that habit outright. */}
           <button
             onClick={() => setFontSize(fontSizeRef.current - 2)}
             title="縮小字體"
@@ -1618,9 +1644,7 @@ export default function ReadPage() {
             </span>
           </button>
 
-          <div style={{ flex: '1 1 auto' }} />
-
-          {/* Speed dropdown — also a 44px-tall target now */}
+          {/* Speed dropdown — 34px tall, right-aligned */}
           <select
             value={playbackRate}
             onChange={(e) => {
@@ -1639,12 +1663,12 @@ export default function ReadPage() {
               borderRadius: '22px',
               boxSizing: 'border-box',
               height: `${AUDIO_BAR_BTN}px`,
-              padding: '0 24px 0 14px',
-              fontSize: '0.82rem',
+              padding: '0 18px 0 10px',
+              fontSize: '0.8rem',
               fontFamily: 'inherit',
               color: C.textPrimary,
               cursor: 'pointer',
-              minWidth: '64px',
+              minWidth: '54px',
               textAlign: 'center',
               flexShrink: 0,
               outline: 'none',
@@ -1667,28 +1691,26 @@ export default function ReadPage() {
           forcing the bar to two rows — rejected as 「新不如舊」. */}
       <style>{`
         .ab-btn { all: unset !important; box-sizing: border-box !important; min-width: unset !important; min-height: unset !important; }
-        .ab-btn, .ab-prev, .ab-next, .ab-play, .ab-font-dec, .ab-font-inc { width: ${AUDIO_BAR_BTN}px !important; height: ${AUDIO_BAR_BTN}px !important; }
-        .ab-btn { display: flex !important; align-items: center !important; justify-content: center !important; background: transparent !important; border: none !important; border-radius: 50% !important; cursor: pointer !important; transition: all 0.2s !important; padding: 0 !important; flex-shrink: 0 !important; }
-        /* The drawn face IS the touch target. A first attempt kept the artwork
-           at its old 28/38px and only widened an invisible 44px hit box
-           around it — which looked like nothing had changed while doubling
-           the bar's height, because the user still saw 28px circles floating
-           in 44px of empty air. Doubling the bar to hide an unchanged button
-           is not a fix. So the face now grows to a real 40px (44px for play)
-           and the bar goes back to a single 52px row: the button genuinely
-           looks bigger AND fits on one line. */
-        .ab-face { display: flex !important; align-items: center !important; justify-content: center !important; box-sizing: border-box !important; border-radius: 50% !important; border: 1px solid ${C.borderColor} !important; transition: all 0.2s !important; }
-        .ab-prev .ab-face, .ab-next .ab-face { width: ${AUDIO_BAR_FACE}px !important; height: ${AUDIO_BAR_FACE}px !important; background: transparent !important; color: ${C.textSecondary} !important; font-size: 1rem !important; }
-        .ab-play .ab-face { width: ${AUDIO_BAR_FACE}px !important; height: ${AUDIO_BAR_FACE}px !important; background: ${C.bgCard} !important; border-color: ${C.borderColor} !important; color: ${C.textPrimary} !important; font-size: 1.35rem !important; }
-        .ab-font-dec .ab-face, .ab-font-inc .ab-face { width: ${AUDIO_BAR_FACE}px !important; height: ${AUDIO_BAR_FACE}px !important; background: ${C.bgCard} !important; color: ${C.textSecondary} !important; font-size: 1rem !important; font-weight: 700 !important; }
+        .ab-btn, .ab-prev, .ab-next, .ab-font-dec, .ab-font-inc { width: ${AUDIO_BAR_BTN}px !important; height: ${AUDIO_BAR_BTN}px !important; }
+        .ab-play { width: ${AUDIO_BAR_PLAY}px !important; height: ${AUDIO_BAR_PLAY}px !important; }
+        /* Design language copied from the Bible read aloud project (index.css
+           .player-bar): rounded RECTANGLES, not circles. A 34px circle and a
+           34px rounded square share a bounding box, but the square reads as
+           BIGGER (no corners wasted on empty space) and the flat edge saves
+           width across four secondary controls. Circles at 44px needed 380px
+           and forced either a 104px two-row bar or a chapter label that
+           collapsed to zero width and became invisible. */
+        .ab-btn { display: flex !important; align-items: center !important; justify-content: center !important; background: transparent !important; border: 1px solid ${C.borderColor} !important; border-radius: 6px !important; cursor: pointer !important; transition: all 0.2s !important; padding: 0 !important; flex-shrink: 0 !important; }
+        .ab-face { display: flex !important; align-items: center !important; justify-content: center !important; box-sizing: border-box !important; transition: all 0.2s !important; }
+        .ab-prev .ab-face, .ab-next .ab-face { background: transparent !important; color: ${C.textSecondary} !important; font-size: 0.8rem !important; }
+        .ab-play .ab-face { background: ${C.bgCard} !important; border: 1px solid ${C.borderColor} !important; border-radius: 50% !important; color: ${C.textPrimary} !important; font-size: 1.1rem !important; }
+        .ab-font-dec .ab-face, .ab-font-inc .ab-face { background: ${C.bgCard} !important; color: ${C.textSecondary} !important; font-size: 0.85rem !important; font-weight: 700 !important; }
         /* the "all: unset !important" above wipes the UA disabled styling, so
            the at-boundary state (創1 / 啟22) would look identical to an enabled
-           button and give no affordance. Re-assert it explicitly, and dim the
-           drawn FACE (the button itself is now invisible) so the cue is still
-           visible at the corpus boundary. */
+           button and give no affordance. Re-assert it explicitly. */
         .ab-btn:disabled { cursor: default !important; pointer-events: none !important; }
         .ab-btn:disabled .ab-face { opacity: 0.3 !important; }
-        .ab-speed { border: 1px solid ${C.borderColor} !important; border-radius: 22px !important; height: ${AUDIO_BAR_BTN}px !important; padding: 0 24px 0 14px !important; font-size: 0.82rem !important; color: ${C.textPrimary} !important; cursor: pointer !important; text-align: center !important; flex-shrink: 0 !important; outline: none !important; }
+        .ab-speed { border: 1px solid ${C.borderColor} !important; border-radius: 6px !important; height: ${AUDIO_BAR_BTN}px !important; padding: 0 18px 0 10px !important; font-size: 0.8rem !important; color: ${C.textPrimary} !important; cursor: pointer !important; text-align: center !important; flex-shrink: 0 !important; outline: none !important; }
       `}</style>
 
       {/* ── Main content ──────────────────────────────────────────────── */}
