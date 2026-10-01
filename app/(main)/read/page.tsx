@@ -1833,7 +1833,7 @@ export default function ReadPage() {
               border: `1px solid ${rangeMode ? C.accentGold : C.borderColor}`,
               borderRadius: '8px',
               color: C.textPrimary,
-              fontSize: '0.95rem',
+              fontSize: '1.05rem',
               fontWeight: 500,
               cursor: 'pointer',
               WebkitTapHighlightColor: 'transparent',
@@ -1883,7 +1883,7 @@ export default function ReadPage() {
                     borderRadius: '8px',
                     cursor: 'pointer',
                     color: startBook ? C.textPrimary : C.textMuted,
-                    fontSize: '0.95rem',
+                    fontSize: '1.05rem',
                     minHeight: '44px',
                     display: 'flex',
                     alignItems: 'center',
@@ -1891,12 +1891,18 @@ export default function ReadPage() {
                     userSelect: 'none',
                   }}
                 >
-                  <span>
+                  <span
+                    style={{
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
                     {startBook
                       ? `${startBook.name}${startChapter ? ` 第${startChapter}章` : ''}`
                       : '選擇起始書卷'}
                   </span>
-                  <span style={{ fontSize: '0.7rem', color: C.textMuted }}>
+                  <span style={{ fontSize: '0.7rem', color: C.textMuted, flexShrink: 0 }}>
                     ▼
                   </span>
                 </div>
@@ -2006,7 +2012,7 @@ export default function ReadPage() {
                       borderRadius: '8px',
                       cursor: 'pointer',
                       color: endBook ? C.textPrimary : C.textMuted,
-                      fontSize: '0.95rem',
+                      fontSize: '1.05rem',
                       minHeight: '44px',
                       display: 'flex',
                       alignItems: 'center',
