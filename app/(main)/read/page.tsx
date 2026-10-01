@@ -1728,13 +1728,14 @@ export default function ReadPage() {
 
       {/* ── Main content ──────────────────────────────────────────────── */}
       <div
-        // Horizontal padding was 16 (page) + 20 (card) = 36px per side, which
-        // on a 360px phone left only 288px of text — 14 CJK chars per line.
-        // The card already carries a border + shadow, so the outer padding was
-        // pure dead air. Now 0 + 14 = 14px per side → 332px of text (~18% more
-        // per screen). Vertical padding is unchanged; the bottom tab bar needs
-        // its own clearance and that is handled separately.
-        style={{ maxWidth: '900px', margin: '0 auto', padding: '20px 10px' }}
+        // Line efficiency is the goal here. Budget per side: 6 (page) + 10
+        // (card) + 5 (border + gold accent) = 21px, plus a 18px verse-number
+        // gutter and a 6px gap, so 55px of a 390px screen is not text.
+        // That leaves 335px — 85.9%. At 20px per CJK glyph that is 16
+        // characters per line, up from 15, and on a 360px Android from 13 to
+        // 16. The card keeps a visible inset so it still reads as a floating
+        // card rather than bleeding into the screen edge.
+        style={{ maxWidth: '900px', margin: '0 auto', padding: '20px 6px' }}
       >
         {/* ── Range Selector ─────────────────────────────────────── */}
         <div
@@ -2410,12 +2411,10 @@ export default function ReadPage() {
                     {
                       background: C.bgCard,
                       borderRadius: '10px',
-                      // 20px → 14px. See the note on the page wrapper: the
-                      // card's own inset was the bigger half of the wasted
-                      // space, and the text does not need 20px of breathing
-                      // room to stay readable — the 4px gold left accent
-                      // already separates the card from the page.
-                      padding: '18px 14px',
+                      // 20px → 10px horizontally; vertical stays generous at
+                      // 18px so verses still separate vertically. See the note
+                      // on the page wrapper for the efficiency budget.
+                      padding: '18px 10px',
                       marginBottom: '20px',
                       border: `1px solid ${C.borderLight}`,
                       borderLeft: `4px solid ${C.accentGold}`,
@@ -2468,7 +2467,7 @@ export default function ReadPage() {
                       style={{
                         marginBottom: '12px',
                         display: 'flex',
-                        gap: '8px',
+                        gap: '4px',
                         alignItems: 'flex-start',
                       }}
                     >
@@ -2478,12 +2477,21 @@ export default function ReadPage() {
                             fontFamily: 'Georgia, serif',
                             color: C.verseNumber,
                             fontWeight: 500,
-                            fontSize: '0.75em',
-                            // 2.5em reserved room for up to 3 digits (119),
-                            // but 90% of verses are 1-2 digits. `minWidth` with
-                            // flexShrink:0 still allows the column to be just
-                            // wide enough, so this is a floor not a hard lock.
-                            minWidth: '1.8em',
+                            // 0.7em: the number is a reference marker, not
+                            // content. Narrowing the column from 0.75 to 0.7
+                            // takes the gutter from 18px to 17px, and the gap
+                            // from 6 to 4 gives back 2px more. Right-alignment
+                            // means 1-digit and 2-digit verses still line up
+                            // in one clean column.
+                            fontSize: '0.7em',
+                            // 2.5em -> 1.2em. This was the single largest
+                            // waste: it reserved room for a 3-digit verse
+                            // (119) although ~90% of verses are 1-2 digits.
+                            // 1.2em at this 0.75em font is 18px, which holds
+                            // two digits plus the period, and because the
+                            // column is right-aligned a 1-digit verse still
+                            // lines up under the 2-digit ones above it.
+                            minWidth: '1.15em',
                             textAlign: 'right',
                             flexShrink: 0,
                             paddingTop: '2px',
