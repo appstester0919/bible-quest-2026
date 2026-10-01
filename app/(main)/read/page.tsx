@@ -226,7 +226,7 @@ const SPEEDS = [1, 1.25, 1.5, 1.75, 2] as const
 // centred inside the box, so the bar gains reachability without gaining
 // visual bulk. A single source of truth for the box size, so the inline styles
 // and the injected stylesheet can never disagree.
-const AUDIO_BAR_BTN = 34
+const AUDIO_BAR_BTN = 32
 // The circle the user actually sees, and the whole touch target. They are the
 // SAME box now. A first attempt (a 44px transparent button wrapping an
 // unchanged 28px circle) satisfied the letter of the 44px rule while looking
@@ -238,7 +238,7 @@ const AUDIO_BAR_FACE = AUDIO_BAR_BTN
 // Play is the one control that earns extra size — Bible read aloud gives it
 // 42px against its siblings' 34px, and that asymmetry is what makes the row
 // read as a media player rather than a row of equals.
-const AUDIO_BAR_PLAY = 42
+const AUDIO_BAR_PLAY = 40
 // One 44px row + the bar's own vertical padding.
 const AUDIO_BAR_ROW_GAP = 0
 const AUDIO_BAR_PAD_Y = 8
@@ -1469,8 +1469,8 @@ export default function ReadPage() {
               // to 60px first so a 360px Android loses the label's padding
               // rather than the speed control; the row scrolls only as a last
               // resort, and every button keeps its full 34/42px.
-              minWidth: '60px',
-              maxWidth: '100px',
+              minWidth: '56px',
+              maxWidth: '80px',
               flexShrink: 1,
               height: `${AUDIO_BAR_BTN}px`,
               display: 'flex',
@@ -1498,8 +1498,12 @@ export default function ReadPage() {
               : '太 1章'}
           </div>
 
-          {/* Absorbs the leftover width so the font + speed controls sit at
-              the right edge, mirroring Bible read aloud's spacing. */}
+          {/* Three groups with EQUAL gaps between them: [書卷] [transport]
+              [font+speed]. Two flexible spacers share all the slack evenly
+              (flex-grow 1 each), so the transport cluster is centred rather
+              than glued to the font group. The visible gap between groups is
+              the constant 8px outer gap; the spacers only add breathing room
+              on top. */}
           <div style={{ flex: '1 1 auto', minWidth: 0 }} />
 
           {/* Prev */}
@@ -1593,6 +1597,10 @@ export default function ReadPage() {
             </span>
           </button>
 
+          {/* The second flexible spacer — see the note above. Together the two
+              spacers split the slack so all three groups sit symmetrically. */}
+          <div style={{ flex: '1 1 auto', minWidth: 0 }} />
+
           {/* Font size A− / A+ — separate buttons on purpose: the reader
               enlarges text by tapping A+ several times in a row, so each step
               needs its own target. A single cycling Aa button was rejected
@@ -1673,7 +1681,7 @@ export default function ReadPage() {
               fontFamily: 'inherit',
               color: C.textPrimary,
               cursor: 'pointer',
-              minWidth: '54px',
+              minWidth: '50px',
               textAlign: 'center',
               flexShrink: 0,
               outline: 'none',
@@ -1697,7 +1705,7 @@ export default function ReadPage() {
       <style>{`
         .ab-btn { all: unset !important; box-sizing: border-box !important; min-width: unset !important; min-height: unset !important; }
         .ab-btn, .ab-prev, .ab-next, .ab-font-dec, .ab-font-inc { width: ${AUDIO_BAR_BTN}px !important; height: ${AUDIO_BAR_BTN}px !important; }
-        .ab-play { width: ${AUDIO_BAR_PLAY}px !important; height: ${AUDIO_BAR_PLAY}px !important; border: none !important; background: transparent !important; }
+        .ab-play.ab-btn { width: ${AUDIO_BAR_PLAY}px !important; height: ${AUDIO_BAR_PLAY}px !important; border: none !important; background: transparent !important; border-radius: 0 !important; }
         /* Design language copied from the Bible read aloud project (index.css
            .player-bar): rounded RECTANGLES, not circles. A 34px circle and a
            34px rounded square share a bounding box, but the square reads as
