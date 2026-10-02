@@ -1,4 +1,9 @@
 import { addDays, daysBetween } from './readingDate'
+import { generateReadingPlan, type EnrollmentLite } from './bible/planGenerator'
+import type { BookMeta } from './bible/lookup'
+
+/** 0-based index of 馬太福音 — the first NT book. */
+const NT_FIRST_BOOK_INDEX = 39
 
 // ============================================================================
 // Reading-progress catch-up analysis.
@@ -34,6 +39,26 @@ export interface GapBlock {
 export type CatchUpCase =
   /** No gaps: on schedule, or ahead. Nothing to offer. */
   | { kind: 'on_track' }
+  /**
+   * Behind, but ONLY the recent part is still catch-up-able.
+   *
+   * This is the priority case and it is checked BEFORE the >7-day branches.
+   * Rationale: a reader who is 23 days behind has already made peace with
+   * having skipped the old material — offering to re-read it is noise, and
+   * two competing buttons make them stop reading. But the LAST few days are
+   * genuinely cheap to recover (≤7 days = one week's reading), and that is
+   * the decision they can still act on. So the recent window wins, alone.
+   */
+  | {
+      kind: 'catch_up'
+      /** Days in the recent, still-recoverable window. */
+      behindDays: number
+      /** Every chapter scheduled across that window, in order. */
+      missedRefs: string[]
+      firstGap: GapBlock
+      /** Total missed days, including the old ones we deliberately ignore. */
+      totalBehindDays: number
+    }
   /** Behind, but small enough to read in one sitting. */
   | {
       kind: 'small'
@@ -124,8 +149,38 @@ export function analyseCatchUp(
 
   const missedRefs = missed.flatMap((m) => m.refs)
   const behindDays = missed.length
+
   const firstGap = blocks[0]
   const lastGap = blocks[blocks.length - 1]
+
+  // ── Priority: the most recent gap, if it is still catch-up-able ──────────
+  // Checked BEFORE the >7-day branches, and deliberately keyed on the last
+  // gap BLOCK rather than a raw 7-day slice.
+  //
+  // A slice of the last 7 missed days is almost never contiguous: any day the
+  // reader did manage to read sits inside it and splits it in two. Keying on
+  // the block means the offer is always "read this unbroken run", which is
+  // both answerable in one go and safe to re-anchor onto (a block's first day
+  // cannot swallow a day the reader actually read).
+  //
+  // The priority is the whole point. A reader 23 days behind has already made
+  // peace with the old material; offering it alongside the recent week as a
+  // second button is what made the earlier version confusing. The last block
+  // is the only part still cheap to recover, so it takes the card alone.
+  if (lastGap.days <= CATCHUP_MAX_DAYS) {
+    return {
+      kind: 'catch_up',
+      behindDays: lastGap.days,
+      missedRefs: [...lastGap.refs],
+      firstGap: {
+        firstDate: lastGap.firstDate,
+        lastDate: lastGap.lastDate,
+        days: lastGap.days,
+        refs: [...lastGap.refs],
+      },
+      totalBehindDays: behindDays,
+    }
+  }
 
   if (behindDays <= CATCHUP_MAX_DAYS) {
     return { kind: 'small', behindDays, missedRefs, firstGap }
@@ -150,6 +205,71 @@ export function shortRef(ref: string): string {
   // renders as 「馬太」. Fall back to the full name if nothing is left.
   const short = book.replace(/(福音|記|書|篇|歌|詩|箴|道|錄|傳|志|考)$/u, '')
   return chapter ? `${short || book} ${chapter}` : short || book
+}
+
+/**
+ * Where in the canon a re-anchored plan must START reading.
+ *
+ * WHY THIS EXISTS — a bug, not a feature
+ *
+ * `reanchorPlan` used to move only `started_at`. The plan generator, however,
+ * starts reading at the enrollment's own start position
+ * (`ot_start_book_index` / `ot_start_chapter`, etc.), which stayed at the
+ * ORIGINAL choice. So re-anchoring to 5/9 still began at 詩篇 51 on 5/9 — the
+ * dashboard promised "today you'll read 哥林多前 7" and then served
+ * 詩篇 51. The confirm dialog was confidently wrong.
+ *
+ * The fix is to derive the start position from the chapter the anchor day was
+ * supposed to read, so day one of the new plan is the chapter the reader
+ * actually chose to restart from.
+ */
+export interface AnchorPosition {
+  book_index: number
+  chapter: number
+}
+
+/**
+ * Compute the start position for a plan re-anchored on `anchorDate`.
+ *
+ * For the parallel ('2-5') reading order both testaments advance together, so
+ * the anchor day's refs are the SAME single position and we simply return its
+ * first chapter. For the sequential orders ('nt_then_ot' / 'ot_then_nt') the
+ * active testament on that day depends on whether the primary is already
+ * finished, so the day's refs can span BOTH testaments — in that case the plan
+ * is mid-flight and re-anchoring is not a simple matter of "one book, one
+ * chapter"; we return the first ref and let the caller's start position keep
+ * the sequential offset, which the plan generator already honours.
+ *
+ * @param enrollment the CURRENT enrollment (its start position is ignored)
+ * @param books     canonical book list
+ * @param anchorDate the day the reader chose to restart from
+ * @returns the book index + chapter to start from, or null if unresolvable
+ */
+export function anchorPositionFor(
+  enrollment: EnrollmentLite,
+  books: BookMeta[],
+  anchorDate: string,
+): AnchorPosition | null {
+  if (books.length === 0) return null
+
+  // The plan as it stands today, keyed by date — the anchor day must be one
+  // it actually scheduled, otherwise there is nothing to restart from.
+  const current = generateReadingPlan(enrollment, books, 400)
+  const refs = current.get(anchorDate) ?? []
+  if (refs.length === 0) return null
+
+  // Take the chapter the anchor day would have read FIRST. For a single
+  // testament or a parallel order that is exactly the restart point; for a
+  // sequential order mid-flight it is the correct head of the restart run.
+  const firstRef = refs[0]
+  const match = firstRef.match(/^(.+?)\s+(\d+)$/)
+  if (!match) return null
+  const bookName = match[1]
+  const chapter = Number(match[2])
+  const book = books.find((b) => b.name === bookName)
+  if (!book || !Number.isFinite(chapter) || chapter < 1) return null
+
+  return { book_index: book.index, chapter }
 }
 
 /** "馬太 1 – 馬太 3" for a span, or a single ref when the span is one chapter. */

@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import { reanchorPlan } from '@/lib/catchupActions'
-import { readingDate } from '@/lib/readingDate'
+import { readingDate, addDays, daysBetween } from '@/lib/readingDate'
 import {
   generateReadingPlan,
   type EnrollmentLite,
@@ -10,7 +10,9 @@ import {
 import type { BookMeta } from '@/lib/bible/lookup'
 import {
   analyseCatchUp,
+  anchorPositionFor,
   describeRefSpan,
+  shortRef,
   type CatchUpCase,
   type GapBlock,
 } from '@/lib/readingProgress'
@@ -51,6 +53,9 @@ export function CatchUpCard({ enrollment, books, completedDates }: Props) {
   const [pending, setPending] = useState<{
     date: string
     label: string
+    /** Canon position the new plan must start from — see anchorPositionFor. */
+    bookIndex: number
+    chapter: number
   } | null>(null)
 
   const today = readingDate()
@@ -69,26 +74,78 @@ export function CatchUpCard({ enrollment, books, completedDates }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enrollment, books, completedDates, today])
 
+  // The chapters this anchor is actually about — the run of days being
+  // chased. Without this the dialog showed only an unexplained start/end
+  // span (「詩 51 – 路加 15」) that was neither the missed range nor the
+  // plan's remainder, so it answered no question the reader had.
+  const anchorRefs: string[] = useMemo(() => {
+    if (!pending || books.length === 0) return []
+    const plan = generateReadingPlan(enrollment, books, 400)
+    const out: string[] = []
+    for (
+      let d = pending.date;
+      daysBetween(
+        d,
+        addDays(
+          pending.date,
+          analysis.kind === 'catch_up' ? analysis.behindDays - 1 : 0,
+        ),
+      ) >= 0;
+      d = addDays(d, 1)
+    ) {
+      out.push(...(plan.get(d) ?? []))
+    }
+    return out
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pending, books, enrollment, analysis])
+
   if (analysis.kind === 'on_track') return null
 
   // ── Preview the schedule a given anchor would produce ─────────────────────
   // The plan is a pure function of started_at, so the consequence of an
   // anchor is computable before anything is written. This is what the user
   // confirms against — never a vague promise of "we'll adjust it".
-  const previewFor = (anchor: string): string[] => {
+  // The preview has to move the start POSITION too, not just the date —
+  // otherwise it shows the very schedule the old code would have produced,
+  // which is how the confirm dialog came to promise chapters the plan would
+  // never serve.
+  const previewFor = (
+    anchor: string,
+    bookIndex: number,
+    chapter: number,
+  ): string[] => {
+    const isNT = bookIndex >= 39
     const plan = generateReadingPlan(
-      { ...enrollment, started_at: anchor },
+      {
+        ...enrollment,
+        started_at: anchor,
+        start_book_index: bookIndex,
+        start_chapter: chapter,
+        ...(isNT
+          ? { nt_start_book_index: bookIndex, nt_start_chapter: chapter }
+          : { ot_start_book_index: bookIndex, ot_start_chapter: chapter }),
+      },
       books,
       400,
     )
     return plan.get(readingDate()) ?? []
   }
 
-  const applyAnchor = async (anchor: string) => {
+  const applyAnchor = async (target: {
+    date: string
+    bookIndex: number
+    chapter: number
+  }) => {
+    const anchor = target.date
     setBusy(true)
     setError(null)
     try {
-      const res = await reanchorPlan(enrollment.id, anchor)
+      const res = await reanchorPlan(
+        enrollment.id,
+        anchor,
+        target.bookIndex,
+        target.chapter,
+      )
       if (!res.ok) setError(res.error)
       else setPending(null)
       // Reload so the dashboard recomputes the plan and progress bar.
@@ -98,6 +155,96 @@ export function CatchUpCard({ enrollment, books, completedDates }: Props) {
     } finally {
       setBusy(false)
     }
+  }
+
+  // ── Priority case: only the recent week is still worth chasing ───────────
+  // Checked first, before 'small' and 'reanchor', because a reader 23 days
+  // behind does not want to be told about the 23 days — they want the last
+  // week, which is the only part that is still cheap. Offering both windows
+  // side by side is what made the earlier version confusing.
+  if (analysis.kind === 'catch_up') {
+    const gap = analysis.firstGap
+    const pos = anchorPositionFor(enrollment, books, gap.firstDate)
+    if (!pos) return null // position unresolvable — better silent than wrong
+    const href = buildCatchUpHref(analysis.missedRefs)
+    return (
+      <div className="card" style={{ borderColor: 'var(--color-success)' }}>
+        <p className="h-eyebrow">📖 追趕進度</p>
+        <p className="font-extrabold text-lg mt-1">
+          最近 {analysis.behindDays} 日未讀，共 {analysis.missedRefs.length} 章
+        </p>
+        <p className="text-sm mt-1" style={{ color: 'var(--color-ink-soft)' }}>
+          {D(gap.firstDate)} – {D(gap.lastDate)} · {describeRefSpan(gap.refs)}
+        </p>
+
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() =>
+            setPending({
+              date: gap.firstDate,
+              label: `追趕最近 ${analysis.behindDays} 日`,
+              bookIndex: pos.book_index,
+              chapter: pos.chapter,
+            })
+          }
+          className="btn btn-primary mt-3 gap-2"
+          style={{
+            minHeight: 56,
+            width: '100%',
+            flexDirection: 'column',
+            alignItems: 'flex-start',
+            paddingTop: 10,
+            paddingBottom: 10,
+            textTransform: 'none',
+            letterSpacing: 0,
+            lineHeight: 1.3,
+          }}
+        >
+          <span className="flex items-center gap-2 w-full">
+            <span style={{ fontSize: 17 }}>⏩</span>
+            <span>追趕呢 {analysis.behindDays} 日</span>
+          </span>
+          <span
+            className="w-full"
+            style={{
+              fontSize: 13,
+              fontWeight: 700,
+              opacity: 0.85,
+              paddingLeft: 29,
+              whiteSpace: 'normal',
+            }}
+          >
+            {describeRefSpan(gap.refs)}
+          </span>
+          <span
+            className="w-full"
+            style={{
+              fontSize: 12,
+              fontWeight: 600,
+              opacity: 0.7,
+              paddingLeft: 29,
+              whiteSpace: 'normal',
+            }}
+          >
+            讀完之後，今日就由 {shortRef(gap.refs[0] ?? '')} 開始
+          </span>
+        </button>
+
+        <p className="text-xs mt-2" style={{ color: 'var(--color-ink-soft)' }}>
+          {analysis.totalBehindDays > analysis.behindDays
+            ? `更早嘅 ${analysis.totalBehindDays - analysis.behindDays} 日已經唔追。想重新編排請到「設定」。`
+            : '讀完之後，今日功課會自動接返原定進度。'}
+        </p>
+        <a
+          href={href}
+          className="text-xs mt-1 block"
+          style={{ color: 'var(--color-ink-soft)' }}
+        >
+          或者逐章慢慢補讀 →
+        </a>
+      </div>
+    )
   }
 
   // ── Case 1: ≤ 7 days behind — read them, don't rewrite the plan ───────────
@@ -143,7 +290,16 @@ export function CatchUpCard({ enrollment, books, completedDates }: Props) {
       key={gap.firstDate}
       type="button"
       disabled={busy}
-      onClick={() => setPending({ date: gap.firstDate, label: title })}
+      onClick={() => {
+        const pos = anchorPositionFor(enrollment, books, gap.firstDate)
+        if (!pos) return
+        setPending({
+          date: gap.firstDate,
+          label: title,
+          bookIndex: pos.book_index,
+          chapter: pos.chapter,
+        })
+      }}
       className={`btn ${variant === 'primary' ? 'btn-primary' : 'btn-secondary'} gap-2`}
       style={{
         minHeight: 56,
@@ -248,12 +404,24 @@ export function CatchUpCard({ enrollment, books, completedDates }: Props) {
             <dl className="mt-3 text-sm space-y-2">
               <div className="flex justify-between gap-3">
                 <dt style={{ color: 'var(--color-ink-soft)' }}>由呢日開始</dt>
-                <dd className="font-bold">{D(pending.date)}</dd>
+                <dd className="font-bold">
+                  {D(pending.date)} · {shortRef(anchorRefs[0] ?? '')}
+                </dd>
               </div>
               <div className="flex justify-between gap-3">
                 <dt style={{ color: 'var(--color-ink-soft)' }}>今日讀經</dt>
                 <dd className="font-bold text-right">
-                  {describeRefSpan(previewFor(pending.date))}
+                  {describeRefSpan(
+                    previewFor(
+                      pending.date,
+                      pending.bookIndex,
+                      pending.chapter,
+                    ),
+                  )}
+                </dd>
+                <dt style={{ color: 'var(--color-ink-soft)' }}>要補讀</dt>
+                <dd className="font-bold text-right">
+                  {describeRefSpan(anchorRefs)}
                 </dd>
               </div>
               <div className="flex justify-between gap-3">
@@ -291,7 +459,13 @@ export function CatchUpCard({ enrollment, books, completedDates }: Props) {
               <button
                 type="button"
                 disabled={busy}
-                onClick={() => applyAnchor(pending.date)}
+                onClick={() =>
+                  applyAnchor({
+                    date: pending.date,
+                    bookIndex: pending.bookIndex,
+                    chapter: pending.chapter,
+                  })
+                }
                 className="btn btn-primary flex-1"
                 style={{ minHeight: 48 }}
               >
