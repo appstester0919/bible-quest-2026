@@ -5,6 +5,76 @@ import type { BookMeta } from './bible/lookup'
 /** 0-based index of 馬太福音 — the first NT book. */
 const NT_FIRST_BOOK_INDEX = 39
 
+/** The canon index a re-anchored plan should read from, and how. */
+export interface AnchorPosition {
+  book_index: number
+  chapter: number
+}
+
+/**
+ * The enrollment as it must be rewritten for a plan re-anchored at `pos`.
+ *
+ * WHY reading_order HAS TO MOVE — the bug that made the dialog lie
+ *
+ * The plan generator treats `reading_order` as deciding which testament is
+ * PRIMARY. Under `'ot_then_nt'` the OT is primary and is read first, from
+ * `ot_start_chapter`. Re-anchoring onto an NT chapter by rewriting only the
+ * start columns therefore changed nothing: the plan still began at 詩篇 51 and
+ * the confirm dialog promised 哥林多前 7 while the plan served 詩篇 111.
+ *
+ * When the reader restarts INSIDE the secondary testament, the two testaments
+ * have to swap roles, otherwise the new start position is never consulted. So
+ * the order is flipped to match whichever testament the anchor sits in, and
+ * both start columns are written explicitly.
+ *
+ * This lives in one place on purpose: the confirm dialog's preview and the
+ * server action that performs the write must not be able to disagree.
+ */
+export function reanchoredEnrollment<
+  E extends EnrollmentLite & Record<string, unknown>,
+>(enrollment: E, pos: AnchorPosition): EnrollmentLite {
+  const anchorIsNT = pos.book_index >= NT_FIRST_BOOK_INDEX
+  const order = enrollment.reading_order ?? null
+  const isSequential = order === 'nt_then_ot' || order === 'ot_then_nt'
+
+  const base: EnrollmentLite = {
+    ...enrollment,
+    started_at: null,
+    start_book_index: pos.book_index,
+    start_chapter: pos.chapter,
+  }
+
+  if (!isSequential) {
+    // Single-testament or parallel: the columns the generator reads for this
+    // shape are start_book_index / start_chapter, already set above.
+    return base
+  }
+
+  // Sequential: swap the primary testament to the one the anchor sits in, and
+  // keep the OTHER testament's start where the reader originally chose it, so
+  // the second half of the plan still begins where they asked.
+  const flipped: EnrollmentLite = anchorIsNT
+    ? { ...base, reading_order: 'nt_then_ot' }
+    : { ...base, reading_order: 'ot_then_nt' }
+
+  if (anchorIsNT) {
+    return {
+      ...flipped,
+      nt_start_book_index: pos.book_index,
+      nt_start_chapter: pos.chapter,
+      ot_start_book_index: enrollment.ot_start_book_index ?? 0,
+      ot_start_chapter: enrollment.ot_start_chapter ?? 1,
+    }
+  }
+  return {
+    ...flipped,
+    ot_start_book_index: pos.book_index,
+    ot_start_chapter: pos.chapter,
+    nt_start_book_index: enrollment.nt_start_book_index ?? NT_FIRST_BOOK_INDEX,
+    nt_start_chapter: enrollment.nt_start_chapter ?? 1,
+  }
+}
+
 // ============================================================================
 // Reading-progress catch-up analysis.
 //
@@ -205,27 +275,6 @@ export function shortRef(ref: string): string {
   // renders as 「馬太」. Fall back to the full name if nothing is left.
   const short = book.replace(/(福音|記|書|篇|歌|詩|箴|道|錄|傳|志|考)$/u, '')
   return chapter ? `${short || book} ${chapter}` : short || book
-}
-
-/**
- * Where in the canon a re-anchored plan must START reading.
- *
- * WHY THIS EXISTS — a bug, not a feature
- *
- * `reanchorPlan` used to move only `started_at`. The plan generator, however,
- * starts reading at the enrollment's own start position
- * (`ot_start_book_index` / `ot_start_chapter`, etc.), which stayed at the
- * ORIGINAL choice. So re-anchoring to 5/9 still began at 詩篇 51 on 5/9 — the
- * dashboard promised "today you'll read 哥林多前 7" and then served
- * 詩篇 51. The confirm dialog was confidently wrong.
- *
- * The fix is to derive the start position from the chapter the anchor day was
- * supposed to read, so day one of the new plan is the chapter the reader
- * actually chose to restart from.
- */
-export interface AnchorPosition {
-  book_index: number
-  chapter: number
 }
 
 /**

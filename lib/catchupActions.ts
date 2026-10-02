@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { readingDate, daysBetween } from '@/lib/readingDate'
+import { reanchoredEnrollment } from '@/lib/readingProgress'
 
 // ============================================================================
 // Catch-up actions.
@@ -102,32 +103,38 @@ export async function reanchorPlan(
     return { ok: false, error: '新的起點位置無效' }
   }
 
-  // The plan generator reads a DIFFERENT column depending on scope and order,
-  // so the position has to be written to every column the current enrollment
-  // could consult. Writing the same (book, chapter) to all of them is safe:
-  // only the one that matches the enrollment's own scope/order is ever read,
-  // and leaving the others stale would resurrect the old bug the next time the
-  // reader changes scope in settings.
-  const isParallel = /^\d+-\d+$/.test(enrollment.reading_order ?? '')
-  const isSequential =
-    enrollment.reading_order === 'nt_then_ot' ||
-    enrollment.reading_order === 'ot_then_nt'
-
+  // The shape of the rewrite is decided by ONE shared helper, the same one the
+  // confirm dialog previews with. Doing it separately here is what let the
+  // dialog promise 哥林多前 7 while the plan still began at 詩篇 111: the
+  // preview and the write had drifted apart, and under 'ot_then_nt' the
+  // reading ORDER — not just the start columns — decides where reading
+  // begins.
+  const rebuilt = reanchoredEnrollment(enrollment as never, {
+    book_index: startBookIndex,
+    chapter: startChapter,
+  })
   const patch: Record<string, unknown> = {
     started_at: `${anchorDate}T00:00:00.000Z`,
-    start_book_index: startBookIndex,
-    start_chapter: startChapter,
+    start_book_index: rebuilt.start_book_index,
+    start_chapter: rebuilt.start_chapter,
   }
-  // Per-testament columns exist for nt_ot (migrations 010/013) and are ignored
-  // for single-testament scopes, so always keep them in sync with the anchor.
-  if (enrollment.scope === 'nt_ot' || isParallel || isSequential) {
-    if (startBookIndex >= NT_FIRST_BOOK_INDEX) {
-      patch.nt_start_book_index = startBookIndex
-      patch.nt_start_chapter = startChapter
-    } else {
-      patch.ot_start_book_index = startBookIndex
-      patch.ot_start_chapter = startChapter
-    }
+  // reading_order is a real part of the rewrite: restarting inside the
+  // secondary testament has to swap which testament is primary, or the new
+  // start position is never consulted.
+  if (rebuilt.reading_order != null) {
+    patch.reading_order = rebuilt.reading_order
+  }
+  if (rebuilt.ot_start_book_index != null) {
+    patch.ot_start_book_index = rebuilt.ot_start_book_index
+  }
+  if (rebuilt.ot_start_chapter != null) {
+    patch.ot_start_chapter = rebuilt.ot_start_chapter
+  }
+  if (rebuilt.nt_start_book_index != null) {
+    patch.nt_start_book_index = rebuilt.nt_start_book_index
+  }
+  if (rebuilt.nt_start_chapter != null) {
+    patch.nt_start_chapter = rebuilt.nt_start_chapter
   }
 
   const { error } = await supabase

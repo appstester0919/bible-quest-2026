@@ -7,6 +7,7 @@ import {
 import {
   analyseCatchUp,
   anchorPositionFor,
+  reanchoredEnrollment,
   describeRefSpan,
 } from '../readingProgress'
 import bibleData from '../../public/bible-data.json'
@@ -172,5 +173,56 @@ describe('a shown ref span always means something', () => {
     )
     expect(a.missedRefs).toEqual(expected)
     expect(describeRefSpan(a.missedRefs)).toBe(describeRefSpan(expected))
+  })
+})
+
+describe('the preview cannot drift from what is written', () => {
+  // The bug this pins: the dialog built its preview by setting only the start
+  // columns, so under 'ot_then_nt' the OT stayed primary and the preview showed
+  // 詩篇 111 for an anchor sitting on 約翰 12. The preview and the write now go
+  // through the same helper.
+  const anchorDate = '2026-09-29'
+
+  it('reanchoredEnrollment flips the primary testament to the anchor', () => {
+    const pos = anchorPositionFor(ENROLLMENT, books, anchorDate)!
+    const rebuilt = reanchoredEnrollment(ENROLLMENT, pos)
+    // Anchor is in the NT, so the NT must become primary.
+    expect(rebuilt.reading_order).toBe('nt_then_ot')
+    expect(rebuilt.nt_start_book_index).toBe(pos.book_index)
+    expect(rebuilt.nt_start_chapter).toBe(pos.chapter)
+  })
+
+  it('an OT anchor flips it back, so the two orders are symmetric', () => {
+    const otPos = {
+      book_index: books.find((b) => b.name === '詩篇')!.index,
+      chapter: 51,
+    }
+    const rebuilt = reanchoredEnrollment(ENROLLMENT, otPos)
+    expect(rebuilt.reading_order).toBe('ot_then_nt')
+    expect(rebuilt.ot_start_chapter).toBe(51)
+  })
+
+  it('the previewed today-refs are the refs the new plan will serve', () => {
+    const pos = anchorPositionFor(ENROLLMENT, books, anchorDate)!
+    const rebuilt = {
+      ...reanchoredEnrollment(ENROLLMENT, pos),
+      started_at: anchorDate,
+    }
+    const today =
+      generateReadingPlan(rebuilt, books, 400).get('2026-10-02') ?? []
+    expect(today.length).toBe(20)
+    expect(today[0]).toBe('哥林多前書 7')
+    // The old preview showed 詩篇 111 — the symptom of the order never moving.
+    expect(today[0]).not.toContain('詩篇')
+  })
+
+  it('day 1 of the new plan is the anchor chapter, not the original start', () => {
+    const pos = anchorPositionFor(ENROLLMENT, books, anchorDate)!
+    const rebuilt = {
+      ...reanchoredEnrollment(ENROLLMENT, pos),
+      started_at: anchorDate,
+    }
+    const day1 = generateReadingPlan(rebuilt, books, 400).get(anchorDate) ?? []
+    expect(day1[0]).toBe(`${books[pos.book_index].name} ${pos.chapter}`)
   })
 })

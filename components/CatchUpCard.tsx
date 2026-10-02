@@ -11,6 +11,7 @@ import type { BookMeta } from '@/lib/bible/lookup'
 import {
   analyseCatchUp,
   anchorPositionFor,
+  reanchoredEnrollment,
   describeRefSpan,
   shortRef,
   type CatchUpCase,
@@ -218,22 +219,23 @@ export function CatchUpCard({ enrollment, books, completedDates }: Props) {
   // otherwise it shows the very schedule the old code would have produced,
   // which is how the confirm dialog came to promise chapters the plan would
   // never serve.
+  //
+  // The rewrite goes through reanchoredEnrollment, the SAME helper the server
+  // action uses, so the preview cannot drift from what will actually be
+  // written. Setting only the start columns here left the reading ORDER
+  // untouched, and under 'ot_then_nt' the OT is what the generator starts
+  // from — the dialog showed 詩篇 111 for a plan anchored on 約翰 12.
   const previewFor = (
     anchor: string,
     bookIndex: number,
     chapter: number,
   ): string[] => {
-    const isNT = bookIndex >= 39
+    const rebuilt = reanchoredEnrollment(enrollment, {
+      book_index: bookIndex,
+      chapter,
+    })
     const plan = generateReadingPlan(
-      {
-        ...enrollment,
-        started_at: anchor,
-        start_book_index: bookIndex,
-        start_chapter: chapter,
-        ...(isNT
-          ? { nt_start_book_index: bookIndex, nt_start_chapter: chapter }
-          : { ot_start_book_index: bookIndex, ot_start_chapter: chapter }),
-      },
+      { ...rebuilt, started_at: anchor },
       books,
       400,
     )
