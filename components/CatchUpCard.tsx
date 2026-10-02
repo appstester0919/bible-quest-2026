@@ -102,71 +102,129 @@ export function CatchUpCard({ enrollment, books, completedDates }: Props) {
 
   // ── Case 1: ≤ 7 days behind — read them, don't rewrite the plan ───────────
   if (analysis.kind === 'small') {
-    const href = buildCatchUpHref(analysis.firstGap.refs)
+    const href = buildCatchUpHref(analysis.missedRefs)
     return (
-      <div className="card" style={{ borderColor: 'var(--color-primary)' }}>
-        <p className="h-eyebrow">落後進度</p>
-        <p className="font-extrabold mt-1">
-          你落後 {analysis.behindDays} 日，共 {analysis.missedRefs.length}{' '}
-          章未讀
+      <div className="card" style={{ borderColor: 'var(--color-success)' }}>
+        <p className="h-eyebrow">📖 補讀進度</p>
+        <p className="font-extrabold text-lg mt-1">
+          有 {analysis.behindDays} 日嘅功課未讀，共 {analysis.missedRefs.length}{' '}
+          章
         </p>
-        <p className="text-sm opacity-80 mt-1">
+        <p className="text-sm mt-1" style={{ color: 'var(--color-ink-soft)' }}>
           {D(analysis.firstGap.firstDate)} – {D(analysis.firstGap.lastDate)} ·{' '}
-          {describeRefSpan(analysis.firstGap.refs)}
+          {describeRefSpan(analysis.missedRefs)}
         </p>
         <a
           href={href}
-          className="btn btn-primary w-full mt-3 inline-block text-center"
-          style={{ minHeight: 44 }}
+          className="btn btn-primary w-full mt-3"
+          style={{ minHeight: 48, width: '100%' }}
         >
-          一次過追進度（{analysis.missedRefs.length}章）
+          補讀晒 {analysis.missedRefs.length} 章 →
         </a>
-        <p className="text-xs opacity-60 mt-2">
-          讀完後今日功課會自動接回原定進度，計劃不會改動。
+        <p className="text-xs mt-2" style={{ color: 'var(--color-ink-soft)' }}>
+          補讀之後，今日功課會自動接返原定進度，計劃唔會改動。
         </p>
       </div>
     )
   }
 
   // ── Cases 2 & 3: > 7 days behind — re-anchor the plan ────────────────────
+  // Two buttons, deliberately different weights. They are NOT "more" and "less"
+  // of the same action — they are two different decisions with different
+  // consequences, so the copy has to say which is which rather than relying on
+  // the reader to work it out from the dates.
   const gapButton = (
     gap: GapBlock,
-    label: string,
+    title: string,
+    hint: string,
     variant: 'primary' | 'secondary',
   ) => (
     <button
       key={gap.firstDate}
       type="button"
       disabled={busy}
-      onClick={() => setPending({ date: gap.firstDate, label })}
-      className={`btn ${variant === 'primary' ? 'btn-primary' : 'btn-ghost'} w-full`}
-      style={{ minHeight: 44 }}
+      onClick={() => setPending({ date: gap.firstDate, label: title })}
+      className={`btn ${variant === 'primary' ? 'btn-primary' : 'btn-secondary'} gap-2`}
+      style={{
+        minHeight: 56,
+        width: '100%',
+        flexDirection: 'column',
+        alignItems: 'flex-start',
+        paddingTop: 10,
+        paddingBottom: 10,
+        textTransform: 'none',
+        letterSpacing: 0,
+        lineHeight: 1.3,
+      }}
     >
-      {label}
-      <span className="text-xs opacity-70 ml-2">
+      <span className="flex items-center gap-2 w-full">
+        <span style={{ fontSize: 17 }}>
+          {variant === 'primary' ? '⏪' : '⏩'}
+        </span>
+        <span>{title}</span>
+      </span>
+      <span
+        className="w-full"
+        style={{
+          fontSize: 13,
+          fontWeight: 700,
+          opacity: 0.85,
+          paddingLeft: 29,
+          whiteSpace: 'normal',
+        }}
+      >
         {D(gap.firstDate)} · {describeRefSpan(gap.refs)}
+      </span>
+      <span
+        className="w-full"
+        style={{
+          fontSize: 12,
+          fontWeight: 600,
+          opacity: 0.7,
+          paddingLeft: 29,
+          whiteSpace: 'normal',
+        }}
+      >
+        {hint}
       </span>
     </button>
   )
 
   return (
-    <div className="card" style={{ borderColor: 'var(--color-primary)' }}>
-      <p className="h-eyebrow">落後進度</p>
-      <p className="font-extrabold mt-1">你落後 {analysis.behindDays} 日</p>
-      <p className="text-sm opacity-80 mt-1">
-        重新調整進度後，今日會由你選的斷位開始，按原本每日章數繼續。
-        {!analysis.multipleGaps && ' 這個計劃只有一個斷位。'}
+    <div className="card" style={{ borderColor: 'var(--color-success)' }}>
+      <p className="h-eyebrow">📅 調整進度</p>
+      <p className="font-extrabold text-lg mt-1">
+        你有 {analysis.behindDays} 日未讀，想喺邊度接返落去？
+      </p>
+      <p className="text-sm mt-1" style={{ color: 'var(--color-ink-soft)' }}>
+        揀一個斷位重新開始，今日就會讀嗰個位置嘅章，往後照原本每日章數繼續。
+        {!analysis.multipleGaps && ' 呢個計劃只有一個斷位。'}
       </p>
 
       <div className="flex flex-col gap-2 mt-3">
         {analysis.multipleGaps
-          ? gapButton(analysis.firstGap, '由第一個斷位重新開始', 'primary')
-          : gapButton(analysis.firstGap, '由斷位重新開始', 'primary')}
+          ? gapButton(
+              analysis.firstGap,
+              '由最早嘅斷位接返',
+              '補返晒中間漏咗嘅進度',
+              'primary',
+            )
+          : gapButton(
+              analysis.firstGap,
+              '由斷位接返',
+              '繼續原本嘅進度',
+              'primary',
+            )}
         {analysis.multipleGaps &&
-          gapButton(analysis.lastGap, '由最後斷位重新開始', 'secondary')}
+          gapButton(
+            analysis.lastGap,
+            '由最近嘅斷位接返',
+            '跳過中間，只讀之後嘅內容',
+            'secondary',
+          )}
       </div>
 
-      <p className="text-xs opacity-60 mt-2">
+      <p className="text-xs mt-2" style={{ color: 'var(--color-ink-soft)' }}>
         執行前會列出新的計劃安排，確認後才會改動。若想自行重新編排，請到「設定」。
       </p>
 
@@ -184,28 +242,31 @@ export function CatchUpCard({ enrollment, books, completedDates }: Props) {
             style={{ background: 'var(--color-surface)' }}
             onClick={(e) => e.stopPropagation()}
           >
-            <p className="h-eyebrow">確認新計劃</p>
+            <p className="h-eyebrow">📅 確認新安排</p>
             <p className="font-extrabold text-lg mt-1">{pending.label}</p>
 
             <dl className="mt-3 text-sm space-y-2">
               <div className="flex justify-between gap-3">
-                <dt className="opacity-70">新起點</dt>
+                <dt style={{ color: 'var(--color-ink-soft)' }}>由呢日開始</dt>
                 <dd className="font-bold">{D(pending.date)}</dd>
               </div>
               <div className="flex justify-between gap-3">
-                <dt className="opacity-70">今日讀經</dt>
+                <dt style={{ color: 'var(--color-ink-soft)' }}>今日讀經</dt>
                 <dd className="font-bold text-right">
                   {describeRefSpan(previewFor(pending.date))}
                 </dd>
               </div>
               <div className="flex justify-between gap-3">
-                <dt className="opacity-70">每日章數</dt>
+                <dt style={{ color: 'var(--color-ink-soft)' }}>之後每日</dt>
                 <dd className="font-bold">{enrollment.chapters_per_day} 章</dd>
               </div>
             </dl>
 
-            <p className="text-xs opacity-70 mt-3">
-              已經讀過的紀錄不會改動，未讀的斷位日子會留在日曆上。
+            <p
+              className="text-xs mt-3"
+              style={{ color: 'var(--color-ink-soft)' }}
+            >
+              已經讀過嘅紀錄唔會改動；跳過咗嘅日子會留返喺日曆同連續紀錄上面。
             </p>
 
             {error && (
@@ -222,8 +283,8 @@ export function CatchUpCard({ enrollment, books, completedDates }: Props) {
                 type="button"
                 disabled={busy}
                 onClick={() => setPending(null)}
-                className="btn btn-ghost flex-1"
-                style={{ minHeight: 44 }}
+                className="btn btn-secondary flex-1"
+                style={{ minHeight: 48 }}
               >
                 取消
               </button>
@@ -232,9 +293,9 @@ export function CatchUpCard({ enrollment, books, completedDates }: Props) {
                 disabled={busy}
                 onClick={() => applyAnchor(pending.date)}
                 className="btn btn-primary flex-1"
-                style={{ minHeight: 44 }}
+                style={{ minHeight: 48 }}
               >
-                {busy ? '執行中…' : '確認執行'}
+                {busy ? '執行中…' : '就係咁做'}
               </button>
             </div>
           </div>
