@@ -19,6 +19,7 @@ import {
   type PendingRequestInfo,
 } from '@/lib/groupActions'
 import { NudgeButton } from '@/components/NudgeButton'
+import { CatchUpCard } from '@/components/CatchUpCard'
 import { readingDate } from '@/lib/readingDate'
 
 interface Profile {
@@ -549,6 +550,19 @@ export default function DashboardPage() {
             <div className="text-5xl">{todayCompleted ? '✓' : '▶'}</div>
           </div>
         </a>
+
+        {/* Catch-up card — renders only when the reader is genuinely behind.
+            Sits directly under today's lesson so the remedy is the next thing
+            the eye lands on, and never appears when the plan is on track. */}
+        {enrollment && books.length > 0 && (
+          <CatchUpCard
+            enrollment={enrollment}
+            books={books}
+            completedDates={Array.from(
+              new Set(sessions.map((s) => s.date_local)),
+            )}
+          />
+        )}
 
         {/* Plan Progress */}
         {enrollment && (
