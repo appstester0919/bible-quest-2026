@@ -47,6 +47,115 @@ const D = (s: string) =>
     day: 'numeric',
   })
 
+/**
+ * Confirmation shown before any plan is rewritten.
+ *
+ * Extracted from the re-anchor branch so the catch-up branch gets it too —
+ * it used to live inline, which meant the new seven-day-priority branch could
+ * set `pending` and then render a card with no way to confirm anything.
+ *
+ * Every row answers a question the reader is actually asking: where do I
+ * start, what will today be, what am I catching up on, and what stays the
+ * same. The previous "詩 51 – 路加 15" span answered none of them.
+ */
+function ConfirmDialog({
+  pending,
+  busy,
+  error,
+  anchorRefs,
+  todayRefs,
+  chaptersPerDay,
+  onCancel,
+  onConfirm,
+}: {
+  pending: { date: string; label: string; bookIndex: number; chapter: number }
+  busy: boolean
+  error: string | null
+  anchorRefs: string[]
+  todayRefs: string[]
+  chaptersPerDay: number
+  onCancel: () => void
+  onConfirm: () => void
+}) {
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      className="fixed inset-0 z-50 flex items-end justify-center p-4"
+      style={{ background: 'rgba(0,0,0,0.5)' }}
+      onClick={() => !busy && onCancel()}
+    >
+      <div
+        className="card w-full max-w-md pb-2"
+        style={{ background: 'var(--color-surface)' }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <p className="h-eyebrow">📅 確認新安排</p>
+        <p className="font-extrabold text-lg mt-1">{pending.label}</p>
+
+        <dl className="mt-3 text-sm space-y-2">
+          <div className="flex justify-between gap-3">
+            <dt style={{ color: 'var(--color-ink-soft)' }}>由呢日開始</dt>
+            <dd className="font-bold text-right">
+              {D(pending.date)} · {shortRef(anchorRefs[0] ?? '')}
+            </dd>
+          </div>
+          <div className="flex justify-between gap-3">
+            <dt style={{ color: 'var(--color-ink-soft)' }}>要補讀</dt>
+            <dd className="font-bold text-right">
+              {describeRefSpan(anchorRefs)}
+            </dd>
+          </div>
+          <div className="flex justify-between gap-3">
+            <dt style={{ color: 'var(--color-ink-soft)' }}>今日讀經</dt>
+            <dd className="font-bold text-right">
+              {describeRefSpan(todayRefs)}
+            </dd>
+          </div>
+          <div className="flex justify-between gap-3">
+            <dt style={{ color: 'var(--color-ink-soft)' }}>之後每日</dt>
+            <dd className="font-bold">{chaptersPerDay} 章</dd>
+          </div>
+        </dl>
+
+        <p className="text-xs mt-3" style={{ color: 'var(--color-ink-soft)' }}>
+          已經讀過嘅紀錄唔會改動；跳過咗嘅日子會留返喺日曆同連續紀錄上面。
+        </p>
+
+        {error && (
+          <p
+            className="text-sm mt-2"
+            style={{ color: 'var(--color-danger, #DC2626)' }}
+          >
+            {error}
+          </p>
+        )}
+
+        <div className="flex gap-2 mt-4">
+          <button
+            type="button"
+            disabled={busy}
+            onClick={onCancel}
+            className="btn btn-secondary flex-1"
+            style={{ minHeight: 48 }}
+          >
+            取消
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={onConfirm}
+            className="btn btn-primary flex-1"
+            style={{ minHeight: 48 }}
+          >
+            {busy ? '執行中…' : '就係咁做'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export function CatchUpCard({ enrollment, books, completedDates }: Props) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -168,82 +277,113 @@ export function CatchUpCard({ enrollment, books, completedDates }: Props) {
     if (!pos) return null // position unresolvable — better silent than wrong
     const href = buildCatchUpHref(analysis.missedRefs)
     return (
-      <div className="card" style={{ borderColor: 'var(--color-success)' }}>
-        <p className="h-eyebrow">📖 追趕進度</p>
-        <p className="font-extrabold text-lg mt-1">
-          最近 {analysis.behindDays} 日未讀，共 {analysis.missedRefs.length} 章
-        </p>
-        <p className="text-sm mt-1" style={{ color: 'var(--color-ink-soft)' }}>
-          {D(gap.firstDate)} – {D(gap.lastDate)} · {describeRefSpan(gap.refs)}
-        </p>
+      <>
+        <div className="card" style={{ borderColor: 'var(--color-success)' }}>
+          <p className="h-eyebrow">📖 追趕進度</p>
+          <p className="font-extrabold text-lg mt-1">
+            最近 {analysis.behindDays} 日未讀，共 {analysis.missedRefs.length}{' '}
+            章
+          </p>
+          <p
+            className="text-sm mt-1"
+            style={{ color: 'var(--color-ink-soft)' }}
+          >
+            {D(gap.firstDate)} – {D(gap.lastDate)} · {describeRefSpan(gap.refs)}
+          </p>
 
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() =>
-            setPending({
-              date: gap.firstDate,
-              label: `追趕最近 ${analysis.behindDays} 日`,
-              bookIndex: pos.book_index,
-              chapter: pos.chapter,
-            })
-          }
-          className="btn btn-primary mt-3 gap-2"
-          style={{
-            minHeight: 56,
-            width: '100%',
-            flexDirection: 'column',
-            alignItems: 'flex-start',
-            paddingTop: 10,
-            paddingBottom: 10,
-            textTransform: 'none',
-            letterSpacing: 0,
-            lineHeight: 1.3,
-          }}
-        >
-          <span className="flex items-center gap-2 w-full">
-            <span style={{ fontSize: 17 }}>⏩</span>
-            <span>追趕呢 {analysis.behindDays} 日</span>
-          </span>
-          <span
-            className="w-full"
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() =>
+              setPending({
+                date: gap.firstDate,
+                label: `追趕最近 ${analysis.behindDays} 日`,
+                bookIndex: pos.book_index,
+                chapter: pos.chapter,
+              })
+            }
+            className="btn btn-primary mt-3 gap-2"
             style={{
-              fontSize: 13,
-              fontWeight: 700,
-              opacity: 0.85,
-              paddingLeft: 29,
-              whiteSpace: 'normal',
+              minHeight: 56,
+              width: '100%',
+              flexDirection: 'column',
+              alignItems: 'flex-start',
+              paddingTop: 10,
+              paddingBottom: 10,
+              textTransform: 'none',
+              letterSpacing: 0,
+              lineHeight: 1.3,
             }}
           >
-            {describeRefSpan(gap.refs)}
-          </span>
-          <span
-            className="w-full"
-            style={{
-              fontSize: 12,
-              fontWeight: 600,
-              opacity: 0.7,
-              paddingLeft: 29,
-              whiteSpace: 'normal',
-            }}
-          >
-            讀完之後，今日就由 {shortRef(gap.refs[0] ?? '')} 開始
-          </span>
-        </button>
+            <span className="flex items-center gap-2 w-full">
+              <span style={{ fontSize: 17 }}>⏩</span>
+              <span>追趕呢 {analysis.behindDays} 日</span>
+            </span>
+            <span
+              className="w-full"
+              style={{
+                fontSize: 13,
+                fontWeight: 700,
+                opacity: 0.85,
+                paddingLeft: 29,
+                whiteSpace: 'normal',
+              }}
+            >
+              {describeRefSpan(gap.refs)}
+            </span>
+            <span
+              className="w-full"
+              style={{
+                fontSize: 12,
+                fontWeight: 600,
+                opacity: 0.7,
+                paddingLeft: 29,
+                whiteSpace: 'normal',
+              }}
+            >
+              讀完之後，今日就由 {shortRef(gap.refs[0] ?? '')} 開始
+            </span>
+          </button>
 
-        <p className="text-xs mt-2" style={{ color: 'var(--color-ink-soft)' }}>
-          {analysis.totalBehindDays > analysis.behindDays
-            ? `更早嘅 ${analysis.totalBehindDays - analysis.behindDays} 日已經唔追。想重新編排請到「設定」。`
-            : '讀完之後，今日功課會自動接返原定進度。'}
-        </p>
-        <a
-          href={href}
-          className="text-xs mt-1 block"
-          style={{ color: 'var(--color-ink-soft)' }}
-        >
-          或者逐章慢慢補讀 →
-        </a>
-      </div>
+          <p
+            className="text-xs mt-2"
+            style={{ color: 'var(--color-ink-soft)' }}
+          >
+            {analysis.totalBehindDays > analysis.behindDays
+              ? `更早嘅 ${analysis.totalBehindDays - analysis.behindDays} 日已經唔追。想重新編排請到「設定」。`
+              : '讀完之後，今日功課會自動接返原定進度。'}
+          </p>
+          <a
+            href={href}
+            className="text-xs mt-1 block"
+            style={{ color: 'var(--color-ink-soft)' }}
+          >
+            或者逐章慢慢補讀 →
+          </a>
+        </div>
+        {pending && (
+          <ConfirmDialog
+            pending={pending}
+            busy={busy}
+            error={error}
+            anchorRefs={anchorRefs}
+            todayRefs={previewFor(
+              pending.date,
+              pending.bookIndex,
+              pending.chapter,
+            )}
+            chaptersPerDay={enrollment.chapters_per_day}
+            onCancel={() => setPending(null)}
+            onConfirm={() =>
+              applyAnchor({
+                date: pending.date,
+                bookIndex: pending.bookIndex,
+                chapter: pending.chapter,
+              })
+            }
+          />
+        )}
+      </>
     )
   }
 
@@ -347,135 +487,67 @@ export function CatchUpCard({ enrollment, books, completedDates }: Props) {
   )
 
   return (
-    <div className="card" style={{ borderColor: 'var(--color-success)' }}>
-      <p className="h-eyebrow">📅 調整進度</p>
-      <p className="font-extrabold text-lg mt-1">
-        你有 {analysis.behindDays} 日未讀，想喺邊度接返落去？
-      </p>
-      <p className="text-sm mt-1" style={{ color: 'var(--color-ink-soft)' }}>
-        揀一個斷位重新開始，今日就會讀嗰個位置嘅章，往後照原本每日章數繼續。
-        {!analysis.multipleGaps && ' 呢個計劃只有一個斷位。'}
-      </p>
+    <>
+      <div className="card" style={{ borderColor: 'var(--color-success)' }}>
+        <p className="h-eyebrow">📅 調整進度</p>
+        <p className="font-extrabold text-lg mt-1">
+          你有 {analysis.behindDays} 日未讀，想喺邊度接返落去？
+        </p>
+        <p className="text-sm mt-1" style={{ color: 'var(--color-ink-soft)' }}>
+          揀一個斷位重新開始，今日就會讀嗰個位置嘅章，往後照原本每日章數繼續。
+          {!analysis.multipleGaps && ' 呢個計劃只有一個斷位。'}
+        </p>
 
-      <div className="flex flex-col gap-2 mt-3">
-        {analysis.multipleGaps
-          ? gapButton(
-              analysis.firstGap,
-              '由最早嘅斷位接返',
-              '補返晒中間漏咗嘅進度',
-              'primary',
-            )
-          : gapButton(
-              analysis.firstGap,
-              '由斷位接返',
-              '繼續原本嘅進度',
-              'primary',
+        <div className="flex flex-col gap-2 mt-3">
+          {analysis.multipleGaps
+            ? gapButton(
+                analysis.firstGap,
+                '由最早嘅斷位接返',
+                '補返晒中間漏咗嘅進度',
+                'primary',
+              )
+            : gapButton(
+                analysis.firstGap,
+                '由斷位接返',
+                '繼續原本嘅進度',
+                'primary',
+              )}
+          {analysis.multipleGaps &&
+            gapButton(
+              analysis.lastGap,
+              '由最近嘅斷位接返',
+              '跳過中間，只讀之後嘅內容',
+              'secondary',
             )}
-        {analysis.multipleGaps &&
-          gapButton(
-            analysis.lastGap,
-            '由最近嘅斷位接返',
-            '跳過中間，只讀之後嘅內容',
-            'secondary',
-          )}
-      </div>
-
-      <p className="text-xs mt-2" style={{ color: 'var(--color-ink-soft)' }}>
-        執行前會列出新的計劃安排，確認後才會改動。若想自行重新編排，請到「設定」。
-      </p>
-
-      {/* ── Confirm: show the ACTUAL resulting schedule before writing ────── */}
-      {pending && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          className="fixed inset-0 z-50 flex items-end justify-center p-4"
-          style={{ background: 'rgba(0,0,0,0.5)' }}
-          onClick={() => !busy && setPending(null)}
-        >
-          <div
-            className="card w-full max-w-md pb-2"
-            style={{ background: 'var(--color-surface)' }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <p className="h-eyebrow">📅 確認新安排</p>
-            <p className="font-extrabold text-lg mt-1">{pending.label}</p>
-
-            <dl className="mt-3 text-sm space-y-2">
-              <div className="flex justify-between gap-3">
-                <dt style={{ color: 'var(--color-ink-soft)' }}>由呢日開始</dt>
-                <dd className="font-bold">
-                  {D(pending.date)} · {shortRef(anchorRefs[0] ?? '')}
-                </dd>
-              </div>
-              <div className="flex justify-between gap-3">
-                <dt style={{ color: 'var(--color-ink-soft)' }}>今日讀經</dt>
-                <dd className="font-bold text-right">
-                  {describeRefSpan(
-                    previewFor(
-                      pending.date,
-                      pending.bookIndex,
-                      pending.chapter,
-                    ),
-                  )}
-                </dd>
-                <dt style={{ color: 'var(--color-ink-soft)' }}>要補讀</dt>
-                <dd className="font-bold text-right">
-                  {describeRefSpan(anchorRefs)}
-                </dd>
-              </div>
-              <div className="flex justify-between gap-3">
-                <dt style={{ color: 'var(--color-ink-soft)' }}>之後每日</dt>
-                <dd className="font-bold">{enrollment.chapters_per_day} 章</dd>
-              </div>
-            </dl>
-
-            <p
-              className="text-xs mt-3"
-              style={{ color: 'var(--color-ink-soft)' }}
-            >
-              已經讀過嘅紀錄唔會改動；跳過咗嘅日子會留返喺日曆同連續紀錄上面。
-            </p>
-
-            {error && (
-              <p
-                className="text-sm mt-2"
-                style={{ color: 'var(--color-danger, #DC2626)' }}
-              >
-                {error}
-              </p>
-            )}
-
-            <div className="flex gap-2 mt-4">
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => setPending(null)}
-                className="btn btn-secondary flex-1"
-                style={{ minHeight: 48 }}
-              >
-                取消
-              </button>
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() =>
-                  applyAnchor({
-                    date: pending.date,
-                    bookIndex: pending.bookIndex,
-                    chapter: pending.chapter,
-                  })
-                }
-                className="btn btn-primary flex-1"
-                style={{ minHeight: 48 }}
-              >
-                {busy ? '執行中…' : '就係咁做'}
-              </button>
-            </div>
-          </div>
         </div>
+
+        <p className="text-xs mt-2" style={{ color: 'var(--color-ink-soft)' }}>
+          執行前會列出新的計劃安排，確認後才會改動。若想自行重新編排，請到「設定」。
+        </p>
+      </div>
+      {pending && (
+        <ConfirmDialog
+          pending={pending}
+          busy={busy}
+          error={error}
+          anchorRefs={anchorRefs}
+          todayRefs={previewFor(
+            pending.date,
+            pending.bookIndex,
+            pending.chapter,
+          )}
+          chaptersPerDay={enrollment.chapters_per_day}
+          onCancel={() => setPending(null)}
+          onConfirm={() =>
+            applyAnchor({
+              date: pending.date,
+              bookIndex: pending.bookIndex,
+              chapter: pending.chapter,
+            })
+          }
+        />
       )}
-    </div>
+    </>
   )
 }
 
