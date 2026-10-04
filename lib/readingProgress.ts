@@ -128,6 +128,15 @@ export type CatchUpCase =
       firstGap: GapBlock
       /** Total missed days, including the old ones we deliberately ignore. */
       totalBehindDays: number
+      /**
+       * Today's own scheduled chapters.
+       *
+       * The catch-up action is a READ, not a re-plan: it queues the missed
+       * days AND today, so catching up lands the reader on today's lesson
+       * rather than a few chapters behind it. Re-anchoring would move today
+       * itself, which is not what "I missed three days" is asking for.
+       */
+      today: string[]
     }
   /** Behind, but small enough to read in one sitting. */
   | {
@@ -249,6 +258,7 @@ export function analyseCatchUp(
         refs: [...lastGap.refs],
       },
       totalBehindDays: behindDays,
+      today: planForDate(today),
     }
   }
 

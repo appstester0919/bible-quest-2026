@@ -226,3 +226,32 @@ describe('the preview cannot drift from what is written', () => {
     expect(day1[0]).toBe(`${books[pos.book_index].name} ${pos.chapter}`)
   })
 })
+
+describe('catching up is a READ, not a re-plan', () => {
+  // The correction: the seven-day card was built as a re-anchor button, so
+  // pressing it moved today's lesson to the anchor chapter. What a reader who
+  // missed three days wants is to read them — the plan must not move.
+  const a = analyseCatchUp(
+    ENROLLMENT.started_at,
+    '2026-10-02',
+    ['2026-09-28'],
+    planFor(ENROLLMENT),
+  )
+
+  it("exposes today's own chapters so the queue covers missed + today", () => {
+    if (a.kind !== 'catch_up') throw new Error('expected catch_up')
+    expect(a.today).toEqual(planFor(ENROLLMENT)('2026-10-02'))
+    expect(a.today.length).toBe(20)
+    expect(a.today[0]).toBe('哥林多前書 7')
+  })
+
+  it("the missed refs and today's refs together cover the whole backlog", () => {
+    if (a.kind !== 'catch_up') throw new Error('expected catch_up')
+    const all = [...a.missedRefs, ...a.today]
+    expect(all.length).toBe(a.missedRefs.length + 20)
+    // Contiguous in reading order: the missed run ends exactly where today
+    // begins (10/01 ended at 哥林多前 6, today starts at 哥林多前 7).
+    expect(all[a.missedRefs.length]).toBe(a.today[0])
+    expect(all[a.missedRefs.length - 1]).toBe('哥林多前書 6')
+  })
+})

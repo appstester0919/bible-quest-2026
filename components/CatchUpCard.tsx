@@ -82,12 +82,16 @@ function ConfirmDialog({
     <div
       role="dialog"
       aria-modal="true"
-      className="fixed inset-0 z-50 flex items-end justify-center p-4"
+      // items-center, not items-end: pinning the sheet to the bottom put its
+      // upper half below the fold on a 393×852 phone, so the summary rows
+      // were unreachable without scrolling. Centered, and scrollable if the
+      // content is ever taller than the viewport.
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto"
       style={{ background: 'rgba(0,0,0,0.5)' }}
       onClick={() => !busy && onCancel()}
     >
       <div
-        className="card w-full max-w-md pb-2"
+        className="card w-full max-w-md my-auto"
         style={{ background: 'var(--color-surface)' }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -172,17 +176,26 @@ export function CatchUpCard({ enrollment, books, completedDates }: Props) {
 
   // Regenerating the whole plan on every render would be wasteful; it only
   // depends on the enrollment, the book list and the completion set.
-  const analysis = useMemo<CatchUpCase>(() => {
-    if (books.length === 0) return { kind: 'on_track' }
-    const plan = generateReadingPlan(enrollment, books, 400)
-    return analyseCatchUp(
-      enrollment.started_at,
-      today,
-      completedDates,
-      (d) => plan.get(d) ?? [],
-    )
+  // The plan is a pure function of the enrollment, so it is built once and
+  // shared: the analysis walks it, and the catch-up card reads today's own
+  // chapters straight off it.
+  const plan = useMemo(
+    () =>
+      books.length === 0
+        ? new Map<string, string[]>()
+        : generateReadingPlan(enrollment, books, 400),
+    [enrollment, books],
+  )
+  const planFor = (d: string): string[] => plan.get(d) ?? []
+
+  const analysis = useMemo<CatchUpCase>(
+    () =>
+      books.length === 0
+        ? { kind: 'on_track' }
+        : analyseCatchUp(enrollment.started_at, today, completedDates, planFor),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enrollment, books, completedDates, today])
+    [enrollment, books, completedDates, today],
+  )
 
   // The chapters this anchor is actually about — the run of days being
   // chased. Without this the dialog showed only an unexplained start/end
@@ -268,124 +281,90 @@ export function CatchUpCard({ enrollment, books, completedDates }: Props) {
     }
   }
 
-  // ── Priority case: only the recent week is still worth chasing ───────────
-  // Checked first, before 'small' and 'reanchor', because a reader 23 days
-  // behind does not want to be told about the 23 days — they want the last
-  // week, which is the only part that is still cheap. Offering both windows
-  // side by side is what made the earlier version confusing.
+  // ── Priority case: the recent week, as a plain "go read this" link ───────
+  // Checked first, before 'small' and 'reanchor'.
+  //
+  // THIS DOES NOT REWRITE THE PLAN. That was the original misreading: the
+  // card looks like a re-anchor button, but what the reader actually wants
+  // when a few days slipped is to just READ them. Rewriting the plan moves
+  // today's lesson to the anchor chapter, which is not what "I missed three
+  // days" means — it quietly reschedules the whole remaining plan as a side
+  // effect of catching up.
+  //
+  // So this is one tap, zero writes, and it shows the missed chapters TOGETHER
+  // WITH today's — the reader sees the whole backlog in one queue rather than
+  // today's slice only. Only the >7-day case actually rewrites anything, and
+  // that one keeps its confirmation dialog.
   if (analysis.kind === 'catch_up') {
     const gap = analysis.firstGap
-    const pos = anchorPositionFor(enrollment, books, gap.firstDate)
-    if (!pos) return null // position unresolvable — better silent than wrong
-    const href = buildCatchUpHref(analysis.missedRefs)
-    return (
-      <>
-        <div className="card" style={{ borderColor: 'var(--color-success)' }}>
-          <p className="h-eyebrow">📖 追趕進度</p>
-          <p className="font-extrabold text-lg mt-1">
-            最近 {analysis.behindDays} 日未讀，共 {analysis.missedRefs.length}{' '}
-            章
-          </p>
-          <p
-            className="text-sm mt-1"
-            style={{ color: 'var(--color-ink-soft)' }}
-          >
-            {D(gap.firstDate)} – {D(gap.lastDate)} · {describeRefSpan(gap.refs)}
-          </p>
+    // Today's own chapters, so the queue is "missed days + today" rather than
+    // "missed days only" — catching up should land you on today, not beside it.
+    const todayRefs = analysis.today
+    const allRefs = [...analysis.missedRefs, ...todayRefs]
+    const href = buildCatchUpHref(allRefs)
+    const old = analysis.totalBehindDays - analysis.behindDays
 
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() =>
-              setPending({
-                date: gap.firstDate,
-                label: `追趕最近 ${analysis.behindDays} 日`,
-                bookIndex: pos.book_index,
-                chapter: pos.chapter,
-              })
-            }
-            className="btn btn-primary mt-3 gap-2"
+    return (
+      <div className="card" style={{ borderColor: 'var(--color-success)' }}>
+        <p className="h-eyebrow">📖 追趕進度</p>
+        <p className="font-extrabold text-lg mt-1">
+          最近 {analysis.behindDays} 日未讀，共 {allRefs.length} 章
+        </p>
+        <p className="text-sm mt-1" style={{ color: 'var(--color-ink-soft)' }}>
+          {D(gap.firstDate)} 至今 · {describeRefSpan(allRefs)}
+        </p>
+
+        <a
+          href={href}
+          className="btn btn-primary mt-3 gap-2"
+          style={{
+            minHeight: 56,
+            width: '100%',
+            flexDirection: 'column',
+            alignItems: 'flex-start',
+            paddingTop: 10,
+            paddingBottom: 10,
+            textTransform: 'none',
+            letterSpacing: 0,
+            lineHeight: 1.3,
+          }}
+        >
+          <span className="flex items-center gap-2 w-full">
+            <span style={{ fontSize: 17 }}>⏩</span>
+            <span>一齊追趕呢 {analysis.behindDays} 日 + 今日</span>
+          </span>
+          <span
+            className="w-full"
             style={{
-              minHeight: 56,
-              width: '100%',
-              flexDirection: 'column',
-              alignItems: 'flex-start',
-              paddingTop: 10,
-              paddingBottom: 10,
-              textTransform: 'none',
-              letterSpacing: 0,
-              lineHeight: 1.3,
+              fontSize: 13,
+              fontWeight: 700,
+              opacity: 0.85,
+              paddingLeft: 29,
+              whiteSpace: 'normal',
             }}
           >
-            <span className="flex items-center gap-2 w-full">
-              <span style={{ fontSize: 17 }}>⏩</span>
-              <span>追趕呢 {analysis.behindDays} 日</span>
-            </span>
-            <span
-              className="w-full"
-              style={{
-                fontSize: 13,
-                fontWeight: 700,
-                opacity: 0.85,
-                paddingLeft: 29,
-                whiteSpace: 'normal',
-              }}
-            >
-              {describeRefSpan(gap.refs)}
-            </span>
-            <span
-              className="w-full"
-              style={{
-                fontSize: 12,
-                fontWeight: 600,
-                opacity: 0.7,
-                paddingLeft: 29,
-                whiteSpace: 'normal',
-              }}
-            >
-              讀完之後，今日就由 {shortRef(gap.refs[0] ?? '')} 開始
-            </span>
-          </button>
+            {describeRefSpan(allRefs)}
+          </span>
+          <span
+            className="w-full"
+            style={{
+              fontSize: 12,
+              fontWeight: 600,
+              opacity: 0.7,
+              paddingLeft: 29,
+              whiteSpace: 'normal',
+            }}
+          >
+            計劃唔會改動
+          </span>
+        </a>
 
-          <p
-            className="text-xs mt-2"
-            style={{ color: 'var(--color-ink-soft)' }}
-          >
-            {analysis.totalBehindDays > analysis.behindDays
-              ? `更早嘅 ${analysis.totalBehindDays - analysis.behindDays} 日已經唔追。想重新編排請到「設定」。`
-              : '讀完之後，今日功課會自動接返原定進度。'}
-          </p>
-          <a
-            href={href}
-            className="text-xs mt-1 block"
-            style={{ color: 'var(--color-ink-soft)' }}
-          >
-            或者逐章慢慢補讀 →
-          </a>
-        </div>
-        {pending && (
-          <ConfirmDialog
-            pending={pending}
-            busy={busy}
-            error={error}
-            anchorRefs={anchorRefs}
-            todayRefs={previewFor(
-              pending.date,
-              pending.bookIndex,
-              pending.chapter,
-            )}
-            chaptersPerDay={enrollment.chapters_per_day}
-            onCancel={() => setPending(null)}
-            onConfirm={() =>
-              applyAnchor({
-                date: pending.date,
-                bookIndex: pending.bookIndex,
-                chapter: pending.chapter,
-              })
-            }
-          />
-        )}
-      </>
+        <p className="text-xs mt-2" style={{ color: 'var(--color-ink-soft)' }}>
+          {old > 0
+            ? `更早嘅 ${old} 日已經唔追。想重新編排請到「設定」。`
+            : '讀完之後，之後每日照原本章數繼續。'}
+        </p>
+      </div>
     )
   }
 
