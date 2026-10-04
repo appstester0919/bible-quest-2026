@@ -255,3 +255,47 @@ describe('catching up is a READ, not a re-plan', () => {
     expect(all[a.missedRefs.length - 1]).toBe('哥林多前書 6')
   })
 })
+
+describe('a day the reader already finished is not backlog', () => {
+  // The real testing account: started 29/9, read 2/10 and 3/10, missed the
+  // three days before them. Reported as 「追趕 3 日」 — correct — but the card
+  // also said 「29/9 至今」, a span that literally covers 2/10 and 3/10 and so
+  // claimed the finished days were part of the backlog. The WIDTH was right;
+  // the LABEL was the bug. firstGap.lastDate is the real end of the gap.
+  const ENROLL: EnrollmentLite & { id: string; chapters_per_day: number } = {
+    id: 'real',
+    scope: 'nt_ot',
+    chapters_per_day: 20,
+    reading_order: 'nt_then_ot',
+    started_at: '2026-09-29T00:00:00.000Z',
+    start_book_index: 42,
+  }
+  const plan2 = generateReadingPlan(ENROLL, books, 400)
+  const DONE = ['2026-10-02', '2026-10-03']
+  const a = analyseCatchUp(
+    ENROLL.started_at,
+    '2026-10-04',
+    DONE,
+    (d) => plan2.get(d) ?? [],
+  )
+
+  it('counts three missed days, not five', () => {
+    expect(a.kind).toBe('catch_up')
+    if (a.kind !== 'catch_up') return
+    expect(a.behindDays).toBe(3)
+    expect(a.firstGap.firstDate).toBe('2026-09-29')
+    // Ends at the last UNREAD day, so a label reading 「firstDate – lastDate」
+    // cannot include 2/10 or 3/10.
+    expect(a.firstGap.lastDate).toBe('2026-10-01')
+  })
+
+  it('queues the three missed days plus today, and nothing already read', () => {
+    if (a.kind !== 'catch_up') return
+    const queue = [...a.missedRefs, ...a.today]
+    expect(queue).toHaveLength(80)
+    for (const done of DONE) {
+      const firstOfThatDay = plan2.get(done)?.[0]
+      expect(queue).not.toContain(firstOfThatDay)
+    }
+  })
+})

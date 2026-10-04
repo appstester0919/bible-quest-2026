@@ -329,7 +329,11 @@ export function CatchUpCard({ enrollment, books, completedDates }: Props) {
               {allRefs.length}章 · {summariseRuns(allRefs)}
             </p>
             <p className="text-xs opacity-80 mt-1">
-              {D(gap.firstDate)} 至今 · 計劃唔會改動
+              {/* 「29/9 至今」 was literally wrong: the gap ends at the last
+                  UNREAD day, not today. With 10/2 and 10/3 already read, that
+                  wording implied those days were part of the backlog. Name the
+                  unread days instead — it is the only span the button covers. */}
+              未讀：{D(gap.firstDate)} – {D(gap.lastDate)} · 計劃唔會改動
             </p>
           </div>
           <div className="text-5xl">▶</div>
