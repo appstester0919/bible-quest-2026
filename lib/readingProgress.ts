@@ -137,6 +137,15 @@ export type CatchUpCase =
        * itself, which is not what "I missed three days" is asking for.
        */
       today: string[]
+      /**
+       * Whether today is already done.
+       *
+       * The catch-up queue is missed days PLUS today, but only when today is
+       * still unread. Appending today's chapters after finishing them makes
+       * the button re-read a day the reader already completed, which is the
+       * exact thing the card promises not to do.
+       */
+      todayCompleted: boolean
     }
   /** Behind, but small enough to read in one sitting. */
   | {
@@ -259,6 +268,7 @@ export function analyseCatchUp(
       },
       totalBehindDays: behindDays,
       today: planForDate(today),
+      todayCompleted: done.has(today),
     }
   }
 

@@ -300,7 +300,13 @@ export function CatchUpCard({ enrollment, books, completedDates }: Props) {
     const gap = analysis.firstGap
     // Today's own chapters, so the queue is "missed days + today" rather than
     // "missed days only" — catching up should land you on today, not beside it.
-    const allRefs = [...analysis.missedRefs, ...analysis.today]
+    // Only queue today when it is still unread. After finishing today's
+    // lesson the button must cover the backlog alone — appending a day the
+    // reader already completed is precisely what the card promises not to do,
+    // and it silently doubles the reading.
+    const allRefs = analysis.todayCompleted
+      ? [...analysis.missedRefs]
+      : [...analysis.missedRefs, ...analysis.today]
     const href = buildCatchUpHref(allRefs)
     const old = analysis.totalBehindDays - analysis.behindDays
 
@@ -323,7 +329,9 @@ export function CatchUpCard({ enrollment, books, completedDates }: Props) {
               追趕進度
             </p>
             <p className="text-xl font-extrabold mt-1">
-              一齊追趕呢 {analysis.behindDays} 日 + 今日
+              {analysis.todayCompleted
+                ? `追趕呢 ${analysis.behindDays} 日`
+                : `一齊追趕呢 ${analysis.behindDays} 日 + 今日`}
             </p>
             <p className="text-xs opacity-90 mt-1">
               {allRefs.length}章 · {summariseRuns(allRefs)}

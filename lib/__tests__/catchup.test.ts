@@ -299,3 +299,54 @@ describe('a day the reader already finished is not backlog', () => {
     }
   })
 })
+
+describe('today is only queued while it is unread', () => {
+  const ENROLL: EnrollmentLite & { id: string; chapters_per_day: number } = {
+    id: 'today-done',
+    scope: 'nt_ot',
+    chapters_per_day: 20,
+    reading_order: 'nt_then_ot',
+    started_at: '2026-09-29T00:00:00.000Z',
+    start_book_index: 42,
+  }
+  const plan3 = generateReadingPlan(ENROLL, books, 400)
+  const at = (d: string) => plan3.get(d) ?? []
+
+  // 4/10 still to do: the queue is the three missed days PLUS today.
+  const pending = analyseCatchUp(
+    ENROLL.started_at,
+    '2026-10-04',
+    ['2026-10-02', '2026-10-03'],
+    at,
+  )
+  it('includes today while today is unread', () => {
+    expect(pending.kind).toBe('catch_up')
+    if (pending.kind !== 'catch_up') return
+    expect(pending.todayCompleted).toBe(false)
+    expect([...pending.missedRefs, ...pending.today]).toHaveLength(80)
+  })
+
+  // 4/4 finished: today must drop out, leaving the backlog alone.
+  const done = analyseCatchUp(
+    ENROLL.started_at,
+    '2026-10-04',
+    ['2026-10-02', '2026-10-03', '2026-10-04'],
+    at,
+  )
+  it('reports todayCompleted once today is finished', () => {
+    expect(done.kind).toBe('catch_up')
+    if (done.kind !== 'catch_up') return
+    expect(done.todayCompleted).toBe(true)
+  })
+  it('leaves the three missed days untouched', () => {
+    if (done.kind !== 'catch_up') return
+    expect(done.missedRefs).toHaveLength(60)
+    // The UI drops today from the queue, so the catch-up is 60 chapters, not 80.
+    const queue = [
+      ...done.missedRefs,
+      ...done.today.filter(() => !done.todayCompleted),
+    ]
+    expect(queue).toHaveLength(60)
+    expect(queue).not.toContain(at('2026-10-04')[0])
+  })
+})
