@@ -1,5 +1,6 @@
 'use client'
 
+import { summariseRuns } from '@/lib/refRange'
 import { useMemo, useState } from 'react'
 import { reanchorPlan } from '@/lib/catchupActions'
 import { readingDate, addDays, daysBetween } from '@/lib/readingDate'
@@ -299,72 +300,41 @@ export function CatchUpCard({ enrollment, books, completedDates }: Props) {
     const gap = analysis.firstGap
     // Today's own chapters, so the queue is "missed days + today" rather than
     // "missed days only" — catching up should land you on today, not beside it.
-    const todayRefs = analysis.today
-    const allRefs = [...analysis.missedRefs, ...todayRefs]
+    const allRefs = [...analysis.missedRefs, ...analysis.today]
     const href = buildCatchUpHref(allRefs)
     const old = analysis.totalBehindDays - analysis.behindDays
 
     return (
-      <div className="card" style={{ borderColor: 'var(--color-success)' }}>
-        <p className="h-eyebrow">📖 追趕進度</p>
-        <p className="font-extrabold text-lg mt-1">
-          最近 {analysis.behindDays} 日未讀，共 {allRefs.length} 章
-        </p>
-        <p className="text-sm mt-1" style={{ color: 'var(--color-ink-soft)' }}>
-          {D(gap.firstDate)} 至今 · {describeRefSpan(allRefs)}
-        </p>
-
-        <a
-          href={href}
-          className="btn btn-primary mt-3 gap-2"
-          style={{
-            minHeight: 56,
-            width: '100%',
-            flexDirection: 'column',
-            alignItems: 'flex-start',
-            paddingTop: 10,
-            paddingBottom: 10,
-            textTransform: 'none',
-            letterSpacing: 0,
-            lineHeight: 1.3,
-          }}
-        >
-          <span className="flex items-center gap-2 w-full">
-            <span style={{ fontSize: 17 }}>⏩</span>
-            <span>一齊追趕呢 {analysis.behindDays} 日 + 今日</span>
-          </span>
-          <span
-            className="w-full"
-            style={{
-              fontSize: 13,
-              fontWeight: 700,
-              opacity: 0.85,
-              paddingLeft: 29,
-              whiteSpace: 'normal',
-            }}
-          >
-            {describeRefSpan(allRefs)}
-          </span>
-          <span
-            className="w-full"
-            style={{
-              fontSize: 12,
-              fontWeight: 600,
-              opacity: 0.7,
-              paddingLeft: 29,
-              whiteSpace: 'normal',
-            }}
-          >
-            計劃唔會改動
-          </span>
-        </a>
-
-        <p className="text-xs mt-2" style={{ color: 'var(--color-ink-soft)' }}>
-          {old > 0
-            ? `更早嘅 ${old} 日已經唔追。想重新編排請到「設定」。`
-            : '讀完之後，之後每日照原本章數繼續。'}
-        </p>
-      </div>
+      // Same design language as the Today's Lesson card above it: a card that
+      // is itself the tap target, white text on the green gradient, the same
+      // hover/active scale. It is the same KIND of action — "go read this" —
+      // so it must not look like a different kind of thing.
+      <a
+        href={href}
+        className="card block hover:scale-[1.01] active:scale-[0.99] transition-transform"
+        style={{
+          background: 'linear-gradient(135deg, #58CC02 0%, #46A302 100%)',
+          color: '#FFFFFF',
+        }}
+      >
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-xs font-extrabold uppercase tracking-wider opacity-90">
+              追趕進度
+            </p>
+            <p className="text-xl font-extrabold mt-1">
+              一齊追趕呢 {analysis.behindDays} 日 + 今日
+            </p>
+            <p className="text-xs opacity-90 mt-1">
+              {allRefs.length}章 · {summariseRuns(allRefs)}
+            </p>
+            <p className="text-xs opacity-80 mt-1">
+              {D(gap.firstDate)} 至今 · 計劃唔會改動
+            </p>
+          </div>
+          <div className="text-5xl">▶</div>
+        </div>
+      </a>
     )
   }
 

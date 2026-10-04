@@ -8,6 +8,7 @@ import {
   useRef,
   type CSSProperties,
 } from 'react'
+import { summariseRuns } from '@/lib/refRange'
 import { createClient } from '@/lib/supabase/client'
 import {
   markDayCompleteBatch,
@@ -1827,12 +1828,17 @@ export default function ReadPage() {
                   textAlign: 'center',
                 }}
               >
-                📖 今日功課：
+                📖 {todayRequiredRefs.length > 20 ? '追趕進度' : '今日功課'}：
                 {todayRequiredRefs.length > 0
                   ? `${todayRequiredRefs.length}章`
                   : `${todayBook?.name} ${todayChapter} 章`}
+                {/* Collapsed into consecutive runs — a 120-chapter catch-up
+                    listed every chapter by name was a wall of 「哥林多前書 7」
+                    that told the reader nothing they hadn't got from the count.
+                    The run form answers the actual question: where do I start,
+                    where do I stop. */}
                 {todayRequiredRefs.length > 0 &&
-                  ` · ${todayRequiredRefs.join('、')}`}
+                  ` · ${summariseRuns(todayRequiredRefs, 3)}`}
               </div>
             )
           )}
