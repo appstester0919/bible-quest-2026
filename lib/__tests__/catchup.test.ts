@@ -350,3 +350,71 @@ describe('today is only queued while it is unread', () => {
     expect(queue).not.toContain(at('2026-10-04')[0])
   })
 })
+
+describe('re-anchoring restarts TODAY, not on the gap day', () => {
+  // What the button is FOR: the reader stopped for months, has no energy to
+  // claw back 273 days, and wants to start again from the gap chapter starting
+  // today. Writing the GAP DAY into started_at moved the reading position but
+  // left the elapsed span untouched, so the dashboard still said 「273 日未讀」
+  // the moment after the button reported success — the one outcome the button
+  // does not exist to produce.
+  const E = {
+    id: 'stalled',
+    scope: 'nt_ot' as const,
+    chapters_per_day: 4,
+    reading_order: '1-3' as const,
+    started_at: '2026-01-05T00:00:00.000Z',
+    start_book_index: 0,
+  }
+  const plan4 = generateReadingPlan(E as never, books, 400)
+  const at = (d: string) => plan4.get(d) ?? []
+  const behind = analyseCatchUp(E.started_at, '2026-10-05', [], at)
+  if (behind.kind !== 'reanchor') throw new Error('expected reanchor')
+  it('is the reanchor case the card is built for', () => {
+    expect(behind.kind).toBe('reanchor')
+    if (behind.kind !== 'reanchor') return
+    expect(behind.behindDays).toBeGreaterThan(200)
+  })
+
+  it("resolves the restart position to the gap day's first chapter", () => {
+    if (behind.kind !== 'reanchor') return
+    const pos = anchorPositionFor(E as never, books, behind.firstGap.firstDate)
+    expect(pos).not.toBeNull()
+    // Whatever the gap day read first is where reading resumes.
+    expect(pos!.chapter).toBe(1)
+  })
+
+  it('putting started_at at TODAY makes the reader on track again', () => {
+    // The whole point: same position, today's date, zero days behind.
+    const pos = anchorPositionFor(E as never, books, behind.firstGap.firstDate)!
+    const restarted = {
+      ...E,
+      started_at: '2026-10-05T00:00:00.000Z',
+      start_book_index: pos.book_index,
+      start_chapter: pos.chapter,
+    }
+    const after = analyseCatchUp(
+      restarted.started_at,
+      '2026-10-05',
+      [],
+      (d) => generateReadingPlan(restarted as never, books, 400).get(d) ?? [],
+    )
+    expect(after.kind).toBe('on_track')
+  })
+
+  it('starts reading at the gap chapter on day one', () => {
+    const pos = anchorPositionFor(E as never, books, behind.firstGap.firstDate)!
+    const gapRefs = at(behind.firstGap.firstDate)
+    expect(gapRefs[0]).toBeDefined()
+    const restarted = {
+      ...E,
+      started_at: '2026-10-05T00:00:00.000Z',
+      start_book_index: pos.book_index,
+      start_chapter: pos.chapter,
+    }
+    const todayRefs =
+      generateReadingPlan(restarted as never, books, 400).get('2026-10-05') ??
+      []
+    expect(todayRefs[0]).toBe(gapRefs[0])
+  })
+})

@@ -24,15 +24,26 @@ import { reanchoredEnrollment } from '@/lib/readingProgress'
 // ============================================================================
 
 export type ReanchorResult =
-  | { ok: true; from: string; to: string; from_ref: string }
+  | {
+      ok: true
+      from: string
+      to: string
+      anchor_date: string
+      from_ref: string
+    }
   | { ok: false; error: string }
 
 /** 0-based index of 馬太福音 — the first NT book. */
 const NT_FIRST_BOOK_INDEX = 39
 
 /**
- * Re-point the plan to a chosen day so the schedule recomputes from there,
- * starting at the chapter that day was supposed to read.
+ * Restart the plan FROM TODAY at the chapters a chosen day was supposed to read.
+ *
+ * anchorDate selects the CHAPTER position (that day's first chapter);
+ * started_at is rewritten to today. Rewriting started_at to the anchor day
+ * instead is the bug this replaces: it moved the reading position but left the
+ * elapsed span intact, so the reader stayed exactly as far behind — the one
+ * outcome this button does not exist to produce.
  *
  * BOTH parts matter, and missing the second one was a real bug:
  *
@@ -76,16 +87,21 @@ export async function reanchorPlan(
   const today = readingDate()
   const currentStart = String(enrollment.started_at).split('T')[0]
 
-  // The anchor must be a real elapsed day of THIS plan: on or after the
-  // current start (never move backwards) and strictly before today, because
-  // today's chapters are still due and re-anchoring onto them would skip them.
+  // The anchor DAY names which chapters to restart from; the RESTART DATE is
+  // always today. Those are two different things and conflating them is what
+  // made this button useless: writing the anchor day into started_at left the
+  // reader exactly as many days behind as before (273 in the real test account),
+  // which is the precise thing the button exists to end. Restarting from a gap
+  // means 「start reading at this chapter TODAY」, not 「pretend today is that
+  // day」. So the date written is today, and anchorDate is used only to pick the
+  // position the caller already resolved.
   if (daysBetween(currentStart, anchorDate) < 0) {
     return { ok: false, error: '新的起點不能早於現有計劃的開始日' }
   }
-  if (daysBetween(anchorDate, today) < 1) {
-    return { ok: false, error: '新的起點必須是已經過去的日子' }
+  if (daysBetween(anchorDate, today) < 0) {
+    return { ok: false, error: '新的起點不能是將來的日子' }
   }
-  if (anchorDate === currentStart) {
+  if (anchorDate === currentStart && anchorDate === today) {
     return { ok: false, error: '新的起點與現有計劃相同' }
   }
 
@@ -114,7 +130,10 @@ export async function reanchorPlan(
     chapter: startChapter,
   })
   const patch: Record<string, unknown> = {
-    started_at: `${anchorDate}T00:00:00.000Z`,
+    // TODAY, not the anchor day — see the note above. This is the line that
+    // actually resets the backlog; without it the button is a no-op in the only
+    // way the reader can observe.
+    started_at: `${today}T00:00:00.000Z`,
     start_book_index: rebuilt.start_book_index,
     start_chapter: rebuilt.start_chapter,
   }
@@ -150,7 +169,8 @@ export async function reanchorPlan(
   return {
     ok: true,
     from: currentStart,
-    to: anchorDate,
+    to: today,
+    anchor_date: anchorDate,
     from_ref: `${startBookIndex}:${startChapter}`,
   }
 }

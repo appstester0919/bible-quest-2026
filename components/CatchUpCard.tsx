@@ -67,6 +67,7 @@ function ConfirmDialog({
   anchorRefs,
   todayRefs,
   chaptersPerDay,
+  behindDays,
   onCancel,
   onConfirm,
 }: {
@@ -76,6 +77,7 @@ function ConfirmDialog({
   anchorRefs: string[]
   todayRefs: string[]
   chaptersPerDay: number
+  behindDays: number
   onCancel: () => void
   onConfirm: () => void
 }) {
@@ -101,13 +103,7 @@ function ConfirmDialog({
 
         <dl className="mt-3 text-sm space-y-2">
           <div className="flex justify-between gap-3">
-            <dt style={{ color: 'var(--color-ink-soft)' }}>由呢日開始</dt>
-            <dd className="font-bold text-right">
-              {D(pending.date)} · {shortRef(anchorRefs[0] ?? '')}
-            </dd>
-          </div>
-          <div className="flex justify-between gap-3">
-            <dt style={{ color: 'var(--color-ink-soft)' }}>要補讀</dt>
+            <dt style={{ color: 'var(--color-ink-soft)' }}>由斷位接回</dt>
             <dd className="font-bold text-right">
               {describeRefSpan(anchorRefs)}
             </dd>
@@ -122,10 +118,15 @@ function ConfirmDialog({
             <dt style={{ color: 'var(--color-ink-soft)' }}>之後每日</dt>
             <dd className="font-bold">{chaptersPerDay} 章</dd>
           </div>
+          <div className="flex justify-between gap-3">
+            <dt style={{ color: 'var(--color-ink-soft)' }}>落後日數</dt>
+            <dd className="font-bold text-right">{behindDays} 日 → 0 日</dd>
+          </div>
         </dl>
 
         <p className="text-xs mt-3" style={{ color: 'var(--color-ink-soft)' }}>
-          已經讀過嘅紀錄唔會改動；跳過咗嘅日子會留返喺日曆同連續紀錄上面。
+          今日就由呢個位置重新開始，之前未讀嘅 {behindDays}{' '}
+          日唔使補，已經讀過嘅紀錄亦唔會改動。
         </p>
 
         {error && (
@@ -248,8 +249,12 @@ export function CatchUpCard({ enrollment, books, completedDates }: Props) {
       book_index: bookIndex,
       chapter,
     })
+    // started_at is TODAY, matching reanchorPlan. The preview previously used
+    // the anchor day, so it showed 「今日：創 1 – …」 for a schedule whose day
+    // 273 would be today's — the dialog described a different plan from the one
+    // the write produced, which is the only thing a confirmation must never do.
     const plan = generateReadingPlan(
-      { ...rebuilt, started_at: anchor },
+      { ...rebuilt, started_at: today },
       books,
       400,
     )
@@ -500,6 +505,7 @@ export function CatchUpCard({ enrollment, books, completedDates }: Props) {
             pending.chapter,
           )}
           chaptersPerDay={enrollment.chapters_per_day}
+          behindDays={analysis.behindDays}
           onCancel={() => setPending(null)}
           onConfirm={() =>
             applyAnchor({
