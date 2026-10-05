@@ -92,3 +92,72 @@ describe('a short book name is never cut in half', () => {
     expect(out.startsWith('提摩太後書')).toBe(true)
   })
 })
+
+import {
+  parseReadingPlan,
+  CHINESE_BIBLE_ABBREVIATIONS,
+} from '../chineseBibleAbbreviations'
+import bibleData from '../../public/bible-data.json'
+
+describe('the abbreviation table matches the Bible data exactly', () => {
+  // 「提摩太后書」 (后, U+540E) was the key in the table while bible-data.json
+  // spells it 「提摩太後書」 (後, U+5F8C). The forward lookup therefore ALWAYS
+  // missed and fell through to charAt(0), so 2 Timothy rendered as 「提 1-3」 —
+  // indistinguishable from a truncation bug, and wrong to any reader who knows
+  // the canonical abbreviation is 提後. One wrong character broke one book for
+  // every reader; a table test is the only thing that catches it.
+  const bookNames = (bibleData as { books: { n: string }[] }).books.map(
+    (b) => b.n,
+  )
+
+  it('has a key for every book in bible-data.json', () => {
+    const missing = bookNames.filter((n) => !CHINESE_BIBLE_ABBREVIATIONS[n])
+    expect(missing).toEqual([])
+  })
+
+  it('has no key that is not a real book (catches typos like 后/後)', () => {
+    const extra = Object.keys(CHINESE_BIBLE_ABBREVIATIONS).filter(
+      (n) => !bookNames.includes(n),
+    )
+    expect(extra).toEqual([])
+  })
+
+  it('gives 提摩太前書 and 提摩太後書 their canonical abbreviations', () => {
+    expect(CHINESE_BIBLE_ABBREVIATIONS['提摩太前書']).toBe('提前')
+    expect(CHINESE_BIBLE_ABBREVIATIONS['提摩太後書']).toBe('提後')
+  })
+})
+
+describe('regression: the calendar tile showed 「提」 instead of 「提後」', () => {
+  it('does not collapse a book that is already an abbreviation', () => {
+    // Plan refs are ALREADY abbreviated (bible-data.json `a`: 提摩太後書 -> 提後).
+    // parseReadingPlan looked the book up forward-only, missed, and fell back to
+    // charAt(0) — so 「提後」 became 「提」, which reads like a truncation bug and
+    // is wrong in a way a reader of 2 Timothy would catch immediately.
+    const out = parseReadingPlan(['提後 1', '提後 2', '提後 3', '提後 4'])
+    expect(out).toContain('提後')
+    expect(out).not.toMatch(/(^|[^後])提\s*\d/)
+  })
+
+  it('still abbreviates a full book name', () => {
+    expect(parseReadingPlan(['提摩太後書 1', '提摩太後書 2'])).toContain('提後')
+    expect(parseReadingPlan(['提摩太前書 1', '提摩太前書 2'])).toContain('提前')
+  })
+
+  it('handles a mixed day of abbreviated and full names', () => {
+    const out = parseReadingPlan(['歌羅西書 1', '提後 1', '提後 2', '提多書 1'])
+    expect(out).toContain('提後')
+    expect(out).not.toMatch(/(^|[^後])提\s*\d/)
+  })
+
+  it('keeps the canonical two-char abbreviation intact', () => {
+    // Plan refs already carry the CANONICAL abbreviation (提摩太前書 -> 提前,
+    // 提摩太後書 -> 提後), taken from bible-data.json's `a` field. The old tile
+    // then ran substring(0, 6) over the WHOLE ref, which cut 「提前 1」 down to
+    // 「提」 and made a real, recognised abbreviation look like a truncation
+    // bug. summariseRuns must not re-cut what the data already abbreviates.
+    expect(summariseRuns(['提前 1', '提前 2', '提後 1', '提後 2'], 2)).toBe(
+      '提前 1 - 2、提後 1 - 2',
+    )
+  })
+})
