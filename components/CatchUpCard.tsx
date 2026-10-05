@@ -207,19 +207,12 @@ export function CatchUpCard({ enrollment, books, completedDates }: Props) {
     if (!pending || books.length === 0) return []
     const plan = generateReadingPlan(enrollment, books, 400)
     const out: string[] = []
-    for (
-      let d = pending.date;
-      daysBetween(
-        d,
-        addDays(
-          pending.date,
-          analysis.kind === 'catch_up' ? analysis.behindDays - 1 : 0,
-        ),
-      ) >= 0;
-      d = addDays(d, 1)
-    ) {
-      out.push(...(plan.get(d) ?? []))
-    }
+    // The anchor is ONE day — the chapters that day was supposed to read, which
+    // is where reading resumes. Multiplying it by behindDays (the old code, for
+    // the catch-up case) made the button advertise the whole 272-day backlog
+    // 「馬太 1 – 以西結 30」 as the restart point, when the restart is one
+    // day's worth: 馬太 1 – 創世 3.
+    out.push(...(plan.get(pending.date) ?? []))
     return out
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pending, books, enrollment, analysis])
@@ -437,7 +430,7 @@ export function CatchUpCard({ enrollment, books, completedDates }: Props) {
           whiteSpace: 'normal',
         }}
       >
-        {D(gap.firstDate)} · {describeRefSpan(gap.refs)}
+        {D(gap.firstDate)} · {describeRefSpan(planFor(gap.firstDate))}
       </span>
       <span
         className="w-full"
