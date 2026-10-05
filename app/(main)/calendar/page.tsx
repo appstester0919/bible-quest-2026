@@ -8,8 +8,13 @@ import { createClient } from '@/lib/supabase/client'
 import { getBooksMeta, type BookMeta } from '@/lib/bible/lookup'
 import { generateReadingPlan } from '@/lib/bible/planGenerator'
 import { celebrate } from '@/lib/confetti'
-import { markDayCompleteBatch, unmarkDayComplete, markPlanComplete } from '@/lib/actions'
+import {
+  markDayCompleteBatch,
+  unmarkDayComplete,
+  markPlanComplete,
+} from '@/lib/actions'
 import { checkInAllMyGroups } from '@/lib/groupActions'
+import { summariseRuns } from '@/lib/refRange'
 
 interface Enrollment {
   id: string
@@ -44,11 +49,17 @@ function dateToHKDateString(date: Date): string {
 }
 
 function getHKToday(): Date {
-  const [y, m, d] = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Hong_Kong' }).split('-').map(Number)
+  const [y, m, d] = new Date()
+    .toLocaleDateString('en-CA', { timeZone: 'Asia/Hong_Kong' })
+    .split('-')
+    .map(Number)
   return new Date(y, m - 1, d)
 }
 
-function buildPlan(enrollment: Enrollment, books: BookMeta[]): Map<string, string[]> {
+function buildPlan(
+  enrollment: Enrollment,
+  books: BookMeta[],
+): Map<string, string[]> {
   // Delegate to the shared plan generator — handles all reading_order modes.
   return generateReadingPlan(enrollment, books, 400)
 }
@@ -68,8 +79,13 @@ export default function CalendarPage() {
   useEffect(() => {
     const fetchData = async () => {
       const supabase = createClient()
-      const { data: { user: authUser } } = await supabase.auth.getUser()
-      if (!authUser) { setLoading(false); return }
+      const {
+        data: { user: authUser },
+      } = await supabase.auth.getUser()
+      if (!authUser) {
+        setLoading(false)
+        return
+      }
       setUser(authUser)
 
       const { data: enrollmentData, error: enrollmentError } = await supabase
@@ -88,9 +104,13 @@ export default function CalendarPage() {
         setEnrollment(enrollmentData)
       }
 
-      const { data: sessionsData } = enrollmentData && !enrollmentError
-        ? await supabase.from('reading_sessions').select('*').eq('enrollment_id', enrollmentData.id)
-        : { data: null as ReadingSession[] | null }
+      const { data: sessionsData } =
+        enrollmentData && !enrollmentError
+          ? await supabase
+              .from('reading_sessions')
+              .select('*')
+              .eq('enrollment_id', enrollmentData.id)
+          : { data: null as ReadingSession[] | null }
       setSessions(sessionsData ?? [])
 
       const res = await fetch('/bible-data.json')
@@ -112,7 +132,7 @@ export default function CalendarPage() {
     // a redesign where the user navigated quickly between pages), filter them
     // out here so the progress count stays accurate.
     const set = new Set<string>()
-    sessions.forEach(s => {
+    sessions.forEach((s) => {
       if (enrollment && s.enrollment_id === enrollment.id) {
         set.add(s.date_local)
       }
@@ -120,119 +140,163 @@ export default function CalendarPage() {
     return set
   }, [sessions, enrollment])
 
-  const tileContent = useCallback(({ date }: { date: Date }) => {
-    const key = dateToHKDateString(date)
-    const refs = plan.get(key)
-    if (!refs || refs.length === 0) return null
-    const completed = completedDays.has(key)
-    return (
-      <div className="text-xs mt-1 text-center leading-tight">
-        {refs.slice(0, 2).map((ref, i) => (
-          <div key={i} className={completed ? 'line-through opacity-60' : ''}>
-            {ref.length > 8 ? ref.substring(0, 6) + '…' : ref}
-          </div>
-        ))}
-        {refs.length > 2 && <div className="opacity-50">+{refs.length - 2}</div>}
-      </div>
-    )
-  }, [plan, completedDays])
+  const tileContent = useCallback(
+    ({ date }: { date: Date }) => {
+      const key = dateToHKDateString(date)
+      const refs = plan.get(key)
+      if (!refs || refs.length === 0) return null
+      const completed = completedDays.has(key)
+      return (
+        <div className="text-xs mt-1 text-center leading-tight">
+          {/* Was: ref.substring(0, 6) + '…' — a character count, so 「提摩太後書 1」
+            (8 chars) became 「提摩太後…」 and any shorter name collapsed to
+            「提」. Truncating Chinese by CHARACTERS cuts a book name in half
+            and leaves the reader with a chapter prefix, not a book.
+            summariseRuns collapses a whole day into runs first
+            (「提摩太前書 1 - 6、提摩太後書 1 - 3」), and the only thing that
+            gets cut is the tail, marked with an ellipsis. */}
+          {(() => {
+            const lines = summariseRuns(refs, 2).split('、')
+            return (
+              <>
+                {lines.map((line, i) => (
+                  <div
+                    key={i}
+                    className={
+                      (completed ? 'line-through opacity-60 ' : '') + 'truncate'
+                    }
+                  >
+                    {line}
+                  </div>
+                ))}
+                {refs.length > 2 && (
+                  <div className="opacity-50">+{refs.length - 2}</div>
+                )}
+              </>
+            )
+          })()}
+        </div>
+      )
+    },
+    [plan, completedDays],
+  )
 
-  const tileClassName = useCallback(({ date }: { date: Date }) => {
-    const key = dateToHKDateString(date)
-    const refs = plan.get(key)
-    const completed = completedDays.has(key)
-    const isToday = key === hktToday
-    const isSelected = selectedDate && dateToHKDateString(selectedDate) === key
+  const tileClassName = useCallback(
+    ({ date }: { date: Date }) => {
+      const key = dateToHKDateString(date)
+      const refs = plan.get(key)
+      const completed = completedDays.has(key)
+      const isToday = key === hktToday
+      const isSelected =
+        selectedDate && dateToHKDateString(selectedDate) === key
 
-    let cls = 'relative '
-    if (completed) {
-      cls += isToday ? 'bg-green-300 ring-2 ring-[#22c55e] ' : 'bg-green-200 '
-    } else if (isToday) {
-      cls += 'bg-orange-100 ring-2 ring-orange-400 '
-    } else if (refs && refs.length > 0) {
-      cls += 'bg-amber-50 '
-    }
-    if (isSelected) cls += 'ring-2 ring-[#22c55e] '
-    return cls
-  }, [plan, completedDays, hktToday, selectedDate])
+      let cls = 'relative '
+      if (completed) {
+        cls += isToday ? 'bg-green-300 ring-2 ring-[#22c55e] ' : 'bg-green-200 '
+      } else if (isToday) {
+        cls += 'bg-orange-100 ring-2 ring-orange-400 '
+      } else if (refs && refs.length > 0) {
+        cls += 'bg-amber-50 '
+      }
+      if (isSelected) cls += 'ring-2 ring-[#22c55e] '
+      return cls
+    },
+    [plan, completedDays, hktToday, selectedDate],
+  )
 
   const handleDateClick = useCallback(async (date: Date) => {
     setSelectedDate(date)
   }, [])
 
-  const handleCompleteDay = useCallback(async (date: Date) => {
-    const key = dateToHKDateString(date)
-    const refs = plan.get(key)
-    if (!refs || refs.length === 0) return
-    if (completedDays.has(key) || !enrollment) return
+  const handleCompleteDay = useCallback(
+    async (date: Date) => {
+      const key = dateToHKDateString(date)
+      const refs = plan.get(key)
+      if (!refs || refs.length === 0) return
+      if (completedDays.has(key) || !enrollment) return
 
-    // Future-date guard (public launch): cannot mark a future day as complete
-    if (key > hktToday) {
-      alert('未到嘅日子無法標記完成')
-      return
-    }
-
-    setIsCompleting(true)
-    try {
-      // Single RPC: bulk INSERT all chapters + recalculate stats server-side.
-      // Replaces N × markLessonComplete() + recalcUserStatsAfterCompletion()
-      // which saved ~N × (auth rtt + insert rtt) round-trips.
-      const result = await markDayCompleteBatch(enrollment.id, refs, key)
-      if (!result.success) {
-        alert(`寫入失敗: ${result.error}`)
-        setIsCompleting(false)
+      // Future-date guard (public launch): cannot mark a future day as complete
+      if (key > hktToday) {
+        alert('未到嘅日子無法標記完成')
         return
       }
 
-      // Sync group check-ins fire-and-forget (non-blocking)
-      checkInAllMyGroups(key).catch(e => console.error('[handleCompleteDay] group sync err:', e))
+      setIsCompleting(true)
+      try {
+        // Single RPC: bulk INSERT all chapters + recalculate stats server-side.
+        // Replaces N × markLessonComplete() + recalcUserStatsAfterCompletion()
+        // which saved ~N × (auth rtt + insert rtt) round-trips.
+        const result = await markDayCompleteBatch(enrollment.id, refs, key)
+        if (!result.success) {
+          alert(`寫入失敗: ${result.error}`)
+          setIsCompleting(false)
+          return
+        }
 
-      // Check if plan is now fully completed
-      const newCompletedCount = completedDays.size + 1
-      if (newCompletedCount >= plan.size) {
-        await markPlanComplete(enrollment.id)
-      }
+        // Sync group check-ins fire-and-forget (non-blocking)
+        checkInAllMyGroups(key).catch((e) =>
+          console.error('[handleCompleteDay] group sync err:', e),
+        )
 
-      await celebrate({ type: 'burst', particleCount: Math.min(refs.length * 30, 180) })
-      setSessions(prev => [...prev, ...refs.map((ref, i) => ({
-        id: `new-${i}`,
-        enrollment_id: enrollment.id,
-        chapter_ref: ref,
-        date_local: key,
-      }))])
-      setShowSuccess(true)
-      setTimeout(() => setShowSuccess(false), 3000)
-    } catch (error) {
-      console.error('Complete error:', error)
-      alert(`失敗: ${error instanceof Error ? error.message : String(error)}`)
-    } finally {
-      setIsCompleting(false)
-    }
-  }, [plan, completedDays, enrollment])
+        // Check if plan is now fully completed
+        const newCompletedCount = completedDays.size + 1
+        if (newCompletedCount >= plan.size) {
+          await markPlanComplete(enrollment.id)
+        }
 
-  const handleUncompleteDay = useCallback(async (date: Date) => {
-    const key = dateToHKDateString(date)
-    if (!enrollment) return
-
-    setIsCompleting(true)
-    try {
-      const result = await unmarkDayComplete(enrollment.id, key)
-      if (!result.success) {
-        alert(`取消失敗：${result.error}`)
+        await celebrate({
+          type: 'burst',
+          particleCount: Math.min(refs.length * 30, 180),
+        })
+        setSessions((prev) => [
+          ...prev,
+          ...refs.map((ref, i) => ({
+            id: `new-${i}`,
+            enrollment_id: enrollment.id,
+            chapter_ref: ref,
+            date_local: key,
+          })),
+        ])
+        setShowSuccess(true)
+        setTimeout(() => setShowSuccess(false), 3000)
+      } catch (error) {
+        console.error('Complete error:', error)
+        alert(`失敗: ${error instanceof Error ? error.message : String(error)}`)
+      } finally {
         setIsCompleting(false)
-        return
       }
-      // Remove sessions for this date from local state
-      setSessions(prev => prev.filter(s => s.date_local !== key))
-      setShowSuccess(true)
-      setTimeout(() => setShowSuccess(false), 3000)
-    } catch (error) {
-      console.error('Uncomplete error:', error)
-      alert(`取消失敗：${error instanceof Error ? error.message : String(error)}`)
-    } finally {
-      setIsCompleting(false)
-    }
-  }, [enrollment])
+    },
+    [plan, completedDays, enrollment],
+  )
+
+  const handleUncompleteDay = useCallback(
+    async (date: Date) => {
+      const key = dateToHKDateString(date)
+      if (!enrollment) return
+
+      setIsCompleting(true)
+      try {
+        const result = await unmarkDayComplete(enrollment.id, key)
+        if (!result.success) {
+          alert(`取消失敗：${result.error}`)
+          setIsCompleting(false)
+          return
+        }
+        // Remove sessions for this date from local state
+        setSessions((prev) => prev.filter((s) => s.date_local !== key))
+        setShowSuccess(true)
+        setTimeout(() => setShowSuccess(false), 3000)
+      } catch (error) {
+        console.error('Uncomplete error:', error)
+        alert(
+          `取消失敗：${error instanceof Error ? error.message : String(error)}`,
+        )
+      } finally {
+        setIsCompleting(false)
+      }
+    },
+    [enrollment],
+  )
 
   const todayRefs = plan.get(hktToday) ?? []
   const selectedKey = selectedDate ? dateToHKDateString(selectedDate) : ''
@@ -240,7 +304,8 @@ export default function CalendarPage() {
 
   const totalPlanDays = plan.size
   const completedCount = completedDays.size
-  const progress = totalPlanDays > 0 ? Math.round((completedCount / totalPlanDays) * 100) : 0
+  const progress =
+    totalPlanDays > 0 ? Math.round((completedCount / totalPlanDays) * 100) : 0
 
   if (loading) {
     return (
@@ -276,8 +341,12 @@ export default function CalendarPage() {
         {/* Progress card */}
         <div className="card">
           <div className="flex justify-between items-center mb-3">
-            <span className="font-bold text-[var(--color-primary)]">完成進度</span>
-            <span className="badge badge-success">{completedCount}/{totalPlanDays} 天</span>
+            <span className="font-bold text-[var(--color-primary)]">
+              完成進度
+            </span>
+            <span className="badge badge-success">
+              {completedCount}/{totalPlanDays} 天
+            </span>
           </div>
           <div className="progress-track">
             <div className="progress-fill" style={{ width: `${progress}%` }} />
@@ -287,7 +356,14 @@ export default function CalendarPage() {
 
         {/* Custom Mon-first Calendar */}
         <div className="card overflow-hidden">
-          <CustomCalendar plan={plan} completedDays={completedDays} selectedDate={selectedDate} onSelect={handleDateClick} onComplete={handleCompleteDay} onUncomplete={handleUncompleteDay} />
+          <CustomCalendar
+            plan={plan}
+            completedDays={completedDays}
+            selectedDate={selectedDate}
+            onSelect={handleDateClick}
+            onComplete={handleCompleteDay}
+            onUncomplete={handleUncompleteDay}
+          />
           <div
             className="mt-3 px-3 py-2.5 rounded-xl text-sm leading-relaxed"
             style={{
@@ -306,14 +382,20 @@ export default function CalendarPage() {
           <div className="card animate-scale-in">
             <h3 className="h-section mb-3">
               {selectedDate.toLocaleDateString('zh-TW', {
-                year: 'numeric', month: 'long', day: 'numeric',
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
               })}
             </h3>
             {selectedRefs.length > 0 ? (
               <>
-                <div className={`p-3 rounded-xl text-center font-bold ${
-                  completedDays.has(selectedKey!) ? 'bg-[#D7FFB8] text-[#2D7A01] line-through' : 'bg-[var(--color-background)] text-[var(--color-ink)]'
-                }`}>
+                <div
+                  className={`p-3 rounded-xl text-center font-bold ${
+                    completedDays.has(selectedKey!)
+                      ? 'bg-[#D7FFB8] text-[#2D7A01] line-through'
+                      : 'bg-[var(--color-background)] text-[var(--color-ink)]'
+                  }`}
+                >
                   {formatReadingPlanFull(selectedRefs)}
                 </div>
                 {completedDays.has(selectedKey!) ? (
@@ -348,9 +430,13 @@ export default function CalendarPage() {
               <h3 className="h-section">今日功課</h3>
               <span className="badge badge-gem ml-auto">{hktToday}</span>
             </div>
-            <div className={`p-3 rounded-xl text-center font-bold ${
-              completedDays.has(hktToday) ? 'bg-[#D7FFB8] text-[#2D7A01] line-through' : 'bg-[#FFF1A8] text-[var(--color-ink)]'
-            }`}>
+            <div
+              className={`p-3 rounded-xl text-center font-bold ${
+                completedDays.has(hktToday)
+                  ? 'bg-[#D7FFB8] text-[#2D7A01] line-through'
+                  : 'bg-[#FFF1A8] text-[var(--color-ink)]'
+              }`}
+            >
               {formatReadingPlanFull(todayRefs)}
             </div>
           </div>

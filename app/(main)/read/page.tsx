@@ -1811,7 +1811,14 @@ export default function ReadPage() {
                 textAlign: 'center',
               }}
             >
-              ✅ 今日讀經已完成：{todaySession.chapter_ref}
+              ✅ 今日讀經已完成：
+              {/* todaySession.chapter_ref is ONE row of the day's sessions —
+                  reading_sessions stores a row per chapter, so a 20-chapter day
+                  left the banner claiming 「已完成：歌羅西書 2」 and silently
+                  hiding the other nineteen. Show the whole day instead. */}
+              {todayRequiredRefs.length > 0
+                ? `${todayRequiredRefs.length}章 · ${summariseRuns(todayRequiredRefs, 3)}`
+                : todaySession.chapter_ref}
             </div>
           ) : (
             audioQueue.length > 0 && (
