@@ -491,3 +491,94 @@ describe('BUG: 「由最近嘅斷位接返」 served the earliest gap', () => {
     expect(rebuilt.ot_start_chapter).toBe(PARALLEL.ot_start_chapter)
   })
 })
+
+describe('two gaps: the chosen one is the one that serves', () => {
+  // The exact reported symptom. Two 9-day gaps separated by a week the reader
+  // did read; pressing 「由最近嘅斷位接返」 served the earliest gap instead.
+  // 9/17's day reads 馬太 17, 創 49, 創 50, 出 1 — both testaments, so the
+  // position has to resolve both. Restart day 1 must be those chapters.
+  const E = {
+    scope: 'nt_ot' as const,
+    chapters_per_day: 4,
+    reading_order: '1-3',
+    started_at: '2026-09-01',
+    nt_start_book_index: 39,
+    nt_start_chapter: 1,
+    ot_start_book_index: 0,
+    ot_start_chapter: 1,
+  }
+  const plan = generateReadingPlan(E as never, books, 400)
+  const planFor = (d: string) => plan.get(d) ?? []
+  const read = [
+    '2026-09-10',
+    '2026-09-11',
+    '2026-09-12',
+    '2026-09-13',
+    '2026-09-14',
+    '2026-09-15',
+    '2026-09-16',
+  ]
+  const a = analyseCatchUp('2026-09-01', '2026-09-26', read, planFor)
+
+  it('produces two gap blocks', () => {
+    expect(a.kind).toBe('reanchor')
+    if (a.kind !== 'reanchor') throw new Error('expected reanchor')
+    expect(a.multipleGaps).toBe(true)
+    expect(a.firstGap.firstDate).toBe('2026-09-01')
+    expect(a.lastGap.firstDate).toBe('2026-09-17')
+    expect(a.firstGap.days).toBe(9)
+    expect(a.lastGap.days).toBe(9)
+  })
+
+  it('the last gap resolves a position for both testaments', () => {
+    expect(planFor('2026-09-17')).toEqual([
+      '馬太福音 17',
+      '創世記 49',
+      '創世記 50',
+      '出埃及記 1',
+    ])
+    const pos = anchorPositionFor(E as never, books, '2026-09-17')!
+    expect(pos.primary).toEqual({ book_index: 39, chapter: 17 })
+    expect(pos.secondary).toEqual({ book_index: 0, chapter: 49 })
+  })
+
+  it('pressing the LAST gap restarts AT that day', () => {
+    const pos = anchorPositionFor(E as never, books, '2026-09-17')!
+    const day1 = generateReadingPlan(
+      { ...reanchoredEnrollment(E as never, pos), started_at: '2026-09-26' },
+      books,
+      3,
+    ).get('2026-09-26')!
+    // The bug: this came back 馬太 1, 創 1 — the FIRST gap's opening.
+    expect(day1).toEqual([
+      '馬太福音 17',
+      '創世記 49',
+      '創世記 50',
+      '出埃及記 1',
+    ])
+  })
+
+  it('and none of the FIRST gap is served', () => {
+    const pos = anchorPositionFor(E as never, books, '2026-09-17')!
+    const day1 = generateReadingPlan(
+      { ...reanchoredEnrollment(E as never, pos), started_at: '2026-09-26' },
+      books,
+      3,
+    ).get('2026-09-26')!
+    for (const ref of planFor('2026-09-01')) {
+      expect(day1).not.toContain(ref)
+    }
+  })
+
+  it('pressing the FIRST gap still restarts at the first gap', () => {
+    const pos = anchorPositionFor(E as never, books, '2026-09-01')!
+    const day1 = generateReadingPlan(
+      { ...reanchoredEnrollment(E as never, pos), started_at: '2026-09-26' },
+      books,
+      3,
+    ).get('2026-09-26')!
+    for (const ref of planFor('2026-09-01')) {
+      expect(day1).toContain(ref)
+    }
+  })
+})
