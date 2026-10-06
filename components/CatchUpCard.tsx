@@ -14,6 +14,7 @@ import {
   anchorPositionFor,
   reanchoredEnrollment,
   describeRefSpan,
+  groupRefsByBook,
   shortRef,
   type CatchUpCase,
   type GapBlock,
@@ -302,9 +303,14 @@ export function CatchUpCard({ enrollment, books, completedDates }: Props) {
     // lesson the button must cover the backlog alone — appending a day the
     // reader already completed is precisely what the card promises not to do,
     // and it silently doubles the reading.
-    const allRefs = analysis.todayCompleted
-      ? [...analysis.missedRefs]
-      : [...analysis.missedRefs, ...analysis.today]
+    // Grouped AFTER appending today: missedRefs is already book-grouped, but
+    // today's own NT-then-OT run appended behind it would put 馬太 2 after
+    // 創世 4-6 and split 馬太's two chapters around an OT block again.
+    const allRefs = groupRefsByBook(
+      analysis.todayCompleted
+        ? [...analysis.missedRefs]
+        : [...analysis.missedRefs, ...analysis.today],
+    )
     const href = buildCatchUpHref(allRefs)
     const old = analysis.totalBehindDays - analysis.behindDays
 

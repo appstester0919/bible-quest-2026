@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest'
 import { generateReadingPlan } from '../bible/planGenerator'
+import {
+  groupRefsByBook,
+  describeRefSpan,
+  analyseCatchUp,
+} from '../readingProgress'
 import { getBooksMeta } from '../bible/lookup'
 import bibleData2 from '../../public/bible-data.json'
 const books = getBooksMeta(bibleData2 as never)
@@ -207,5 +212,91 @@ describe('a catch-up run records every day it covered', () => {
     for (const [date, refs] of plan)
       for (const r of refs) if (!map.has(r)) map.set(r, date)
     for (const r of today) expect(map.get(r)).toBe('2026-10-05')
+  })
+})
+
+describe('a multi-day queue reads one book straight through', () => {
+  // A parallel plan gives each day a NT run then an OT run. Flattening two
+  // days produced 馬太 1, 創世 1-3, 馬太 2, 創世 4-6 — the same book split by
+  // another book's chapters, twice over. That is not how anyone reads.
+  const twoDayQueue = [
+    '馬太福音 1',
+    '創世記 1',
+    '創世記 2',
+    '創世記 3',
+    '馬太福音 2',
+    '創世記 4',
+    '創世記 5',
+    '創世記 6',
+  ]
+
+  it('groups by book so no book is interrupted', () => {
+    expect(groupRefsByBook(twoDayQueue)).toEqual([
+      '馬太福音 1',
+      '馬太福音 2',
+      '創世記 1',
+      '創世記 2',
+      '創世記 3',
+      '創世記 4',
+      '創世記 5',
+      '創世記 6',
+    ])
+  })
+
+  it('keeps a single-day queue untouched', () => {
+    const oneDay = ['馬太福音 1', '創世記 1', '創世記 2', '創世記 3']
+    expect(groupRefsByBook(oneDay)).toEqual(oneDay)
+  })
+
+  it('preserves book first-appearance order (plan start book first)', () => {
+    expect(groupRefsByBook(['馬太福音 1', '創世記 1', '馬太福音 2'])).toEqual([
+      '馬太福音 1',
+      '馬太福音 2',
+      '創世記 1',
+    ])
+  })
+
+  it('never loses or duplicates a ref', () => {
+    const g = groupRefsByBook(twoDayQueue)
+    expect(g).toHaveLength(twoDayQueue.length)
+    expect(new Set(g).size).toBe(twoDayQueue.length)
+  })
+
+  it('does not reorder within a book — chapters run forward', () => {
+    expect(groupRefsByBook(['創世記 3', '創世記 1', '創世記 2'])).toEqual([
+      '創世記 1',
+      '創世記 2',
+      '創世記 3',
+    ])
+  })
+
+  it('labels a cross-book span as first run – last run, not first – last chapter', () => {
+    // The old label printed 「創世 1 – 馬太 2」 for this queue, which silently
+    // hid 創世 4-6 behind the dash.
+    expect(describeRefSpan(twoDayQueue)).toBe('馬太 1-2 – 創世 1-6')
+  })
+
+  it('analyseCatchUp hands back an already-grouped backlog', () => {
+    const days: Record<string, string[]> = {
+      '2026-10-04': ['馬太福音 1', '創世記 1', '創世記 2', '創世記 3'],
+      '2026-10-05': ['馬太福音 2', '創世記 4', '創世記 5', '創世記 6'],
+    }
+    const a = analyseCatchUp(
+      '2026-10-04',
+      '2026-10-06',
+      [],
+      (d) => days[d] ?? [],
+    )
+    if (a.kind === 'on_track') throw new Error('expected a gap')
+    const g = a.missedRefs
+    // Every book's chapters must appear consecutively, never interleaved.
+    for (let i = 1; i < g.length; i++) {
+      const prevBook = g[i - 1].replace(/\s+\d+$/, '')
+      const book = g[i].replace(/\s+\d+$/, '')
+      if (book !== prevBook) continue
+      const prevCh = Number(g[i - 1].split(' ').pop())
+      const ch = Number(g[i].split(' ').pop())
+      expect(ch).toBeGreaterThan(prevCh)
+    }
   })
 })

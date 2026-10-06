@@ -2,6 +2,55 @@ import { addDays, daysBetween } from './readingDate'
 import { generateReadingPlan, type EnrollmentLite } from './bible/planGenerator'
 import type { BookMeta } from './bible/lookup'
 
+/**
+ * Put a multi-day reading queue into book-contiguous order.
+ *
+ * A parallel plan ('2-3') gives every day a NT run followed by an OT run, so
+ * flattening two days produced 馬太 1, 創世 1-3, 馬太 2, 創世 4-6 — the same
+ * book split by another book's chapters, twice. Nobody reads that way: within a
+ * book you go forward, and you finish a book before starting the next.
+ *
+ * Grouping by book and sorting each group by chapter makes the queue read
+ * 創世 1-6 → 馬太 1-2. Chapters already in plan order within one day are
+ * unaffected, so a single-day queue comes back identical.
+ *
+ * Sorting is stable on ties, and refs that don't parse as 「書名 章號」 keep
+ * their relative position at the end rather than being dropped.
+ */
+export function groupRefsByBook(refs: string[]): string[] {
+  const parsed: {
+    ref: string
+    book: string
+    chapter: number
+    order: number
+  }[] = []
+  const unparsed: string[] = []
+  refs.forEach((ref, i) => {
+    const m = ref.match(/^(.+?)\s+(\d+)$/)
+    if (!m) {
+      unparsed.push(ref)
+      return
+    }
+    parsed.push({ ref, book: m[1], chapter: Number(m[2]), order: i })
+  })
+
+  const byBook = new Map<string, typeof parsed>()
+  for (const p of parsed) {
+    const list = byBook.get(p.book)
+    if (list) list.push(p)
+    else byBook.set(p.book, [p])
+  }
+
+  // Books keep first-appearance order (a plan reads its start book first);
+  // chapters inside a book run forward from where reading actually is.
+  const out: string[] = []
+  for (const list of byBook.values()) {
+    list.sort((a, b) => a.chapter - b.chapter || a.order - b.order)
+    out.push(...list.map((p) => p.ref))
+  }
+  return [...out, ...unparsed]
+}
+
 /** 0-based index of 馬太福音 — the first NT book. */
 const NT_FIRST_BOOK_INDEX = 39
 
@@ -235,7 +284,11 @@ export function analyseCatchUp(
     }
   }
 
-  const missedRefs = missed.flatMap((m) => m.refs)
+  // Book-contiguous: a parallel plan gives each day a NT run then an OT run,
+  // so flattening days produced 馬太 1, 創世 1-3, 馬太 2, 創世 4-6. Reading a
+  // book back and forth across days is not how anyone reads; the queue is
+  // grouped so each book reads straight through.
+  const missedRefs = groupRefsByBook(missed.flatMap((m) => m.refs))
   const behindDays = missed.length
 
   const firstGap = blocks[0]
@@ -341,10 +394,35 @@ export function anchorPositionFor(
   return { book_index: book.index, chapter }
 }
 
-/** "馬太 1 – 馬太 3" for a span, or a single ref when the span is one chapter. */
+/**
+ * "創世 1-3" for one book, "馬太 1 – 創世 6" when the span crosses books.
+ *
+ * A span is grouped per book, not just first-to-last, so a queue like
+ * 創世 1-3, 馬太 1, 創世 4-6, 馬太 2 doesn't print 「創世 1 – 馬太 2」 with the
+ * middle chapters silently missing. Grouping also keeps the label honest about
+ * how many books the reader actually has open.
+ */
 export function describeRefSpan(refs: string[]): string {
   if (refs.length === 0) return '—'
-  const first = shortRef(refs[0])
-  const last = shortRef(refs[refs.length - 1])
-  return first === last ? first : `${first} – ${last}`
+  const ordered = groupRefsByBook(refs)
+
+  const runs: { book: string; from: number; to: number }[] = []
+  for (const ref of ordered) {
+    const m = ref.match(/^(.+?)\s+(\d+)$/)
+    if (!m) continue
+    const book = m[1]
+    const ch = Number(m[2])
+    const last = runs[runs.length - 1]
+    if (last && last.book === book && ch === last.to + 1) last.to = ch
+    else runs.push({ book, from: ch, to: ch })
+  }
+  if (runs.length === 0) return shortRef(refs[0])
+
+  const parts = runs.map((r) => {
+    const from = shortRef(`${r.book} ${r.from}`)
+    return r.from === r.to ? from : `${from.split(' ')[0]} ${r.from}-${r.to}`
+  })
+  return parts.length === 1
+    ? parts[0]
+    : `${parts[0]} – ${parts[parts.length - 1]}`
 }
