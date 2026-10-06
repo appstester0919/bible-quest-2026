@@ -10,6 +10,7 @@ import {
   anchorPositionFor,
   reanchoredEnrollment,
   describeRefSpan,
+  FINISHED_BOOK_INDEX,
 } from '../readingProgress'
 import bibleData from '../../public/bible-data.json'
 
@@ -736,5 +737,99 @@ describe('BUG: 選最近斷位，舊約喺最近，新約留咗喺最早', () =>
       ).toBe(true)
       expect(refs).toHaveLength(REAL.chapters_per_day)
     }
+  })
+})
+
+describe('BUG: 66 被 DB CHECK constraint 擋住，成個 UPDATE 失敗', () => {
+  // Pressed 「由最近嘅斷位接返」 on the OT-only recent gap and got an error;
+  // the plan would not update. Verified against the live database:
+  //
+  //   PATCH nt_start_book_index = 66
+  //   → 23514  violates check constraint
+  //     "user_plan_enrollments_nt_start_book_index_chk"
+  //
+  // because migrations 011/012 cap the start columns at real book indices
+  // (39..65 NT, 0..38 OT). The UPDATE is one statement, so the whole write
+  // aborted — including the columns that were perfectly legal.
+  const REAL = {
+    scope: 'nt_ot' as const,
+    chapters_per_day: 6,
+    reading_order: '2-4',
+    started_at: '2026-06-23',
+    nt_start_book_index: 42,
+    nt_start_chapter: 21,
+    ot_start_book_index: 5,
+    ot_start_chapter: 1,
+  }
+  const otOnlyAnchor = anchorPositionFor(REAL as never, books, '2026-09-24')!
+
+  const rebuildWith = (ntIdx: number, ntCh: number) => {
+    const rebuilt = reanchoredEnrollment(REAL as never, otOnlyAnchor)
+    return generateReadingPlan(
+      {
+        ...rebuilt,
+        nt_start_book_index: ntIdx,
+        nt_start_chapter: ntCh,
+        started_at: '2026-10-06',
+      },
+      books,
+      40,
+    )
+  }
+
+  it('the out-of-range sentinel is what the old constraints reject', () => {
+    // Documents the exact value that 23514'd: past 啟示錄 (65).
+    expect(FINISHED_BOOK_INDEX).toBeGreaterThan(65)
+  })
+
+  it('the in-range fallback ALSO reads as finished, not as one chapter left', () => {
+    // The naive fallback — park at the last book, chapter 1 — fails: the plan
+    // then hands out 啟示錄 22, a chapter the reader already finished. That is
+    // the same class of bug as re-reading 約翰 1, just smaller.
+    const naive = rebuildWith(65, 1)
+    const naiveRefs = naive.get('2026-10-06')!
+    expect(naiveRefs.some((r) => r.startsWith('啟示錄'))).toBe(true)
+
+    // Parking at the FINAL chapter is what the generator reads as 「done」.
+    const correct = rebuildWith(65, 22)
+    const refs = correct.get('2026-10-06')!
+    expect(refs.some((r) => r.startsWith('啟示錄'))).toBe(false)
+    expect(
+      refs.every((r) => books.find((b) => r.startsWith(b.name))!.index < 39),
+    ).toBe(true)
+    expect(refs).toHaveLength(REAL.chapters_per_day)
+  })
+
+  it('the in-range fallback survives the whole plan, not just day one', () => {
+    const p = rebuildWith(65, 22)
+    let ntChapters = 0
+    for (const [, refs] of p) {
+      ntChapters += refs.filter(
+        (r) => books.find((b) => r.startsWith(b.name))!.index >= 39,
+      ).length
+    }
+    expect(ntChapters).toBe(0)
+  })
+
+  it('both spellings produce the identical plan, so the retry is invisible', () => {
+    const sentinel = generateReadingPlan(
+      {
+        ...reanchoredEnrollment(REAL as never, otOnlyAnchor),
+        started_at: '2026-10-06',
+      },
+      books,
+      40,
+    )
+    const fallback = rebuildWith(65, 22)
+    expect([...fallback.entries()].slice(0, 40)).toEqual(
+      [...sentinel.entries()].slice(0, 40),
+    )
+  })
+
+  it('a testament that is NOT finished still starts normally', () => {
+    // Guard against the finished-detection being too eager: 啟示錄 21 is one
+    // chapter short of done and must still be read.
+    const p = rebuildWith(65, 21)
+    expect(p.get('2026-10-06')!.some((r) => r.startsWith('啟示錄'))).toBe(true)
   })
 })

@@ -4,7 +4,19 @@ import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { readingDate, daysBetween } from '@/lib/readingDate'
 import type { AnchorPosition, AnchorPositions } from './readingProgress'
-import { reanchoredEnrollment } from '@/lib/readingProgress'
+import {
+  reanchoredEnrollment,
+  FINISHED_BOOK_INDEX,
+  FINISHED_BOOK_INDEX_LEGACY,
+} from '@/lib/readingProgress'
+
+/**
+ * Final chapter of each testament's last book: the in-range spelling of
+ * 「finished」. Canonical counts verified against public/bible-data.json —
+ * 啟示錄 has 22 chapters, 瑪拉基 has 4.
+ */
+const LAST_NT_CHAPTER = 22
+const LAST_OT_CHAPTER = 4
 
 // ============================================================================
 // Catch-up actions.
@@ -178,7 +190,47 @@ export async function reanchorPlan(
     .update(patch)
     .eq('id', enrollmentId)
     .eq('user_id', user.id)
-  if (error) return { ok: false, error: error.message }
+
+  // A finished testament is written as a sentinel book index (66, past 啟示錄
+  // 65). Databases still carrying the migrations 011/012 CHECK constraints
+  // reject it with 23514 and abort the entire UPDATE — the reader pressed the
+  // button and got an error instead of the restart. When that is the failure,
+  // retry once expressing 「finished」 the way that fits the old range: the
+  // testament's last book at its last chapter. The generator reads that as
+  // finished too, so the restart still lands on the requested gap.
+  let failed = error
+  if (
+    failed &&
+    failed.code === '23514' &&
+    (patch.nt_start_book_index === FINISHED_BOOK_INDEX ||
+      patch.ot_start_book_index === FINISHED_BOOK_INDEX ||
+      patch.start_book_index === FINISHED_BOOK_INDEX)
+  ) {
+    const legacy = { ...patch }
+    if (legacy.nt_start_book_index === FINISHED_BOOK_INDEX) {
+      legacy.nt_start_book_index = FINISHED_BOOK_INDEX_LEGACY.nt
+      legacy.nt_start_chapter = LAST_NT_CHAPTER
+    }
+    if (legacy.ot_start_book_index === FINISHED_BOOK_INDEX) {
+      legacy.ot_start_book_index = FINISHED_BOOK_INDEX_LEGACY.ot
+      legacy.ot_start_chapter = LAST_OT_CHAPTER
+    }
+    if (legacy.start_book_index === FINISHED_BOOK_INDEX) {
+      const singleIsNT = rebuilt.scope === 'nt'
+      legacy.start_book_index = singleIsNT
+        ? FINISHED_BOOK_INDEX_LEGACY.nt
+        : FINISHED_BOOK_INDEX_LEGACY.ot
+      legacy.start_chapter = singleIsNT ? LAST_NT_CHAPTER : LAST_OT_CHAPTER
+    }
+    const retry = await supabase
+      .from('user_plan_enrollments')
+      .update(legacy)
+      .eq('id', enrollmentId)
+      .eq('user_id', user.id)
+    if (!retry.error) failed = null
+    else failed = retry.error
+  }
+  if (failed) return { ok: false, error: failed.message }
 
   revalidatePath('/dashboard')
   revalidatePath('/calendar')

@@ -72,6 +72,27 @@ const NT_FIRST_BOOK_INDEX = 39
  */
 export const FINISHED_BOOK_INDEX = 66
 
+/**
+ * Best-effort repair for a database whose CHECK constraints still cap start
+ * columns at the last real book (migrations 011/012, 39..65 and 0..38).
+ *
+ * `reanchoredEnrollment` must be able to say 「this testament is finished」.
+ * Until migration 014 widens those checks, writing 66 aborts the whole UPDATE
+ * with 23514 and the reader gets an error instead of the restart they pressed
+ * for. When a write of the sentinel fails, retry ONCE with this value, which
+ * the generator reads as NT-complete / OT-complete / whole-plan-complete
+ * respectively — so the restart still lands on the gap the button promised,
+ * even before the migration has been run.
+ *
+ * Remove once migration 014 has been applied everywhere.
+ */
+export const FINISHED_BOOK_INDEX_LEGACY = {
+  /** Whole-plan scope: the finished testament IS the whole plan. */
+  single: 65,
+  nt: 65,
+  ot: 38,
+}
+
 export interface AnchorPositions {
   primary: AnchorPosition
   /** The other testament's position, when the plan reads both in parallel. */
