@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { readingDate, daysBetween } from '@/lib/readingDate'
+import type { AnchorPosition, AnchorPositions } from './readingProgress'
 import { reanchoredEnrollment } from '@/lib/readingProgress'
 
 // ============================================================================
@@ -37,6 +38,23 @@ export type ReanchorResult =
 const NT_FIRST_BOOK_INDEX = 39
 
 /**
+ * A client-supplied start position, checked again on the server. Canonical
+ * index is 0–65 (創=0 … 啟=65) and a chapter is a plain positive integer;
+ * anything else is a corrupt or hostile payload and is rejected, not clamped.
+ */
+function isValidAnchorPosition(pos: AnchorPosition | null): boolean {
+  if (!pos) return false
+  return (
+    Number.isInteger(pos.book_index) &&
+    pos.book_index >= 0 &&
+    pos.book_index <= 65 &&
+    Number.isInteger(pos.chapter) &&
+    pos.chapter >= 1 &&
+    pos.chapter <= 150
+  )
+}
+
+/**
  * Restart the plan FROM TODAY at the chapters a chosen day was supposed to read.
  *
  * anchorDate selects the CHAPTER position (that day's first chapter);
@@ -58,6 +76,12 @@ const NT_FIRST_BOOK_INDEX = 39
  * bible index) and passed in; it is re-validated here because a client-supplied
  * book index must never be trusted to write straight through.
  *
+ * A parallel plan's day holds chapters from BOTH testaments, so `positions`
+ * carries both. Re-anchoring on such a day used to take only the first ref —
+ * the NT chapter — which reset NT to the plan's opening chapters and left OT
+ * untouched, so 「由最近嘅斷位接返」 served the earliest gap instead of the
+ * chosen one. Both are validated and both are written.
+ *
  * The missed days are left exactly as they were. They stay visible as a real
  * gap in the calendar and streak — the user chose to move on, not to claim
  * they read what they didn't.
@@ -65,8 +89,7 @@ const NT_FIRST_BOOK_INDEX = 39
 export async function reanchorPlan(
   enrollmentId: string,
   anchorDate: string,
-  startBookIndex: number,
-  startChapter: number,
+  positions: AnchorPositions,
 ): Promise<ReanchorResult> {
   const supabase = await createClient()
   const {
@@ -109,12 +132,9 @@ export async function reanchorPlan(
   // (創=0 … 啟=65) and a chapter is a plain positive integer; anything else is
   // a corrupt or hostile payload and is rejected rather than clamped.
   if (
-    !Number.isInteger(startBookIndex) ||
-    startBookIndex < 0 ||
-    startBookIndex > 65 ||
-    !Number.isInteger(startChapter) ||
-    startChapter < 1 ||
-    startChapter > 150
+    !isValidAnchorPosition(positions.primary) ||
+    (positions.secondary !== null &&
+      !isValidAnchorPosition(positions.secondary))
   ) {
     return { ok: false, error: '新的起點位置無效' }
   }
@@ -125,10 +145,7 @@ export async function reanchorPlan(
   // preview and the write had drifted apart, and under 'ot_then_nt' the
   // reading ORDER — not just the start columns — decides where reading
   // begins.
-  const rebuilt = reanchoredEnrollment(enrollment as never, {
-    book_index: startBookIndex,
-    chapter: startChapter,
-  })
+  const rebuilt = reanchoredEnrollment(enrollment as never, positions)
   const patch: Record<string, unknown> = {
     // TODAY, not the anchor day — see the note above. This is the line that
     // actually resets the backlog; without it the button is a no-op in the only
@@ -171,6 +188,8 @@ export async function reanchorPlan(
     from: currentStart,
     to: today,
     anchor_date: anchorDate,
-    from_ref: `${startBookIndex}:${startChapter}`,
+    from_ref: positions.secondary
+      ? `${positions.primary.book_index}:${positions.primary.chapter}+${positions.secondary.book_index}:${positions.secondary.chapter}`
+      : `${positions.primary.book_index}:${positions.primary.chapter}`,
   }
 }

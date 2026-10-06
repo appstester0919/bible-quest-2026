@@ -18,6 +18,7 @@ import {
   shortRef,
   type CatchUpCase,
   type GapBlock,
+  type AnchorPositions,
 } from '@/lib/readingProgress'
 
 // ============================================================================
@@ -72,7 +73,7 @@ function ConfirmDialog({
   onCancel,
   onConfirm,
 }: {
-  pending: { date: string; label: string; bookIndex: number; chapter: number }
+  pending: { date: string; label: string; positions: AnchorPositions }
   busy: boolean
   error: string | null
   anchorRefs: string[]
@@ -170,9 +171,8 @@ export function CatchUpCard({ enrollment, books, completedDates }: Props) {
   const [pending, setPending] = useState<{
     date: string
     label: string
-    /** Canon position the new plan must start from — see anchorPositionFor. */
-    bookIndex: number
-    chapter: number
+    /** Canon positions the new plan must start from — see anchorPositionFor. */
+    positions: AnchorPositions
   } | null>(null)
 
   const today = readingDate()
@@ -234,15 +234,8 @@ export function CatchUpCard({ enrollment, books, completedDates }: Props) {
   // written. Setting only the start columns here left the reading ORDER
   // untouched, and under 'ot_then_nt' the OT is what the generator starts
   // from — the dialog showed 詩篇 111 for a plan anchored on 約翰 12.
-  const previewFor = (
-    anchor: string,
-    bookIndex: number,
-    chapter: number,
-  ): string[] => {
-    const rebuilt = reanchoredEnrollment(enrollment, {
-      book_index: bookIndex,
-      chapter,
-    })
+  const previewFor = (anchor: string, positions: AnchorPositions): string[] => {
+    const rebuilt = reanchoredEnrollment(enrollment, positions)
     // started_at is TODAY, matching reanchorPlan. The preview previously used
     // the anchor day, so it showed 「今日：創 1 – …」 for a schedule whose day
     // 273 would be today's — the dialog described a different plan from the one
@@ -257,19 +250,13 @@ export function CatchUpCard({ enrollment, books, completedDates }: Props) {
 
   const applyAnchor = async (target: {
     date: string
-    bookIndex: number
-    chapter: number
+    positions: AnchorPositions
   }) => {
     const anchor = target.date
     setBusy(true)
     setError(null)
     try {
-      const res = await reanchorPlan(
-        enrollment.id,
-        anchor,
-        target.bookIndex,
-        target.chapter,
-      )
+      const res = await reanchorPlan(enrollment.id, anchor, target.positions)
       if (!res.ok) setError(res.error)
       else setPending(null)
       // Reload so the dashboard recomputes the plan and progress bar.
@@ -400,12 +387,7 @@ export function CatchUpCard({ enrollment, books, completedDates }: Props) {
       onClick={() => {
         const pos = anchorPositionFor(enrollment, books, gap.firstDate)
         if (!pos) return
-        setPending({
-          date: gap.firstDate,
-          label: title,
-          bookIndex: pos.book_index,
-          chapter: pos.chapter,
-        })
+        setPending({ date: gap.firstDate, label: title, positions: pos })
       }}
       className={`btn ${variant === 'primary' ? 'btn-primary' : 'btn-secondary'} gap-2`}
       style={{
@@ -498,21 +480,11 @@ export function CatchUpCard({ enrollment, books, completedDates }: Props) {
           busy={busy}
           error={error}
           anchorRefs={anchorRefs}
-          todayRefs={previewFor(
-            pending.date,
-            pending.bookIndex,
-            pending.chapter,
-          )}
+          todayRefs={previewFor(pending.date, pending.positions)}
           chaptersPerDay={enrollment.chapters_per_day}
           behindDays={analysis.behindDays}
           onCancel={() => setPending(null)}
-          onConfirm={() =>
-            applyAnchor({
-              date: pending.date,
-              bookIndex: pending.bookIndex,
-              chapter: pending.chapter,
-            })
-          }
+          onConfirm={() => applyAnchor(pending)}
         />
       )}
     </>

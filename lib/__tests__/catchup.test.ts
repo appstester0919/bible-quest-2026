@@ -89,10 +89,10 @@ describe('re-anchoring moves the start POSITION, not just the date', () => {
   it('resolves the anchor day to a canon position', () => {
     const pos = anchorPositionFor(ENROLLMENT, books, anchorDate)
     expect(pos).not.toBeNull()
-    expect(pos!.chapter).toBeGreaterThan(0)
+    expect(pos!.primary.chapter).toBeGreaterThan(0)
     // 29/9 is ~24 days past 詩篇 51 at 20 chapters/day, so it must be far
     // into the NT — nowhere near the OT start the plan used to keep.
-    expect(pos!.book_index).toBeGreaterThan(18)
+    expect(pos!.primary.book_index).toBeGreaterThan(18)
   })
 
   it('the written plan starts at the anchor chapter, not the old OT start', () => {
@@ -108,18 +108,15 @@ describe('re-anchoring moves the start POSITION, not just the date', () => {
     const pos = anchorPositionFor(ENROLLMENT, books, anchorDate)!
     const fixed = generateReadingPlan(
       {
-        ...ENROLLMENT,
+        ...reanchoredEnrollment(ENROLLMENT, pos),
         started_at: `${anchorDate}T00:00:00.000Z`,
-        scope: 'nt',
-        start_book_index: pos.book_index,
-        start_chapter: pos.chapter,
-        nt_start_book_index: pos.book_index,
-        nt_start_chapter: pos.chapter,
       },
       books,
       400,
     ).get(anchorDate)
-    expect(fixed![0]).toBe(`${books[pos.book_index].name} ${pos.chapter}`)
+    expect(fixed![0]).toBe(
+      `${books[pos.primary.book_index].name} ${pos.primary.chapter}`,
+    )
     expect(fixed![0]).not.toBe('詩篇 51')
   })
 
@@ -129,13 +126,8 @@ describe('re-anchoring moves the start POSITION, not just the date', () => {
     const preview =
       generateReadingPlan(
         {
-          ...ENROLLMENT,
+          ...reanchoredEnrollment(ENROLLMENT, pos),
           started_at: `${anchorDate}T00:00:00.000Z`,
-          scope: 'nt',
-          start_book_index: pos.book_index,
-          start_chapter: pos.chapter,
-          nt_start_book_index: pos.book_index,
-          nt_start_chapter: pos.chapter,
         },
         books,
         400,
@@ -188,14 +180,18 @@ describe('the preview cannot drift from what is written', () => {
     const rebuilt = reanchoredEnrollment(ENROLLMENT, pos)
     // Anchor is in the NT, so the NT must become primary.
     expect(rebuilt.reading_order).toBe('nt_then_ot')
-    expect(rebuilt.nt_start_book_index).toBe(pos.book_index)
-    expect(rebuilt.nt_start_chapter).toBe(pos.chapter)
+    expect(rebuilt.nt_start_book_index).toBe(pos.primary.book_index)
+    expect(rebuilt.nt_start_chapter).toBe(pos.primary.chapter)
   })
 
   it('an OT anchor flips it back, so the two orders are symmetric', () => {
     const otPos = {
-      book_index: books.find((b) => b.name === '詩篇')!.index,
-      chapter: 51,
+      primary: {
+        book_index: books.find((b) => b.name === '詩篇')!.index,
+        chapter: 51,
+      },
+      secondary: null,
+      testament: 'ot' as const,
     }
     const rebuilt = reanchoredEnrollment(ENROLLMENT, otPos)
     expect(rebuilt.reading_order).toBe('ot_then_nt')
@@ -223,7 +219,9 @@ describe('the preview cannot drift from what is written', () => {
       started_at: anchorDate,
     }
     const day1 = generateReadingPlan(rebuilt, books, 400).get(anchorDate) ?? []
-    expect(day1[0]).toBe(`${books[pos.book_index].name} ${pos.chapter}`)
+    expect(day1[0]).toBe(
+      `${books[pos.primary.book_index].name} ${pos.primary.chapter}`,
+    )
   })
 })
 
@@ -381,7 +379,7 @@ describe('re-anchoring restarts TODAY, not on the gap day', () => {
     const pos = anchorPositionFor(E as never, books, behind.firstGap.firstDate)
     expect(pos).not.toBeNull()
     // Whatever the gap day read first is where reading resumes.
-    expect(pos!.chapter).toBe(1)
+    expect(pos!.primary.chapter).toBe(1)
   })
 
   it('putting started_at at TODAY makes the reader on track again', () => {
@@ -390,8 +388,8 @@ describe('re-anchoring restarts TODAY, not on the gap day', () => {
     const restarted = {
       ...E,
       started_at: '2026-10-05T00:00:00.000Z',
-      start_book_index: pos.book_index,
-      start_chapter: pos.chapter,
+      start_book_index: pos.primary.book_index,
+      start_chapter: pos.primary.chapter,
     }
     const after = analyseCatchUp(
       restarted.started_at,
@@ -409,12 +407,87 @@ describe('re-anchoring restarts TODAY, not on the gap day', () => {
     const restarted = {
       ...E,
       started_at: '2026-10-05T00:00:00.000Z',
-      start_book_index: pos.book_index,
-      start_chapter: pos.chapter,
+      start_book_index: pos.primary.book_index,
+      start_chapter: pos.primary.chapter,
     }
     const todayRefs =
       generateReadingPlan(restarted as never, books, 400).get('2026-10-05') ??
       []
     expect(todayRefs[0]).toBe(gapRefs[0])
+  })
+})
+
+describe('BUG: 「由最近嘅斷位接返」 served the earliest gap', () => {
+  // A parallel plan ('1-3') reads NT chapters then OT chapters each day, so an
+  // anchor day holds BOTH. Taking refs[0] — the NT chapter — reset NT to the
+  // plan's opening chapters and left OT untouched, so choosing the most recent
+  // gap restarted at the earliest one. Observed: the anchor day read 馬太 8,
+  // 創 22-24 and the restart began at 馬太 1, 創 1.
+  const PARALLEL = {
+    scope: 'nt_ot' as const,
+    chapters_per_day: 4,
+    reading_order: '1-3',
+    started_at: '2026-09-01',
+    nt_start_book_index: 39,
+    nt_start_chapter: 1,
+    ot_start_book_index: 0,
+    ot_start_chapter: 1,
+  }
+  const dates = [...generateReadingPlan(PARALLEL, books, 400).keys()].sort()
+  const late = dates[7]!
+
+  it('the anchor day really does span both testaments', () => {
+    const refs = generateReadingPlan(PARALLEL, books, 400).get(late)!
+    const ntIdx = books.find((b) => b.name === '馬太福音')!.index
+    const hasNT = refs.some((r) => r.startsWith('馬太福音'))
+    const hasOT = refs.some((r) => !r.startsWith('馬太福音'))
+    expect(ntIdx).toBe(39)
+    expect(hasNT && hasOT).toBe(true)
+  })
+
+  it('resolves a position for EACH testament, not just the first chapter', () => {
+    const pos = anchorPositionFor(PARALLEL, books, late)!
+    expect(pos.secondary).not.toBeNull()
+    expect(pos.primary.chapter).toBeGreaterThan(1)
+    // The OT chapter that day had reached — the bug reset this to 創 1.
+    expect(pos.secondary!.chapter).toBeGreaterThan(1)
+  })
+
+  it('the rebuilt plan begins at the anchor day, not at the plan start', () => {
+    const pos = anchorPositionFor(PARALLEL, books, late)!
+    const rebuilt = reanchoredEnrollment(PARALLEL as never, pos)
+    const day1 = generateReadingPlan(
+      { ...rebuilt, started_at: '2026-10-06' },
+      books,
+      5,
+    ).get('2026-10-06')!
+
+    const anchorRefs = generateReadingPlan(PARALLEL, books, 400).get(late)!
+    // Day one must contain the chapters that day was going to read.
+    for (const ref of anchorRefs) {
+      expect(day1).toContain(ref)
+    }
+    // And it must NOT be the opening chapters again.
+    expect(day1).not.toContain('馬太福音 1')
+    expect(day1).not.toContain('創世記 1')
+  })
+
+  it('both testaments move, so neither keeps reading unread early chapters', () => {
+    const pos = anchorPositionFor(PARALLEL, books, late)!
+    const rebuilt = reanchoredEnrollment(PARALLEL as never, pos)
+    expect(rebuilt.nt_start_chapter).toBe(pos.primary.chapter)
+    expect(rebuilt.ot_start_chapter).toBe(pos.secondary!.chapter)
+  })
+
+  it('an anchor day present in only one testament leaves the other alone', () => {
+    // Once OT is finished the days go NT-only; the OT column must not move.
+    const pos = anchorPositionFor(PARALLEL, books, late)!
+    const ntOnly = {
+      primary: pos.primary,
+      secondary: null,
+      testament: 'nt' as const,
+    }
+    const rebuilt = reanchoredEnrollment(PARALLEL as never, ntOnly)
+    expect(rebuilt.ot_start_chapter).toBe(PARALLEL.ot_start_chapter)
   })
 })

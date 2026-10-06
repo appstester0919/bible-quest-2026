@@ -55,6 +55,22 @@ export function groupRefsByBook(refs: string[]): string[] {
 const NT_FIRST_BOOK_INDEX = 39
 
 /** The canon index a re-anchored plan should read from, and how. */
+/**
+ * Where reading resumes when the plan is re-anchored on a day.
+ *
+ * `primary` is always the anchor. `secondary` exists only for parallel plans,
+ * whose day reads both testaments — such a day genuinely has two restart
+ * positions, and using only the first is what made 「由最近嘅斷位接返」 restart
+ * at the earliest chapters instead.
+ */
+export interface AnchorPositions {
+  primary: AnchorPosition
+  /** The other testament's position, when the plan reads both in parallel. */
+  secondary: AnchorPosition | null
+  /** Which testament `primary` sits in. */
+  testament: 'nt' | 'ot'
+}
+
 export interface AnchorPosition {
   book_index: number
   chapter: number
@@ -81,21 +97,55 @@ export interface AnchorPosition {
  */
 export function reanchoredEnrollment<
   E extends EnrollmentLite & Record<string, unknown>,
->(enrollment: E, pos: AnchorPosition): EnrollmentLite {
-  const anchorIsNT = pos.book_index >= NT_FIRST_BOOK_INDEX
+>(enrollment: E, pos: AnchorPositions): EnrollmentLite {
+  const anchor = pos.primary
+  const anchorIsNT = pos.testament === 'nt'
   const order = enrollment.reading_order ?? null
   const isSequential = order === 'nt_then_ot' || order === 'ot_then_nt'
+  const isParallel = /^\d+-\d+$/.test(order ?? '')
 
   const base: EnrollmentLite = {
     ...enrollment,
     started_at: null,
-    start_book_index: pos.book_index,
-    start_chapter: pos.chapter,
+    start_book_index: anchor.book_index,
+    start_chapter: anchor.chapter,
+  }
+
+  if (isParallel) {
+    // Parallel plans ('1-3') have a SEPARATE start column per testament, and
+    // the generator reads those, never start_book_index / start_chapter. So
+    // writing only the single-column start looked like it re-anchored and
+    // changed nothing: the plan came back beginning at its very first
+    // chapters. An anchor day here holds chapters from BOTH testaments, so the
+    // anchor decides the testament the reader picks up in, and the other
+    // testament keeps the position it had — that one is still unread, only
+    // out of sequence, and resetting it would silently drop chapters the
+    // reader has never seen.
+    // Both testaments move to where that day actually read to, not just the
+    // first one: the reader chose a day and expects to resume it, not resume
+    // half of it.
+    const ntPos = anchorIsNT ? anchor : pos.secondary
+    const otPos = anchorIsNT ? pos.secondary : anchor
+    return {
+      ...base,
+      ...(ntPos
+        ? {
+            nt_start_book_index: ntPos.book_index,
+            nt_start_chapter: ntPos.chapter,
+          }
+        : {}),
+      ...(otPos
+        ? {
+            ot_start_book_index: otPos.book_index,
+            ot_start_chapter: otPos.chapter,
+          }
+        : {}),
+    }
   }
 
   if (!isSequential) {
-    // Single-testament or parallel: the columns the generator reads for this
-    // shape are start_book_index / start_chapter, already set above.
+    // Single-testament: the columns the generator reads for this shape are
+    // start_book_index / start_chapter, already set above.
     return base
   }
 
@@ -109,16 +159,16 @@ export function reanchoredEnrollment<
   if (anchorIsNT) {
     return {
       ...flipped,
-      nt_start_book_index: pos.book_index,
-      nt_start_chapter: pos.chapter,
+      nt_start_book_index: anchor.book_index,
+      nt_start_chapter: anchor.chapter,
       ot_start_book_index: enrollment.ot_start_book_index ?? 0,
       ot_start_chapter: enrollment.ot_start_chapter ?? 1,
     }
   }
   return {
     ...flipped,
-    ot_start_book_index: pos.book_index,
-    ot_start_chapter: pos.chapter,
+    ot_start_book_index: anchor.book_index,
+    ot_start_chapter: anchor.chapter,
     nt_start_book_index: enrollment.nt_start_book_index ?? NT_FIRST_BOOK_INDEX,
     nt_start_chapter: enrollment.nt_start_chapter ?? 1,
   }
@@ -371,7 +421,7 @@ export function anchorPositionFor(
   enrollment: EnrollmentLite,
   books: BookMeta[],
   anchorDate: string,
-): AnchorPosition | null {
+): AnchorPositions | null {
   if (books.length === 0) return null
 
   // The plan as it stands today, keyed by date — the anchor day must be one
@@ -380,18 +430,51 @@ export function anchorPositionFor(
   const refs = current.get(anchorDate) ?? []
   if (refs.length === 0) return null
 
-  // Take the chapter the anchor day would have read FIRST. For a single
-  // testament or a parallel order that is exactly the restart point; for a
-  // sequential order mid-flight it is the correct head of the restart run.
-  const firstRef = refs[0]
-  const match = firstRef.match(/^(.+?)\s+(\d+)$/)
-  if (!match) return null
-  const bookName = match[1]
-  const chapter = Number(match[2])
-  const book = books.find((b) => b.name === bookName)
-  if (!book || !Number.isFinite(chapter) || chapter < 1) return null
+  const parse = (ref: string) => {
+    const m = ref.match(/^(.+?)\s+(\d+)$/)
+    if (!m) return null
+    const book = books.find((b) => b.name === m[1])
+    const chapter = Number(m[2])
+    if (!book || !Number.isFinite(chapter) || chapter < 1) return null
+    return { book_index: book.index, chapter }
+  }
 
-  return { book_index: book.index, chapter }
+  // A parallel plan's day holds chapters from BOTH testaments, and which
+  // chapter of each matters. Taking refs[0] — the NT chapter — reset the plan
+  // to the NT start while leaving OT wherever it was, so choosing the most
+  // recent gap silently served the earliest one instead: the day read 馬太 8,
+  // 創 22-24 and the restart began at 馬太 1, 創 1.
+  //
+  // So resolve each testament's position from that day's own chapters, and
+  // reset both. A testament absent from the day keeps its current start.
+  const order = enrollment.reading_order ?? null
+  if (/^\d+-\d+$/.test(order ?? '')) {
+    let nt: AnchorPosition | null = null
+    let ot: AnchorPosition | null = null
+    for (const ref of refs) {
+      const p = parse(ref)
+      if (!p) continue
+      if (p.book_index >= NT_FIRST_BOOK_INDEX) {
+        if (!nt) nt = p
+      } else if (!ot) ot = p
+    }
+    if (!nt && !ot) return null
+    return {
+      primary: nt ?? ot!,
+      secondary: nt ? ot : null,
+      testament: nt ? 'nt' : 'ot',
+    }
+  }
+
+  // Single-testament or sequential order: the day is read in one run, so its
+  // FIRST chapter is the restart point.
+  const first = parse(refs[0])
+  if (!first) return null
+  return {
+    primary: first,
+    secondary: null,
+    testament: first.book_index >= NT_FIRST_BOOK_INDEX ? 'nt' : 'ot',
+  }
 }
 
 /**
