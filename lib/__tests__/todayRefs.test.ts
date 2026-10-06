@@ -281,3 +281,54 @@ describe('planLengthDays / chaptersInPlan ask the generator, not 260 and 929', (
     expect(getRequiredDays('ot', 3)).toBe(planLengthDays(early, books)) // both = ceil(929/3)
   })
 })
+
+describe('FINISHED_BOOK_INDEX must stay inside the DB constraint', () => {
+  // ── c27fdec: writing 66 against the migrations 011/012 CHECK constraints
+  // (nt BETWEEN 39 AND 65) violated the constraint, and because PostgREST runs
+  // a single statement the whole UPDATE aborted — the reader got an error
+  // instead of a restart. Migration 014 widened all three columns to 66.
+  //
+  // These bounds are duplicated in SQL and cannot be read from the client, so
+  // this test is the only automated guard. If a future migration narrows a
+  // column, it fails here with the reason, instead of 23514 on a live button.
+  // See docs/schema-invariants.md.
+
+  it('is past the last real book index', () => {
+    const lastBook = Math.max(...books.map((b) => b.index))
+    expect(FINISHED_BOOK_INDEX).toBeGreaterThan(lastBook)
+    expect(lastBook).toBe(65) // 啟示錄
+    expect(FINISHED_BOOK_INDEX).toBe(66)
+  })
+
+  it('fits every start column constraint in migration 014', () => {
+    // start_book_index  BETWEEN 0  AND 66
+    // nt_start_book_index BETWEEN 39 AND 66
+    // ot_start_book_index BETWEEN 0  AND 66
+    expect(FINISHED_BOOK_INDEX).toBeLessThanOrEqual(66)
+    expect(FINISHED_BOOK_INDEX).toBeGreaterThanOrEqual(39)
+  })
+
+  it('keeps the in-range fallback inside its own constraint', () => {
+    // catchupActions rewrites the sentinel as 啓 22 / 瑪 4 for databases that
+    // have not run 014. Those must stay real book indexes.
+    const rev = books.find((b) => b.index === 65)!
+    const mal = books.find((b) => b.index === 38)!
+    expect(rev.chapters).toBeGreaterThanOrEqual(22)
+    expect(mal.chapters).toBeGreaterThanOrEqual(4)
+    expect(rev.index).toBeLessThanOrEqual(65)
+    expect(mal.index).toBeLessThanOrEqual(38)
+  })
+
+  it('reads an out-of-range start as "finished" for every scope', () => {
+    const finished: EnrollmentLite = {
+      scope: 'ot',
+      chapters_per_day: 2,
+      started_at: '2026-10-06T00:00:00.000Z',
+      start_book_index: FINISHED_BOOK_INDEX,
+      start_chapter: 1,
+    }
+    // OT-only, finished: no chapters at all, so the generator emits no days.
+    expect(planLengthDays(finished, books)).toBe(0)
+    expect(chaptersInPlan(finished, books)).toBe(0)
+  })
+})
