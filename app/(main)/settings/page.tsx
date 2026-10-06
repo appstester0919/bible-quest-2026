@@ -3,19 +3,43 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { subscribeToPush, unsubscribeFromPush, getPushPermissionStatus } from '@/lib/push'
+import {
+  subscribeToPush,
+  unsubscribeFromPush,
+  getPushPermissionStatus,
+} from '@/lib/push'
 import { updateDisplayName } from '@/lib/groupActions'
-import { updateIdentity as updateIdentityAction, updateReceiveNudges as updateReceiveNudgesAction } from './actions'
+import {
+  updateIdentity as updateIdentityAction,
+  updateReceiveNudges as updateReceiveNudgesAction,
+} from './actions'
 import { getRequiredDays } from '@/lib/bible/scope'
 import type { Scope } from '@/lib/bible/scope'
-import { ALL_IDENTITIES, IDENTITIES, DEFAULT_IDENTITY, isIdentity, type Identity } from '@/lib/identity'
+import {
+  ALL_IDENTITIES,
+  IDENTITIES,
+  DEFAULT_IDENTITY,
+  isIdentity,
+  type Identity,
+} from '@/lib/identity'
+import { useMemo } from 'react'
+import { generateReadingPlan } from '@/lib/bible/planGenerator'
+import { BIBLE_BOOKS } from '@/lib/bible/books'
+import { getEstimatedCompletionDate } from '@/lib/bible/scope'
+import { formatPlanDate as formatDate } from '@/lib/bible/format'
 
 // Reminder time constraints — minute granularity is 15 min to avoid cron
 // running every minute (free Cloudflare plan stays within quota). Hour is
 // 0-23 because Cloudflare Cron Triggers are hourly at best; the minute
 // pick controls which quarter-hour inside that hour the push fires.
-const HOURS = Array.from({ length: 24 }, (_, h) => ({ value: h, label: `${h.toString().padStart(2, '0')}時` }))
-const MINUTES = [0, 15, 30, 45].map((m) => ({ value: m, label: `${m.toString().padStart(2, '0')}分` }))
+const HOURS = Array.from({ length: 24 }, (_, h) => ({
+  value: h,
+  label: `${h.toString().padStart(2, '0')}時`,
+}))
+const MINUTES = [0, 15, 30, 45].map((m) => ({
+  value: m,
+  label: `${m.toString().padStart(2, '0')}分`,
+}))
 
 // Friendly "晚/早/中" labelling for hour — Cantonese reader gets a quick read.
 function hourLabel(h: number): string {
@@ -28,7 +52,9 @@ function hourLabel(h: number): string {
 
 export default function SettingsPage() {
   const router = useRouter()
-  const [pushPermission, setPushPermission] = useState<NotificationPermission | 'unsupported'>('default')
+  const [pushPermission, setPushPermission] = useState<
+    NotificationPermission | 'unsupported'
+  >('default')
   const [isSubscribed, setIsSubscribed] = useState(false)
   const [loading, setLoading] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -43,16 +69,52 @@ export default function SettingsPage() {
   const [identitySaving, setIdentitySaving] = useState(false)
   const [identitySaved, setIdentitySaved] = useState(false)
   const [currentEnrollment, setCurrentEnrollment] = useState<{
-    id: string; scope: string; chapters_per_day: number; total_days: number;
-    reading_order?: string | null;
-    start_book_index?: number | null; start_chapter?: number | null;
-    nt_start_book_index?: number | null; ot_start_book_index?: number | null;
-    nt_start_chapter?: number | null; ot_start_chapter?: number | null;
+    id: string
+    scope: string
+    chapters_per_day: number
+    total_days: number
+    reading_order?: string | null
+    start_book_index?: number | null
+    start_chapter?: number | null
+    nt_start_book_index?: number | null
+    ot_start_book_index?: number | null
+    nt_start_chapter?: number | null
+    ot_start_chapter?: null | number
+    started_at?: string | null
   } | null>(null)
   const [completedPlans, setCompletedPlans] = useState(0)
+
+  // 總天數 and 預計完成 must come from the SAME source: the plan the reader will
+  // actually be scheduled on. getRequiredDays counts from 創世記 1 / 馬太 1, so
+  // a plan that starts mid-Bible (帖前 / 約伯記) showed a day count and a
+  // completion date that both ignored the start position — and the settings
+  // page disagreed with the dashboard, which already used plan.size.
+  const currentPlanDays = useMemo(() => {
+    if (!currentEnrollment) return 0
+    return generateReadingPlan(currentEnrollment as never, BIBLE_BOOKS, 730)
+      .size
+  }, [currentEnrollment])
+
+  const currentCompletion = useMemo(() => {
+    if (!currentEnrollment || currentPlanDays === 0) return '—'
+    const start = currentEnrollment.started_at
+      ? new Date(currentEnrollment.started_at.split('T')[0] + 'T00:00:00')
+      : new Date()
+    return formatDate(
+      getEstimatedCompletionDate(
+        currentEnrollment.scope as Scope,
+        currentPlanDays,
+        start,
+      ),
+    )
+  }, [currentEnrollment, currentPlanDays])
   const [updatingPlan, setUpdatingPlan] = useState(false)
   const [confirmShow, setConfirmShow] = useState(false)
-  const [pendingPlan, setPendingPlan] = useState<{ scope: string; chaptersPerDay: number; totalDays: number } | null>(null)
+  const [pendingPlan, setPendingPlan] = useState<{
+    scope: string
+    chaptersPerDay: number
+    totalDays: number
+  } | null>(null)
   const [displayName, setDisplayName] = useState('')
   const [savingName, setSavingName] = useState(false)
   const [nameSaved, setNameSaved] = useState(false)
@@ -97,7 +159,9 @@ export default function SettingsPage() {
     // Read the user's current receive_nudges preference from their profile.
     // DB default is true, so if the row is missing we treat it as true.
     const supabase = createClient()
-    const { data: { user } } = await supabase.auth.getUser()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
     if (!user) return
     const { data } = await supabase
       .from('profiles')
@@ -115,7 +179,9 @@ export default function SettingsPage() {
     // subscription row. We read MAX(reminder_hour) because lib/push.ts upserts
     // the same value to every device row, so any row gives the truth.
     const supabase = createClient()
-    const { data: { user } } = await supabase.auth.getUser()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
     if (!user) return
     const { data } = await supabase
       .from('web_push_subscriptions')
@@ -126,10 +192,17 @@ export default function SettingsPage() {
       .limit(1)
       .maybeSingle()
     if (data) {
-      if (typeof data.reminder_hour === 'number' && data.reminder_hour >= 0 && data.reminder_hour <= 23) {
+      if (
+        typeof data.reminder_hour === 'number' &&
+        data.reminder_hour >= 0 &&
+        data.reminder_hour <= 23
+      ) {
         setReminderHour(data.reminder_hour)
       }
-      if (typeof data.reminder_minute === 'number' && [0, 15, 30, 45].includes(data.reminder_minute)) {
+      if (
+        typeof data.reminder_minute === 'number' &&
+        [0, 15, 30, 45].includes(data.reminder_minute)
+      ) {
         setReminderMinute(data.reminder_minute)
       }
     }
@@ -137,17 +210,29 @@ export default function SettingsPage() {
 
   async function fetchDisplayName() {
     const supabase = createClient()
-    const { data: { user } } = await supabase.auth.getUser()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
     if (!user) return
-    const { data } = await supabase.from('profiles').select('display_name').eq('id', user.id).maybeSingle()
+    const { data } = await supabase
+      .from('profiles')
+      .select('display_name')
+      .eq('id', user.id)
+      .maybeSingle()
     if (data?.display_name) setDisplayName(data.display_name)
   }
 
   async function fetchIdentity() {
     const supabase = createClient()
-    const { data: { user } } = await supabase.auth.getUser()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
     if (!user) return
-    const { data } = await supabase.from('profiles').select('identity').eq('id', user.id).maybeSingle()
+    const { data } = await supabase
+      .from('profiles')
+      .select('identity')
+      .eq('id', user.id)
+      .maybeSingle()
     if (data?.identity && isIdentity(data.identity)) {
       setIdentity(data.identity)
     }
@@ -171,7 +256,9 @@ export default function SettingsPage() {
       // because the layout cached the old identity value.
       setTimeout(() => window.location.reload(), 600)
     } catch (err) {
-      alert('更新身份失敗: ' + (err instanceof Error ? err.message : String(err)))
+      alert(
+        '更新身份失敗: ' + (err instanceof Error ? err.message : String(err)),
+      )
     } finally {
       setIdentitySaving(false)
     }
@@ -179,11 +266,15 @@ export default function SettingsPage() {
 
   async function fetchEnrollment() {
     const supabase = createClient()
-    const { data: { user } } = await supabase.auth.getUser()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
     if (!user) return
     const { data: enrollment } = await supabase
       .from('user_plan_enrollments')
-      .select('id, scope, chapters_per_day, total_days, status, reading_order, start_book_index, start_chapter, nt_start_book_index, ot_start_book_index, nt_start_chapter, ot_start_chapter')
+      .select(
+        'id, scope, chapters_per_day, total_days, status, reading_order, start_book_index, start_chapter, nt_start_book_index, ot_start_book_index, nt_start_chapter, ot_start_chapter',
+      )
       .eq('user_id', user.id)
       .eq('status', 'active')
       .maybeSingle()
@@ -204,7 +295,9 @@ export default function SettingsPage() {
     setUpdatingPlan(true)
     try {
       const supabase = createClient()
-      const { data: { user } } = await supabase.auth.getUser()
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
       if (!user) return
 
       // Mark old enrollment as abandoned, create new active one
@@ -220,16 +313,19 @@ export default function SettingsPage() {
       const scope = currentEnrollment.scope as 'nt' | 'ot' | 'nt_ot'
       const cpd = currentEnrollment.chapters_per_day
       const properTotalDays =
-        scope === 'nt'   ? Math.ceil(260 / cpd) :
-        scope === 'ot'   ? Math.ceil(929 / cpd) :
-        /* nt_ot */        cpd   // legacy fallback — will be re-derived by generator
+        scope === 'nt'
+          ? Math.ceil(260 / cpd)
+          : scope === 'ot'
+            ? Math.ceil(929 / cpd)
+            : /* nt_ot */ cpd // legacy fallback — will be re-derived by generator
 
       // For nt_ot scope, reading_order is REQUIRED by the DB CHECK constraint.
       // If the old enrollment has a valid value, copy it; otherwise compute a
       // sensible default based on chapters_per_day.
       let readingOrder: string | null = null
       if (scope === 'nt_ot') {
-        const old = (currentEnrollment as { reading_order?: string | null }).reading_order
+        const old = (currentEnrollment as { reading_order?: string | null })
+          .reading_order
         if (old && /^[0-9]+-[0-9]+$|^nt_then_ot$|^ot_then_nt$/.test(old)) {
           readingOrder = old
         } else {
@@ -253,23 +349,21 @@ export default function SettingsPage() {
         nt_start_chapter?: number | null
         ot_start_chapter?: number | null
       }
-      const { error } = await supabase
-        .from('user_plan_enrollments')
-        .insert({
-          user_id: user.id,
-          scope,
-          chapters_per_day: cpd,
-          total_days: properTotalDays,
-          reading_order: readingOrder,
-          start_book_index: oldEnr.start_book_index ?? null,
-          start_chapter: oldEnr.start_chapter ?? null,
-          nt_start_book_index: oldEnr.nt_start_book_index ?? null,
-          ot_start_book_index: oldEnr.ot_start_book_index ?? null,
-          nt_start_chapter: oldEnr.nt_start_chapter ?? null,
-          ot_start_chapter: oldEnr.ot_start_chapter ?? null,
-          status: 'active',
-          started_at: new Date().toISOString(),
-        })
+      const { error } = await supabase.from('user_plan_enrollments').insert({
+        user_id: user.id,
+        scope,
+        chapters_per_day: cpd,
+        total_days: properTotalDays,
+        reading_order: readingOrder,
+        start_book_index: oldEnr.start_book_index ?? null,
+        start_chapter: oldEnr.start_chapter ?? null,
+        nt_start_book_index: oldEnr.nt_start_book_index ?? null,
+        ot_start_book_index: oldEnr.ot_start_book_index ?? null,
+        nt_start_chapter: oldEnr.nt_start_chapter ?? null,
+        ot_start_chapter: oldEnr.ot_start_chapter ?? null,
+        status: 'active',
+        started_at: new Date().toISOString(),
+      })
       if (error) {
         alert('更新計劃失敗：' + error.message)
         return
@@ -287,7 +381,9 @@ export default function SettingsPage() {
     setLoading(true)
     try {
       const supabase = createClient()
-      const { data: { user } } = await supabase.auth.getUser()
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
       if (!user) {
         alert('請先登入')
         return
@@ -328,7 +424,9 @@ export default function SettingsPage() {
     setLoading(true)
     try {
       const supabase = createClient()
-      const { data: { user } } = await supabase.auth.getUser()
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
       if (!user) {
         alert('請先登入')
         return
@@ -406,7 +504,10 @@ export default function SettingsPage() {
       if (!result.ok) throw new Error(result.error)
     } catch (err) {
       setReceiveNudges(previous)
-      alert('更新提醒設定失敗: ' + (err instanceof Error ? err.message : String(err)))
+      alert(
+        '更新提醒設定失敗: ' +
+          (err instanceof Error ? err.message : String(err)),
+      )
     } finally {
       setReceiveNudgesSaving(false)
     }
@@ -415,7 +516,9 @@ export default function SettingsPage() {
   return (
     <div className="min-h-screen bg-[var(--color-background)]">
       <header className="bg-white px-4 py-3 flex items-center gap-3 shadow-sm">
-        <a href="/dashboard" className="text-2xl">←</a>
+        <a href="/dashboard" className="text-2xl">
+          ←
+        </a>
         <h1 className="text-xl font-bold text-[var(--color-primary)]">設定</h1>
       </header>
 
@@ -424,7 +527,9 @@ export default function SettingsPage() {
             unlocks any future identity-exclusive features. Set at signup
             and silently editable here. */}
         <div className="bg-white rounded-2xl p-5 shadow-sm">
-          <h2 className="text-lg font-bold text-[var(--color-primary)] mb-1">🏕️ 我的身份</h2>
+          <h2 className="text-lg font-bold text-[var(--color-primary)] mb-1">
+            🏕️ 我的身份
+          </h2>
           <p className="text-sm text-[var(--color-muted)] mb-4">
             揀選你屬於哪個營會／群組，會換背景圖配合。
           </p>
@@ -459,7 +564,9 @@ export default function SettingsPage() {
                         : 'border-gray-300')
                     }
                   >
-                    {selected && <span className="w-2 h-2 rounded-full bg-white" />}
+                    {selected && (
+                      <span className="w-2 h-2 rounded-full bg-white" />
+                    )}
                   </span>
                   <span className="flex-1 min-w-0">
                     <span className="block text-sm font-bold text-[var(--color-primary)]">
@@ -477,13 +584,17 @@ export default function SettingsPage() {
             <p className="text-xs text-[var(--color-muted)] mt-2">更新中...</p>
           )}
           {identitySaved && !identitySaving && (
-            <p className="text-xs text-[var(--color-success)] mt-2">✓ 已更新，背景即將切換</p>
+            <p className="text-xs text-[var(--color-success)] mt-2">
+              ✓ 已更新，背景即將切換
+            </p>
           )}
         </div>
 
         {/* Display Name */}
         <div className="bg-white rounded-2xl p-5 shadow-sm">
-          <h2 className="text-lg font-bold text-[var(--color-primary)] mb-1">👤 顯示名稱</h2>
+          <h2 className="text-lg font-bold text-[var(--color-primary)] mb-1">
+            👤 顯示名稱
+          </h2>
           <p className="text-sm text-[var(--color-muted)] mb-4">
             用在群組裡顯示，最多 3 個中文字
           </p>
@@ -539,9 +650,7 @@ export default function SettingsPage() {
               <span
                 className={
                   'w-11 h-6 rounded-full transition-colors ' +
-                  (receiveNudges
-                    ? 'bg-[var(--color-success)]'
-                    : 'bg-gray-300')
+                  (receiveNudges ? 'bg-[var(--color-success)]' : 'bg-gray-300')
                 }
               />
               {/* Thumb */}
@@ -555,7 +664,14 @@ export default function SettingsPage() {
           </div>
           <p className="text-xs text-[var(--color-muted)] mt-3">
             當前狀態：
-            <span className={'font-bold ml-1 ' + (receiveNudges ? 'text-[var(--color-success)]' : 'text-[var(--color-muted)]')}>
+            <span
+              className={
+                'font-bold ml-1 ' +
+                (receiveNudges
+                  ? 'text-[var(--color-success)]'
+                  : 'text-[var(--color-muted)]')
+              }
+            >
               {receiveNudges ? '已啟用（接收提醒）' : '已關閉（拒收提醒）'}
             </span>
           </p>
@@ -563,7 +679,9 @@ export default function SettingsPage() {
 
         {/* Push Notifications — daily reminder via Web Push */}
         <div className="bg-white rounded-2xl p-5 shadow-sm">
-          <h2 className="text-lg font-bold text-[var(--color-primary)] mb-1">🔔 讀經提醒</h2>
+          <h2 className="text-lg font-bold text-[var(--color-primary)] mb-1">
+            🔔 讀經提醒
+          </h2>
           <p className="text-sm text-[var(--color-muted)] mb-3">
             每日提醒你完成讀經
           </p>
@@ -594,7 +712,11 @@ export default function SettingsPage() {
             </div>
             <button
               onClick={handleTogglePush}
-              disabled={loading || pushPermission === 'unsupported' || pushPermission === 'denied'}
+              disabled={
+                loading ||
+                pushPermission === 'unsupported' ||
+                pushPermission === 'denied'
+              }
               className="px-4 py-2 bg-[var(--color-primary)] text-white rounded-lg font-medium disabled:opacity-50"
             >
               {isSubscribed ? '關閉' : '啟用'}
@@ -612,28 +734,56 @@ export default function SettingsPage() {
                   setLoading(true)
                   try {
                     const supabase = createClient()
-                    const { data: { session } } = await supabase.auth.getSession()
-                    if (!session) { alert('請先登入'); return }
+                    const {
+                      data: { session },
+                    } = await supabase.auth.getSession()
+                    if (!session) {
+                      alert('請先登入')
+                      return
+                    }
                     const resp = await fetch('/api/push/send', {
                       method: 'POST',
                       headers: {
                         'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${session.access_token}`,
+                        Authorization: `Bearer ${session.access_token}`,
                       },
                       credentials: 'same-origin',
                       body: JSON.stringify({}),
                     })
                     const json = await resp.json()
-                    interface PushResult { ok: boolean; expired?: boolean; status?: number }
-                    const results: PushResult[] = Array.isArray(json.results) ? json.results : []
-                    const okCount = results.filter(r => r.ok).length
-                    const expiredCount = results.filter(r => !r.ok && r.expired).length
-                    const failedCount = results.filter(r => !r.ok && !r.expired).length
+                    interface PushResult {
+                      ok: boolean
+                      expired?: boolean
+                      status?: number
+                    }
+                    const results: PushResult[] = Array.isArray(json.results)
+                      ? json.results
+                      : []
+                    const okCount = results.filter((r) => r.ok).length
+                    const expiredCount = results.filter(
+                      (r) => !r.ok && r.expired,
+                    ).length
+                    const failedCount = results.filter(
+                      (r) => !r.ok && !r.expired,
+                    ).length
                     if (resp.ok && okCount > 0 && failedCount === 0) {
-                      const attempted = typeof json.attempted === 'number' ? json.attempted : results.length
-                      const tail = expiredCount > 0 ? `\n(${expiredCount} 個已過期裝置已自動清理)` : ''
-                      alert(`✅ 已發送測試推送 (${okCount}/${attempted} 個裝置)。檢查你的通知中心。${tail}`)
-                    } else if (resp.ok && okCount === 0 && failedCount === 0 && expiredCount > 0) {
+                      const attempted =
+                        typeof json.attempted === 'number'
+                          ? json.attempted
+                          : results.length
+                      const tail =
+                        expiredCount > 0
+                          ? `\n(${expiredCount} 個已過期裝置已自動清理)`
+                          : ''
+                      alert(
+                        `✅ 已發送測試推送 (${okCount}/${attempted} 個裝置)。檢查你的通知中心。${tail}`,
+                      )
+                    } else if (
+                      resp.ok &&
+                      okCount === 0 &&
+                      failedCount === 0 &&
+                      expiredCount > 0
+                    ) {
                       alert(`⚠️ 所有裝置都已過期，已自動清理。請重新訂閱通知。`)
                     } else {
                       alert('❌ 推送失敗:\n' + JSON.stringify(json, null, 2))
@@ -662,7 +812,9 @@ export default function SettingsPage() {
                   className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-base bg-white"
                 >
                   {HOURS.map((h) => (
-                    <option key={h.value} value={h.value}>{h.label}</option>
+                    <option key={h.value} value={h.value}>
+                      {h.label}
+                    </option>
                   ))}
                 </select>
                 <select
@@ -673,7 +825,9 @@ export default function SettingsPage() {
                   className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-base bg-white"
                 >
                   {MINUTES.map((m) => (
-                    <option key={m.value} value={m.value}>{m.label}</option>
+                    <option key={m.value} value={m.value}>
+                      {m.label}
+                    </option>
                   ))}
                 </select>
                 <button
@@ -687,14 +841,16 @@ export default function SettingsPage() {
               <p className="text-xs text-[var(--color-muted)] mt-2">
                 你揀咗：
                 <span className="font-bold text-[var(--color-primary)] ml-1">
-                  {hourLabel(reminderHour)} {reminderMinute.toString().padStart(2, '0')} 分
+                  {hourLabel(reminderHour)}{' '}
+                  {reminderMinute.toString().padStart(2, '0')} 分
                 </span>
               </p>
               <p className="text-xs text-[var(--color-muted)] mt-1">
                 提醒會喺你揀嘅時間發送。如果當日已完成讀經，就唔會重複提醒。
               </p>
               <p className="text-xs text-[var(--color-muted)] mt-1">
-                分鐘只能揀 00／15／30／45。雲端排程每 15 分鐘只可跑一次，所以呢個限制可避免額外收費。
+                分鐘只能揀 00／15／30／45。雲端排程每 15
+                分鐘只可跑一次，所以呢個限制可避免額外收費。
               </p>
             </div>
           )}
@@ -702,7 +858,9 @@ export default function SettingsPage() {
 
         {/* Plan Management */}
         <div className="bg-white rounded-2xl p-5 shadow-sm">
-          <h2 className="text-lg font-bold text-[var(--color-primary)] mb-1">📖 讀經計劃</h2>
+          <h2 className="text-lg font-bold text-[var(--color-primary)] mb-1">
+            📖 讀經計劃
+          </h2>
           <p className="text-sm text-[var(--color-muted)] mb-4">
             查看或修改你的讀經計劃
           </p>
@@ -713,17 +871,29 @@ export default function SettingsPage() {
                 <div className="flex justify-between text-sm">
                   <span className="text-[var(--color-muted)]">當前範圍</span>
                   <span className="font-bold text-[var(--color-primary)]">
-                    {currentEnrollment.scope === 'nt' ? '新約' : currentEnrollment.scope === 'ot' ? '舊約' : '新舊約'}
+                    {currentEnrollment.scope === 'nt'
+                      ? '新約'
+                      : currentEnrollment.scope === 'ot'
+                        ? '舊約'
+                        : '新舊約'}
                   </span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-[var(--color-muted)]">每日章數</span>
-                  <span className="font-bold text-[var(--color-primary)]">{currentEnrollment.chapters_per_day} 章</span>
+                  <span className="font-bold text-[var(--color-primary)]">
+                    {currentEnrollment.chapters_per_day} 章
+                  </span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-[var(--color-muted)]">總天數</span>
                   <span className="font-bold text-[var(--color-primary)]">
-                    {getRequiredDays(currentEnrollment.scope as Scope, currentEnrollment.chapters_per_day)} 天
+                    {currentPlanDays} 天
+                  </span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-[var(--color-muted)]">預計完成</span>
+                  <span className="font-bold text-[var(--color-success)]">
+                    {currentCompletion}
                   </span>
                 </div>
                 <div className="flex justify-between text-sm pt-2 border-t border-[var(--color-muted)]/10">
@@ -761,7 +931,9 @@ export default function SettingsPage() {
               <div className="bg-[var(--color-background)] rounded-xl p-4 mb-4 space-y-2">
                 <div className="flex justify-between text-sm">
                   <span className="text-[var(--color-muted)]">當前狀態</span>
-                  <span className="font-bold text-[var(--color-success)]">✅ 計劃已完成</span>
+                  <span className="font-bold text-[var(--color-success)]">
+                    ✅ 計劃已完成
+                  </span>
                 </div>
                 <div className="flex justify-between text-sm pt-2 border-t border-[var(--color-muted)]/10">
                   <span className="text-[var(--color-muted)]">已完成週目</span>
@@ -830,7 +1002,9 @@ export default function SettingsPage() {
           <div className="flex items-center gap-3">
             <span className="text-2xl">🚪</span>
             <div>
-              <p className="text-lg font-bold text-[var(--color-danger)]">登出</p>
+              <p className="text-lg font-bold text-[var(--color-danger)]">
+                登出
+              </p>
               <p className="text-xs text-[var(--color-muted)] mt-0.5">
                 清除登入狀態，重新登入可修復異常問題
               </p>
@@ -840,7 +1014,9 @@ export default function SettingsPage() {
 
         {/* App Info */}
         <div className="bg-white rounded-2xl p-5 shadow-sm">
-          <h2 className="text-lg font-bold text-[var(--color-primary)] mb-3">ℹ️ 關於</h2>
+          <h2 className="text-lg font-bold text-[var(--color-primary)] mb-3">
+            ℹ️ 關於
+          </h2>
           <div className="space-y-2 text-sm text-[var(--color-muted)]">
             <p>Bible Quest 2026</p>
             <p className="text-xs mt-2">為青少年基督徒而設的讀經計劃應用</p>

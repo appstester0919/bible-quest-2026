@@ -34,12 +34,22 @@ describe('scope.ts', () => {
       expect(result.getTime()).toBeGreaterThan(start.getTime())
     })
 
-    it('actual days = ceil(chapters/chapters_per_day)', () => {
+    it('is exactly start + the day count the plan reports', () => {
       const start = new Date('2026-07-01')
       const result = getEstimatedCompletionDate('nt', 60, start)
-      // 260/5 = 52.0 → ceil = 52, so result should be start + 52 days
       const diff = (result.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)
-      expect(diff).toBe(52)
+      // This used to assert 52 — start + ceil(260 / ceil(260/60)). The
+      // recomputation assumed reading from the first chapter of the Bible, so
+      // a plan starting mid-Bible kept the full-length finish date while 總天數
+      // moved. The plan's own day count is the answer; trust it.
+      expect(diff).toBe(60)
+    })
+
+    it('moves with the day count', () => {
+      const start = new Date('2026-07-01')
+      const short = getEstimatedCompletionDate('nt', 30, start)
+      const long = getEstimatedCompletionDate('nt', 60, start)
+      expect(short.getTime()).toBeLessThan(long.getTime())
     })
   })
 })

@@ -145,16 +145,23 @@ export function getRequiredDays(scope: Scope, chaptersPerDay: number): number {
 
 /**
  * Compute estimated completion date from a start date.
+ *
+ * `totalDays` IS the answer — the plan generator already produced it, counting
+ * only the chapters that lie ahead of the chosen start position. This function
+ * used to throw that away and recompute `ceil(totalChapters / ceil(total /
+ * days))`, i.e. assume reading from the very first chapter of the Bible. So
+ * picking a later start book made 總天數 drop while 預計完成 stayed put — the
+ * two numbers on the same card disagreed. Trusting the caller's day count also
+ * keeps this consistent with the calendar, which schedules from the same
+ * `plan.size`.
  */
 export function getEstimatedCompletionDate(
-  scope: Scope,
+  _scope: Scope,
   totalDays: number,
   startDate: Date = new Date(),
 ): Date {
-  const chaptersPerDay = getChaptersPerDay(scope, totalDays)
-  const actualDays = Math.ceil(SCOPE_CHAPTERS[scope] / chaptersPerDay)
   const d = new Date(startDate)
-  d.setDate(d.getDate() + actualDays)
+  d.setDate(d.getDate() + totalDays)
   return d
 }
 

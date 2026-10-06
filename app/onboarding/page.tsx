@@ -25,6 +25,7 @@ import {
   OT_BOOKS,
   type BibleBook,
 } from '@/lib/bible/books'
+import { formatPlanDate as formatDate } from '@/lib/bible/format'
 import {
   generateReadingPlan,
   type EnrollmentLite,
@@ -249,15 +250,6 @@ function getToday(): string {
   // Use HK timezone — at midnight HKT, UTC is already previous day,
   // so toLocaleDateString('en-CA') gives the correct local calendar date.
   return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Hong_Kong' })
-}
-
-function formatDate(date: Date): string {
-  return date.toLocaleDateString('zh-Hant', {
-    timeZone: 'Asia/Hong_Kong',
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-  })
 }
 
 type OldEnrollment = {

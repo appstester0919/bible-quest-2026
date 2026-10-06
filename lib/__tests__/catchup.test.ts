@@ -4,6 +4,7 @@ import {
   generateReadingPlan,
   type EnrollmentLite,
 } from '../bible/planGenerator'
+import { getEstimatedCompletionDate } from '../bible/scope'
 import {
   analyseCatchUp,
   anchorPositionFor,
@@ -580,5 +581,65 @@ describe('two gaps: the chosen one is the one that serves', () => {
     for (const ref of planFor('2026-09-01')) {
       expect(day1).toContain(ref)
     }
+  })
+})
+
+describe('BUG: 預計完成 ignored the chosen start book', () => {
+  // Reported: in 重新設計計劃, changing the start book always moved 總天數 but
+  // 預計完成 sometimes stayed put. It always stayed put, actually — the two
+  // numbers came from different sources. 總天數 was plan.size (real, counts
+  // only what lies ahead of the start position); 預計完成 recomputed
+  // ceil(1189 / chaptersPerDay) + start, i.e. as if reading from 創 1 / 太 1.
+  // So a later start book made one number drop while the other held, and they
+  // disagreed on the same card.
+  const fromStart = {
+    scope: 'nt_ot' as const,
+    chapters_per_day: 4,
+    reading_order: '1-3',
+    nt_start_book_index: 39,
+    nt_start_chapter: 1,
+    ot_start_book_index: 0,
+    ot_start_chapter: 1,
+  }
+  const fromLater = {
+    ...fromStart,
+    nt_start_book_index: 41,
+    nt_start_chapter: 5,
+    ot_start_book_index: 6,
+    ot_start_chapter: 5,
+  }
+  const start = new Date('2026-10-06T00:00:00')
+
+  const days = (e: typeof fromStart) =>
+    generateReadingPlan(e as never, books, 730).size
+
+  it('a later start book really does produce fewer days', () => {
+    expect(days(fromLater)).toBeLessThan(days(fromStart))
+  })
+
+  it('completion date moves with the day count, not with the full bible', () => {
+    const a = getEstimatedCompletionDate('nt_ot', days(fromStart), start)
+    const b = getEstimatedCompletionDate('nt_ot', days(fromLater), start)
+    expect(b.getTime()).toBeLessThan(a.getTime())
+  })
+
+  it('completion date is exactly start + the reported 總天數', () => {
+    const d = days(fromLater)
+    const completion = getEstimatedCompletionDate('nt_ot', d, start)
+    const expected = new Date(start)
+    expected.setDate(expected.getDate() + d)
+    expect(completion.getTime()).toBe(expected.getTime())
+  })
+
+  it('never predicts a date based on chapters the reader will not read', () => {
+    // The old behaviour always implied reading all 1189 chapters, so the
+    // completion date could not move earlier than the full-bible run — which
+    // is exactly the symptom.
+    const d = days(fromLater)
+    const completion = getEstimatedCompletionDate('nt_ot', d, start)
+    const fullBible = Math.ceil(1189 / 4)
+    expect(completion.getTime() - start.getTime()).toBeLessThan(
+      fullBible * 24 * 60 * 60 * 1000,
+    )
   })
 })
