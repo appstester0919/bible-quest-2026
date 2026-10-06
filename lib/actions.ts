@@ -384,10 +384,22 @@ export async function unmarkDayComplete(
  * Replaces N × markLessonComplete() calls with a single bulk INSERT.
  * Then recalculates stats server-side (no full-session transfer).
  */
+/**
+ * Mark a whole reading run complete.
+ *
+ * `dateLocal` is the FALLBACK date for refs that have no explicit entry in
+ * `dates`. A catch-up queue holds several days' chapters at once (missed days
+ * plus today), and every one of them used to be written under today's single
+ * date_local — so finishing 「兩日 8 章」 recorded all eight chapters against
+ * today and left the missed day still marked unread on both the dashboard and
+ * the calendar. Pass `dates` to attribute each chapter to the plan day it came
+ * from; the ref order matches the queue order, so index alignment is exact.
+ */
 export async function markDayCompleteBatch(
   enrollmentId: string,
   refs: string[],
   dateLocal: string,
+  dates?: (string | null)[],
 ): Promise<{
   success: boolean
   insertedCount?: number
@@ -407,25 +419,34 @@ export async function markDayCompleteBatch(
   if (!user) return { success: false, error: 'Not authenticated' }
   if (!refs || refs.length === 0)
     return { success: false, error: 'No refs provided' }
+  // A misaligned dates array would attribute chapters to the wrong days, which
+  // is worse than not attributing them at all — reject rather than guess.
+  if (dates && dates.length !== refs.length) {
+    return { success: false, error: 'dates length must match refs length' }
+  }
 
   // Future-date guard (public launch): cannot mark a future day as complete
   if (isFutureDate(dateLocal)) {
     return { success: false, error: 'cannot mark a future date as complete' }
   }
+  if (dates?.some((d) => d && isFutureDate(d))) {
+    return { success: false, error: 'cannot mark a future date as complete' }
+  }
 
   // ── Step 1: Bulk INSERT all chapters in ONE round-trip ──────────────────────
   const now = new Date()
-  const rows = refs.map((ref) => {
+  const rows: Record<string, unknown>[] = refs.map((ref, i) => {
     const parts = ref.trim().split(/\s+/)
     const bookZh = parts[0]
     // Handle "創 1" or "創1" or "創 1:3"
     const chapterPart = parts[1] ?? '1'
     const chapter = parseInt(chapterPart.replace(/:\d+$/, ''), 10) || 1
+    const own = dates?.[i] ?? null
     return {
       enrollment_id: enrollmentId,
       user_id: user.id,
       chapter_ref: ref,
-      date_local: dateLocal,
+      date_local: own || dateLocal,
       xp_earned: 10,
       day_number: 1,
       book_zh: bookZh,

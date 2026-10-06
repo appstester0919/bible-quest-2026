@@ -19,6 +19,7 @@ import { useRouter } from 'next/navigation'
 import { getChapter, loadBible, type BookMeta } from '@/lib/bible/lookup'
 import { celebrate } from '@/lib/confetti'
 import { readingDate } from '@/lib/readingDate'
+import { generateReadingPlan } from '@/lib/bible/planGenerator'
 
 // ─── Bible Read Aloud color scheme ─────────────────────────────────────────
 const C = {
@@ -623,6 +624,24 @@ export default function ReadPage() {
   // `new Date()` is read deliberately so this stays correct if the tab is left
   // open across HKT midnight; that costs at most one recompute per render
   // change, and the loop is only reached when the URL refs are absent.
+  // Which plan day each queued chapter belongs to.
+  //
+  // A catch-up queue holds several days at once (missed days plus today), and
+  // the completion write used a single date for the lot — so finishing 「兩日
+  // 8 章」 booked all eight against today and the missed day stayed unread on
+  // the dashboard and calendar. Looking the chapters up in the plan gives the
+  // date each one was actually scheduled for, which is the date the record
+  // belongs to. Unrecognised chapters get null and fall back to today's date.
+  const refDates = useMemo(() => {
+    if (!enrollment || books.length === 0) return new Map<string, string>()
+    const plan = generateReadingPlan(enrollment, books, 400)
+    const map = new Map<string, string>()
+    for (const [date, refs] of plan) {
+      for (const r of refs) if (!map.has(r)) map.set(r, date)
+    }
+    return map
+  }, [enrollment, books])
+
   const todayRequiredRefs = useMemo<string[]>(() => {
     if (autoLoadedRefs && autoLoadedRefs.length > 0) return autoLoadedRefs
 
@@ -690,6 +709,19 @@ export default function ReadPage() {
     }
     return refs
   }, [autoLoadedRefs, enrollment, books])
+
+  // How many plan days this queue spans. The button said 「完成讀經」 for a
+  // two-day catch-up, so the reader had no signal that completing it would
+  // also close the missed day — and after the write, no other place said so
+  // either.
+  const coverDays = useMemo(() => {
+    const days = new Set<string>()
+    for (const r of todayRequiredRefs) {
+      const d = refDates.get(r)
+      if (d) days.add(d)
+    }
+    return Math.max(days.size, 1)
+  }, [todayRequiredRefs, refDates])
 
   // Whether loaded audio chapters cover all today's required reading.
   // Memoised on [audioQueue] — the Set is rebuilt from scratch on every
@@ -1312,7 +1344,15 @@ export default function ReadPage() {
       // approach awarded only 10 XP for the first chapter and 0 for the rest.
       const today = readingDate()
       const refs = audioQueue.map((item) => `${item.book.name} ${item.chapter}`)
-      const result = await markDayCompleteBatch(enrollment.id, refs, today)
+      // Attribute each chapter to the plan day it was scheduled for, so a
+      // catch-up run records every day it actually covered instead of
+      // collapsing them all onto today.
+      const result = await markDayCompleteBatch(
+        enrollment.id,
+        refs,
+        today,
+        refs.map((r) => refDates.get(r) ?? null),
+      )
       if (!result.success) {
         alert(`寫入失敗: ${result.error || 'unknown'}`)
         setIsCompleting(false)
@@ -2626,7 +2666,7 @@ export default function ReadPage() {
                   : isCompleting
                     ? '處理中...'
                     : allRequiredLoaded
-                      ? `完成讀經 ✓（+${todayRequiredRefs.length * 10} XP）`
+                      ? `${coverDays > 1 ? `完成 ${coverDays} 日讀經` : '完成讀經'} ✓（+${todayRequiredRefs.length * 10} XP）`
                       : `需完成 ${todayRequiredRefs.length} 章才能標記完成`}
               </button>
             )}

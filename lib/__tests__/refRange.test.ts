@@ -1,4 +1,8 @@
 import { describe, it, expect } from 'vitest'
+import { generateReadingPlan } from '../bible/planGenerator'
+import { getBooksMeta } from '../bible/lookup'
+import bibleData2 from '../../public/bible-data.json'
+const books = getBooksMeta(bibleData2 as never)
 import { runsOf, formatRun, summariseRuns, countRuns } from '../refRange'
 
 describe('refRange', () => {
@@ -159,5 +163,49 @@ describe('regression: the calendar tile showed 「提」 instead of 「提後」
     expect(summariseRuns(['提前 1', '提前 2', '提後 1', '提後 2'], 2)).toBe(
       '提前 1 - 2、提後 1 - 2',
     )
+  })
+})
+
+describe('a catch-up run records every day it covered', () => {
+  // Finishing 「兩日 8 章」 from the catch-up queue used to write all eight
+  // chapters under TODAY's date_local, because markDayCompleteBatch took a
+  // single date. The missed day therefore stayed unread on the dashboard and
+  // the calendar no matter how many chapters the reader actually finished.
+  // Each chapter must land on the plan day it was scheduled for.
+  const plan = generateReadingPlan(
+    {
+      scope: 'nt_ot',
+      chapters_per_day: 4,
+      reading_order: '1-3',
+      started_at: '2026-10-04T00:00:00.000Z',
+      start_book_index: 0,
+    } as never,
+    books,
+    400,
+  )
+
+  it('maps each queued chapter to the day the plan scheduled it', () => {
+    const missed = plan.get('2026-10-04') ?? []
+    const today = plan.get('2026-10-05') ?? []
+    expect(missed).toHaveLength(4)
+    expect(today).toHaveLength(4)
+
+    // The lookup the read page performs: first plan day owning each ref.
+    const map = new Map<string, string>()
+    for (const [date, refs] of plan)
+      for (const r of refs) if (!map.has(r)) map.set(r, date)
+
+    const queue = [...missed, ...today]
+    const dates = queue.map((r) => map.get(r) ?? null)
+    expect(dates.filter((d) => d === '2026-10-04')).toHaveLength(4)
+    expect(dates.filter((d) => d === '2026-10-05')).toHaveLength(4)
+  })
+
+  it('a single-day queue still attributes every chapter to today', () => {
+    const today = plan.get('2026-10-05') ?? []
+    const map = new Map<string, string>()
+    for (const [date, refs] of plan)
+      for (const r of refs) if (!map.has(r)) map.set(r, date)
+    for (const r of today) expect(map.get(r)).toBe('2026-10-05')
   })
 })
