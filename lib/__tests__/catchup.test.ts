@@ -643,3 +643,98 @@ describe('BUG: 預計完成 ignored the chosen start book', () => {
     )
   })
 })
+
+describe('BUG: 選最近斷位，舊約喺最近，新約留咗喺最早', () => {
+  // The real account, verbatim. A parallel 2-4 NT/OT plan where the NT had
+  // been read to the end: the earliest gap held both testaments, the most
+  // recent gap held OT chapters ONLY, so `secondary` came back null and the
+  // NT start was left where it was. Picking the most recent gap then served
+  // 約翰 21 / 使徒 1 — chapters from the EARLIEST gap — on top of the OT the
+  // button promised. 「選最近斷位」 served the earliest gap's NT.
+  const REAL = {
+    scope: 'nt_ot' as const,
+    chapters_per_day: 6,
+    reading_order: '2-4',
+    started_at: '2026-06-23',
+    nt_start_book_index: 42,
+    nt_start_chapter: 21,
+    ot_start_book_index: 5,
+    ot_start_chapter: 1,
+  }
+  const plan = generateReadingPlan(REAL as never, books, 400)
+  const planFor = (d: string) => plan.get(d) ?? []
+  const a = analyseCatchUp('2026-06-23', '2026-10-06', ['2026-09-23'], planFor)
+
+  const restartDay1 = (anchorDate: string) => {
+    if (a.kind !== 'reanchor') throw new Error('expected reanchor')
+    const pos = anchorPositionFor(REAL as never, books, anchorDate)!
+    return generateReadingPlan(
+      { ...reanchoredEnrollment(REAL as never, pos), started_at: '2026-10-06' },
+      books,
+      3,
+    ).get('2026-10-06')!
+  }
+
+  it('produces the two-gap shape described', () => {
+    expect(a.kind).toBe('reanchor')
+    if (a.kind !== 'reanchor') throw new Error('expected reanchor')
+    expect(a.multipleGaps).toBe(true)
+    expect(a.firstGap.firstDate).toBe('2026-06-23')
+    expect(a.lastGap.firstDate).toBe('2026-09-24')
+    // The recent gap is OT-only: the NT side has nothing left to read.
+    expect(
+      planFor(a.lastGap.firstDate).every(
+        (r) => books.find((b) => r.startsWith(b.name))!.index < 39,
+      ),
+    ).toBe(true)
+  })
+
+  it('picking the RECENT gap restarts at that gap, with no NT', () => {
+    const day1 = restartDay1('2026-09-24')
+    expect(
+      day1.every((r) => books.find((b) => r.startsWith(b.name))!.index < 39),
+    ).toBe(true)
+    // The bug: day1 was 約翰 21, 使徒 1, then 詩篇 96-99.
+    expect(
+      day1.some((r) => r.startsWith('約翰福音') || r.startsWith('使徒行傳')),
+    ).toBe(false)
+  })
+
+  it('picking the EARLIEST gap still restarts with both testaments', () => {
+    const day1 = restartDay1('2026-06-23')
+    expect(day1).toContain('約翰福音 21')
+    expect(
+      day1.some((r) => books.find((b) => r.startsWith(b.name))!.index < 39),
+    ).toBe(true)
+  })
+
+  it('the two choices differ — one gap is not silently serving the other', () => {
+    expect(restartDay1('2026-09-24')).not.toEqual(restartDay1('2026-06-23'))
+  })
+
+  it('a one-testament day freezes that testament instead of re-reading it', () => {
+    const pos = anchorPositionFor(REAL as never, books, '2026-09-24')!
+    expect(pos.secondary).toBeNull()
+    const rebuilt = reanchoredEnrollment(REAL as never, pos)
+    // Past the last book → the generator's length guards yield no chapters.
+    expect(rebuilt.nt_start_book_index!).toBeGreaterThan(65)
+  })
+
+  it('a finished testament contributes nothing, so the quota all goes to the other', () => {
+    const rebuilt = reanchoredEnrollment(
+      REAL as never,
+      anchorPositionFor(REAL as never, books, '2026-09-24')!,
+    )
+    const p = generateReadingPlan(
+      { ...rebuilt, started_at: '2026-10-06' },
+      books,
+      3,
+    )
+    for (const [, refs] of p) {
+      expect(
+        refs.every((r) => books.find((b) => r.startsWith(b.name))!.index < 39),
+      ).toBe(true)
+      expect(refs).toHaveLength(REAL.chapters_per_day)
+    }
+  })
+})

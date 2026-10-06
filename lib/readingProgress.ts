@@ -63,6 +63,15 @@ const NT_FIRST_BOOK_INDEX = 39
  * positions, and using only the first is what made 「由最近嘅斷位接返」 restart
  * at the earliest chapters instead.
  */
+/**
+ * A start book index that means 「this testament is finished」.
+ *
+ * 66 is past 啟示錄 (65), so the generator's `idx < books.length` guards make
+ * the testament yield no chapters. Used for a parallel re-anchor onto a day
+ * that reads only one testament.
+ */
+export const FINISHED_BOOK_INDEX = 66
+
 export interface AnchorPositions {
   primary: AnchorPosition
   /** The other testament's position, when the plan reads both in parallel. */
@@ -126,6 +135,16 @@ export function reanchoredEnrollment<
     // half of it.
     const ntPos = anchorIsNT ? anchor : pos.secondary
     const otPos = anchorIsNT ? pos.secondary : anchor
+
+    // A testament the anchor day does not read is FINISHED, not misplaced, so
+    // park its pointer past the last book instead of leaving it where it was.
+    //
+    // The real account hit this: NT had been read to the end, so the recent gap
+    // held OT chapters only and `secondary` came back null. Keeping the old
+    // NT start then re-ran NT from there — the day the reader picked showed
+    // 約翰 21 / 使徒 1, chapters belonging to the EARLIEST gap, in a restart
+    // they believed was the latest one. Parking it is what 「選最近斷位」 has to
+    // mean when one testament is done.
     return {
       ...base,
       ...(ntPos
@@ -133,13 +152,13 @@ export function reanchoredEnrollment<
             nt_start_book_index: ntPos.book_index,
             nt_start_chapter: ntPos.chapter,
           }
-        : {}),
+        : { nt_start_book_index: FINISHED_BOOK_INDEX, nt_start_chapter: 1 }),
       ...(otPos
         ? {
             ot_start_book_index: otPos.book_index,
             ot_start_chapter: otPos.chapter,
           }
-        : {}),
+        : { ot_start_book_index: FINISHED_BOOK_INDEX, ot_start_chapter: 1 }),
     }
   }
 

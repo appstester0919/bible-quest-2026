@@ -15,8 +15,35 @@
 import {
   getRemainingChapters,
   NT_FIRST_BOOK_INDEX,
+  NT_LAST_BOOK_INDEX,
   OT_FIRST_BOOK_INDEX,
+  OT_LAST_BOOK_INDEX,
 } from './scope'
+
+/**
+ * Locate a testament's start pointer, or park it out of range when that
+ * testament is finished. An out-of-range index makes every inner loop's
+ * `idx < books.length` guard false, so the testament contributes no chapters
+ * and the daily quota falls through to the other one.
+ */
+function ntBookArrIdxOf(
+  books: BookMeta[],
+  startBook: number,
+  finished: boolean,
+): number {
+  if (finished) return books.length
+  const i = books.findIndex((b) => b.index === startBook)
+  return i < 0 ? 0 : i
+}
+function otBookArrIdxOf(
+  books: BookMeta[],
+  startBook: number,
+  finished: boolean,
+): number {
+  if (finished) return books.length
+  const i = books.findIndex((b) => b.index === startBook)
+  return i < 0 ? 0 : i
+}
 
 export type BookMeta = {
   name: string // e.g. "創世記"
@@ -212,19 +239,27 @@ export function generateReadingPlan(
     // Compute initial remaining chapter counts. The books[] passed to
     // getRemainingChapters is the full 66-book list; the helper handles
     // per-testament scoping internally.
-    const ntInitialRemaining =
-      ntStartBook >= NT_FIRST_BOOK_INDEX
+    // A start index past the testament's last book means that testament is
+    // FINISHED, not misplaced. Re-anchoring onto a gap day that holds only OT
+    // chapters must not send NT back to wherever it was last parked: a reader
+    // who finished the NT long ago does not want 約翰 1 again, and it silently
+    // injected the earliest gap's NT chapters into the restart day.
+    const ntFinished = ntStartBook > NT_LAST_BOOK_INDEX
+    const otFinished = otStartBook > OT_LAST_BOOK_INDEX
+
+    const ntInitialRemaining = ntFinished
+      ? 0
+      : ntStartBook >= NT_FIRST_BOOK_INDEX
         ? getRemainingChapters('nt', books, ntStartBook, ntStartChapter)
         : 260
-    const otInitialRemaining =
-      otStartBook <= OT_FIRST_BOOK_INDEX + 38
+    const otInitialRemaining = otFinished
+      ? 0
+      : otStartBook <= OT_FIRST_BOOK_INDEX + 38
         ? getRemainingChapters('ot', books, otStartBook, otStartChapter)
         : 929
 
-    let ntBookArrIdx = ntBooks.findIndex((b) => b.index === ntStartBook)
-    let otBookArrIdx = otBooks.findIndex((b) => b.index === otStartBook)
-    if (ntBookArrIdx < 0) ntBookArrIdx = 0
-    if (otBookArrIdx < 0) otBookArrIdx = 0
+    let ntBookArrIdx = ntBookArrIdxOf(ntBooks, ntStartBook, ntFinished)
+    let otBookArrIdx = otBookArrIdxOf(otBooks, otStartBook, otFinished)
 
     let ntBookIdx = ntBookArrIdx,
       ntChapter = ntStartChapter,
