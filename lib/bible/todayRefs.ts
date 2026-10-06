@@ -102,3 +102,54 @@ export function planRefDates(
   }
   return map
 }
+
+// ============================================================================
+// Plan length — the second half of the 「同一個概念兩個地方」 problem.
+//
+// getRequiredDays(scope, cpd) answers 「if I read from 創 1, how many days?」
+// because it divides the scope's FULL chapter count (260 NT / 929 OT) by the
+// daily quota. That is the wrong question once a start position exists: a plan
+// starting at 詩篇 96 has far fewer chapters ahead of it, so the real length is
+// much shorter.
+//
+// Three places had drifted apart on this:
+//   - settings/page.tsx copied getRequiredDays' hard-coded 260/929 inline, and
+//     for nt_ot fell back to `total_days = cpd` with a comment promising the
+//     generator would re-derive it — it never did.
+//   - onboarding/page.tsx multiplied getRequiredDays by cpd to recover a
+//     chapter count, double-applying the ceil.
+//   - the dashboard and calendar use plan.size, which is right.
+//
+// This asks the generator, so 總天數 cannot disagree with the calendar again.
+// ============================================================================
+
+/**
+ * How many days the plan actually takes, counting only the chapters ahead of
+ * the enrollment's start position.
+ *
+ * `maxDays` bounds the generator's loop, so it must exceed the expected length
+ * or this under-reports. 730 is far above any real plan (the longest possible
+ * is ~1189 days at one chapter a day, and that is the pathological case).
+ */
+export function planLengthDays(
+  enrollment: EnrollmentLite | null | undefined,
+  books: BookMeta[],
+  maxDays = 730,
+): number {
+  if (!enrollment || books.length === 0) return 0
+  return generateReadingPlan(enrollment, books, maxDays).size
+}
+
+/** Total chapters the plan will cover, from its own start position. */
+export function chaptersInPlan(
+  enrollment: EnrollmentLite | null | undefined,
+  books: BookMeta[],
+  maxDays = 730,
+): number {
+  if (!enrollment || books.length === 0) return 0
+  let n = 0
+  for (const refs of generateReadingPlan(enrollment, books, maxDays).values()) {
+    n += refs.length
+  }
+  return n
+}

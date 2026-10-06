@@ -24,6 +24,7 @@ import {
 } from '@/lib/identity'
 import { useMemo } from 'react'
 import { generateReadingPlan } from '@/lib/bible/planGenerator'
+import { planLengthDays } from '@/lib/bible/todayRefs'
 import { BIBLE_BOOKS } from '@/lib/bible/books'
 import { getEstimatedCompletionDate } from '@/lib/bible/scope'
 import { formatPlanDate as formatDate } from '@/lib/bible/format'
@@ -312,12 +313,15 @@ export default function SettingsPage() {
       // current DB CHECK constraint.
       const scope = currentEnrollment.scope as 'nt' | 'ot' | 'nt_ot'
       const cpd = currentEnrollment.chapters_per_day
+      // Ask the generator. The old inline arithmetic divided the FULL scope
+      // count (260 NT / 929 OT) by the daily quota, which is only correct when
+      // reading from 創 1 — and for nt_ot it fell back to `cpd` itself, so a
+      // restart recorded a total_days unrelated to the plan it then created.
+      // BIBLE_BOOKS is already imported here and is the same metadata the
+      // generator uses, so the new enrollment's total_days cannot disagree
+      // with the plan readers actually get.
       const properTotalDays =
-        scope === 'nt'
-          ? Math.ceil(260 / cpd)
-          : scope === 'ot'
-            ? Math.ceil(929 / cpd)
-            : /* nt_ot */ cpd // legacy fallback — will be re-derived by generator
+        planLengthDays(currentEnrollment as never, BIBLE_BOOKS) || 1
 
       // For nt_ot scope, reading_order is REQUIRED by the DB CHECK constraint.
       // If the old enrollment has a valid value, copy it; otherwise compute a

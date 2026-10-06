@@ -30,6 +30,7 @@ import {
   generateReadingPlan,
   type EnrollmentLite,
 } from '@/lib/bible/planGenerator'
+import { chaptersInPlan } from '@/lib/bible/todayRefs'
 
 /**
  * Picker UI: a single row of 2 buttons (book + chapter).
@@ -333,11 +334,12 @@ function OnboardingInner() {
           .eq('enrollment_id', enrollment.id)
         setOldProgress({
           read: count ?? 0,
-          total:
-            getRequiredDays(
-              enrollment.scope as Scope,
-              enrollment.chapters_per_day,
-            ) * enrollment.chapters_per_day,
+          // Chapter count, from the same generator the dashboard and calendar
+          // use. `getRequiredDays(scope, cpd) * cpd` recovered a count by
+          // multiplying back out of a ceil, and it assumed the plan started at
+          // 創 1 — so for any plan with a start position it overstated the
+          // total and made the 「已讀 N / 總 M」 bar read over 100%.
+          total: chaptersInPlan(enrollment as never, BIBLE_BOOKS),
         })
       }
     })()

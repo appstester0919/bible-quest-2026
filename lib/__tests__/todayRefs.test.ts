@@ -5,10 +5,13 @@ import {
   type EnrollmentLite,
 } from '../bible/planGenerator'
 import {
+  chaptersInPlan,
   horizonForToday,
+  planLengthDays,
   planRefDates,
   todayRequiredRefs,
 } from '../bible/todayRefs'
+import { getRequiredDays } from '../bible/scope'
 import { FINISHED_BOOK_INDEX } from '../readingProgress'
 import bibleData from '../../public/bible-data.json'
 
@@ -203,5 +206,78 @@ describe('planRefDates maps a ref to the day the plan scheduled it', () => {
     const map = planRefDates(QUEUE, books, 2)
     expect(map.has('創世記 1')).toBe(true)
     expect(map.has('創世記 100')).toBe(false)
+  })
+})
+
+describe('planLengthDays / chaptersInPlan ask the generator, not 260 and 929', () => {
+  // ── settings/page.tsx copied getRequiredDays' hard-coded 260/929 inline and
+  // for nt_ot fell back to `total_days = chapters_per_day`, with a comment
+  // saying the generator would re-derive it. It never did, so restarting a
+  // 4-chapters-a-day 新舊並行 plan recorded total_days = 4.
+  // ── onboarding/page.tsx multiplied getRequiredDays back out by cpd to get a
+  // chapter count, assuming the plan started at 創 1.
+
+  const MID: EnrollmentLite = {
+    scope: 'nt_ot',
+    chapters_per_day: 4,
+    reading_order: '2-2',
+    started_at: '2026-10-06T00:00:00.000Z',
+    ot_start_book_index: 18,
+    ot_start_chapter: 96,
+    nt_start_book_index: 43,
+    nt_start_chapter: 1,
+  }
+
+  it('never records a one-digit total for a 4-chapters-a-day plan', () => {
+    // The old nt_ot fallback was literally `total_days = cpd`.
+    expect(MID.chapters_per_day).toBe(4)
+    const days = planLengthDays(MID, books)
+    expect(days).toBeGreaterThan(100)
+  })
+
+  it('agrees with the generator, which is what the calendar uses', () => {
+    expect(planLengthDays(MID, books)).toBe(
+      generateReadingPlan(MID, books, 730).size,
+    )
+  })
+
+  it('counts chapters, not days', () => {
+    const days = planLengthDays(MID, books)
+    const chapters = chaptersInPlan(MID, books)
+    expect(chapters).toBeGreaterThanOrEqual(days)
+    // 4 chapters a day, so chapters ≈ days × 4 (the last day is partial).
+    expect(chapters).toBeLessThan(days * 5)
+  })
+
+  it('differs from the old full-Bible arithmetic for a mid-Bible start', () => {
+    // The old formula assumes reading from 創 1 and cannot see the start
+    // position, so the two numbers must not be silently equal by luck.
+    const oldDays = getRequiredDays('nt_ot', MID.chapters_per_day)
+    expect(planLengthDays(MID, books)).not.toBe(oldDays)
+  })
+
+  it('is zero without an enrollment', () => {
+    expect(planLengthDays(null, books)).toBe(0)
+    expect(chaptersInPlan(undefined, [])).toBe(0)
+  })
+
+  it('gives a shorter plan when the start book is later', () => {
+    const late: EnrollmentLite = {
+      scope: 'ot',
+      chapters_per_day: 3,
+      started_at: '2026-10-06T00:00:00.000Z',
+      start_book_index: 30,
+      start_chapter: 1,
+    }
+    const early: EnrollmentLite = {
+      ...late,
+      start_book_index: 0,
+      start_chapter: 1,
+    }
+    expect(planLengthDays(late, books)).toBeLessThan(
+      planLengthDays(early, books),
+    )
+    // The old formula gives both the same number — that was the bug.
+    expect(getRequiredDays('ot', 3)).toBe(planLengthDays(early, books)) // both = ceil(929/3)
   })
 })
