@@ -20,6 +20,11 @@ import { getChapter, loadBible, type BookMeta } from '@/lib/bible/lookup'
 import { celebrate } from '@/lib/confetti'
 import { readingDate } from '@/lib/readingDate'
 import { generateReadingPlan } from '@/lib/bible/planGenerator'
+import {
+  horizonForToday,
+  planRefDates,
+  todayRequiredRefs as todayRequiredRefsOf,
+} from '@/lib/bible/todayRefs'
 
 // ─── Bible Read Aloud color scheme ─────────────────────────────────────────
 const C = {
@@ -632,59 +637,15 @@ export default function ReadPage() {
   // the dashboard and calendar. Looking the chapters up in the plan gives the
   // date each one was actually scheduled for, which is the date the record
   // belongs to. Unrecognised chapters get null and fall back to today's date.
-  const refDates = useMemo(() => {
-    if (!enrollment || books.length === 0) return new Map<string, string>()
-    const plan = generateReadingPlan(enrollment, books, 400)
-    const map = new Map<string, string>()
-    for (const [date, refs] of plan) {
-      for (const r of refs) if (!map.has(r)) map.set(r, date)
-    }
-    return map
-  }, [enrollment, books])
+  const refDates = useMemo(
+    () => planRefDates(enrollment, books, 400),
+    [enrollment, books],
+  )
 
-  const todayRequiredRefs = useMemo<string[]>(() => {
-    if (autoLoadedRefs && autoLoadedRefs.length > 0) return autoLoadedRefs
-    if (!enrollment || books.length === 0) return []
-
-    // Ask the plan generator for TODAY's chapters instead of replaying the
-    // plan by hand.
-    //
-    // The hand-rolled replay walked a single flat list of books from 創 1,
-    // consuming chapters_per_day per day. It never read reading_order, never
-    // read nt_start_book_index / ot_start_book_index, and never read
-    // start_book_index. So for any plan that is parallel (新舊並行) or that
-    // starts mid-Bible — i.e. every re-anchored plan, including every plan this
-    // catch-up button creates — the banner named a completely different range
-    // from the one the dashboard link and the audio queue used. The dashboard
-    // has always gone through generateReadingPlan; only this banner didn't,
-    // which is why the same plan showed two different 「今日讀經」 in two
-    // places on the same account.
-    const hktToday = readingDate()
-    // Horizon must reach today's plan day, however far behind the reader is.
-    // A fixed 400 truncated the lookup for anyone 400+ days behind — the exact
-    // readers the catch-up button exists for — and silently showed the banner's
-    // fallback book/chapter instead.
-    const [sy, sm, sd] = String(enrollment.started_at)
-      .split('T')[0]
-      .split('-')
-      .map(Number)
-    const behindDays = sy
-      ? Math.max(
-          1,
-          Math.floor(
-            (new Date(hktToday).getTime() -
-              new Date(sy, sm - 1, sd).getTime()) /
-              86400000,
-          ) + 1,
-        )
-      : 400
-    const plan = generateReadingPlan(enrollment, books, behindDays + 30)
-    const todays = plan.get(hktToday)
-    if (todays && todays.length > 0) return todays
-
-    // Before the plan starts, or after it ran out of chapters: nothing is due.
-    return []
-  }, [autoLoadedRefs, enrollment, books])
+  const todayRequiredRefs = useMemo<string[]>(
+    () => todayRequiredRefsOf(autoLoadedRefs, enrollment, books, readingDate()),
+    [autoLoadedRefs, enrollment, books],
+  )
 
   // How many plan days this queue spans. The button said 「完成讀經」 for a
   // two-day catch-up, so the reader had no signal that completing it would
