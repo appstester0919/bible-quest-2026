@@ -134,10 +134,18 @@ def parse_chapter(page: str) -> list[dict]:
         heading = "".join(strongs).strip()
         if any(j.fullmatch(heading) for j in JUNK):
             continue
-        # A heading the editor bolded inside a sentence keeps its tail.
+        # A heading the editor bolded inside a sentence keeps its tail as prose
+        # — e.g. 「架构(1)」 bold, then the paragraph that explains it.
         rest = re.sub(r"\s*<strong>.*?</strong>\s*", "", para_html, flags=re.S)
         rest = clean(rest)
-        if rest and rest != stripped:
+        # …unless the tail is only closing punctuation the editor left outside
+        # the <strong> by mistake. On ch3 the source literally reads
+        #   <p><strong>只不过是手段和方法（媒介</strong>）</p>
+        # so the naive split emitted 「）」as its own paragraph above the
+        # subheading. Fold punctuation-only tails back into the heading.
+        if rest and not re.search(r"[\w\u4e00-\u9fff]", rest):
+            heading = (heading + rest).strip()
+        elif rest and rest != stripped:
             blocks.append({"type": "p", "text": rest})
         blocks.append({"type": "h", "text": heading})
     return blocks
@@ -153,6 +161,7 @@ def main() -> None:
         raise SystemExit(f"expected 28 chapters, found {len(links)}")
 
     chapters = []
+    plate_no = 0
     for num, (url, raw_title) in enumerate(links, start=1):
         page = fetch(url, CACHE / f"{num:02d}.html")
         # The index link text is not always a complete title (第十一篇 links as
@@ -176,22 +185,37 @@ def main() -> None:
         n_h = sum(1 for b in blocks if b["type"] == "h")
         n_img = sum(1 for b in blocks if b["type"] == "img")
         chars = sum(len(b.get("text", "")) for b in blocks)
-        # Download each figure and name it deterministically.
-        fig = 0
+        # Resolve each figure to a file. The web fetch is what fixes WHICH plate
+        # belongs to which chapter — the PDF text layer cannot supply that order.
+        # The image it points at, though, is the PDF plate: the site's ?w=1024 is
+        # a re-compress and is SMALLER than pdfimages output (圖4: web 320x244 vs
+        # PDF 534x408), which the user spotted and asked to switch. PDF plates are
+        # numbered sequentially across the whole book, so the order established
+        # here maps straight onto NN.jpg | NN.png.
         for b in blocks:
             if b["type"] != "img":
                 continue
             remote = b.pop("remote").split("?")[0]
-            ext = Path(remote).suffix.lower() or ".png"
-            name = f"web-{num:02d}-{fig}{ext}"
-            dest = OUT_DIR / "img" / name
-            if not dest.exists():
-                subprocess.run(
-                    ["curl", "-sL", "--max-time", "90", remote, "-o", str(dest)],
-                    capture_output=True,
-                )
-            b["src"] = f"img/{name}"
-            fig += 1
+            plate = f"img/{plate_no:02d}"
+            found = None
+            for ext in (".jpg", ".png"):
+                if (OUT_DIR / "img" / f"{plate_no:02d}{ext}").exists():
+                    found = f"{plate}{ext}"
+                    break
+            if found is None:
+                # No PDF plate at this position: fall back to the web copy so the
+                # figure still renders rather than 404ing.
+                ext = Path(remote).suffix.lower() or ".png"
+                found = f"img/web-{num:02d}-{plate_no}{ext}"
+                dest = OUT_DIR / found
+                if not dest.exists():
+                    subprocess.run(
+                        ["curl", "-sL", "--max-time", "90", remote, "-o", str(dest)],
+                        capture_output=True,
+                    )
+                print(f"    warn: no PDF plate at {plate_no}; using web copy {found}")
+            b["src"] = found
+            plate_no += 1
 
         chapters.append({
             "num": num,
