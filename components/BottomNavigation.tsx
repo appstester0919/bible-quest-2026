@@ -94,6 +94,15 @@ const PracticeIcon = ({ size }: IconProps) => (
   </Icon>
 )
 
+// 屬靈書 icon — stacked books, for /ultimate-intention. Distinct from
+// TopTabs' BookIcon (open book) so the two don't read as the same destination.
+const DevotionalIcon = ({ size }: IconProps) => (
+  <Icon size={size}>
+    <path d="M4 5.5A1.5 1.5 0 0 1 5.5 4H10a2 2 0 0 1 2 2v13a2 2 0 0 0-2-2H4z" />
+    <path d="M20 5.5A1.5 1.5 0 0 0 18.5 4H14a2 2 0 0 0-2 2v13a2 2 0 0 1 2-2h6z" />
+  </Icon>
+)
+
 // 外網連結 icon — chain link glyph for the /links sheet entry
 // (Round 24, 2026-09-09). Same stroke style as the rest of the nav.
 const LinkIcon = ({ size }: IconProps) => (
@@ -137,8 +146,11 @@ const TOP_TABS = [
 /** Routes served inside the「更多」sheet — any of these active ⇒ 更多 tab glows.
  *  夥伴 (/partner) 已落架（2026-08）：功能被群組覆蓋且無入口；route 保留，
  *  日後認真發展夥伴時喺 SHEET_GRID 加返 { href:'/partner', label:'夥伴' }
- *  Round 24 (2026-09-09) — 外網連結 (/links) joined the sheet. */
-const SHEET_ROUTE_PREFIXES: string[] = ['/links']
+ *  Round 24 (2026-09-09) — 外網連結 (/links) joined the sheet.
+ *  2026-10-07 — 屬靈書 (/ultimate-intention)《神的終極目的》joined the sheet.
+ *  NOTE the folder is named after the BOOK, not after the app: DuoBible is the
+ *  public name of the whole app, so using it for one feature misleads. */
+const SHEET_ROUTE_PREFIXES: string[] = ['/links', '/ultimate-intention']
 
 export default function BottomNavigation() {
   const pathname = usePathname()
@@ -195,11 +207,11 @@ export default function BottomNavigation() {
     const DIRECTION_EVENTS = 2
 
     lastScrollY.current = window.scrollY
-    let dir = 0            // +1 scrolling down, -1 up, 0 none yet
-    let travel = 0         // accumulated |delta| in the current direction
-    let events = 0         // consecutive scroll events in that direction
-    let shownAt = 0        // timestamp the bar last became visible
-    let hidden = false     // mirrors navHidden so the hold window is honoured
+    let dir = 0 // +1 scrolling down, -1 up, 0 none yet
+    let travel = 0 // accumulated |delta| in the current direction
+    let events = 0 // consecutive scroll events in that direction
+    let shownAt = 0 // timestamp the bar last became visible
+    let hidden = false // mirrors navHidden so the hold window is honoured
 
     const show = () => {
       if (!hidden) {
@@ -226,17 +238,27 @@ export default function BottomNavigation() {
 
       if (y < 96) {
         // Top of the document: the bar is always shown and no debounce applies.
-        dir = 0; travel = 0; events = 0
+        dir = 0
+        travel = 0
+        events = 0
         show()
         return
       }
 
       if (delta > 0) {
-        if (dir !== 1) { dir = 1; travel = 0; events = 0 }
+        if (dir !== 1) {
+          dir = 1
+          travel = 0
+          events = 0
+        }
         travel += delta
         events += 1
       } else if (delta < 0) {
-        if (dir !== -1) { dir = -1; travel = 0; events = 0 }
+        if (dir !== -1) {
+          dir = -1
+          travel = 0
+          events = 0
+        }
         travel += -delta
         events += 1
       } else {
@@ -367,6 +389,18 @@ export default function BottomNavigation() {
                   <LinkIcon size={20} />
                 </span>
                 <span className="more-item-label">外網連結</span>
+              </Link>
+              {/* 2026-10-07 — 屬靈書《神的終極目的》. Sits between 外網連結
+                  and 分享 so the two reading resources stay adjacent. */}
+              <Link
+                href="/ultimate-intention"
+                className="more-item"
+                onClick={() => setSheetOpen(false)}
+              >
+                <span className="more-item-icon more-item-icon-accent">
+                  <DevotionalIcon size={20} />
+                </span>
+                <span className="more-item-label">屬靈書</span>
               </Link>
               <button type="button" className="more-item" onClick={shareApp}>
                 <span className="more-item-icon more-item-icon-streak">
