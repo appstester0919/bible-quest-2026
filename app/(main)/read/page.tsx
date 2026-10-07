@@ -16,6 +16,7 @@ import {
 } from '@/lib/actions'
 import { checkInAllMyGroups } from '@/lib/groupActions'
 import { useRouter } from 'next/navigation'
+import ThemeToggle from '@/components/ThemeToggle'
 import { getChapter, loadBible, type BookMeta } from '@/lib/bible/lookup'
 import { celebrate } from '@/lib/confetti'
 import { readingDate } from '@/lib/readingDate'
@@ -27,21 +28,33 @@ import {
 } from '@/lib/bible/todayRefs'
 
 // ─── Bible Read Aloud color scheme ─────────────────────────────────────────
+/**
+ * The reader's palette, as CSS custom properties rather than hex literals.
+ *
+ * React passes `var(--x)` straight through to the style attribute, so every
+ * one of the 100 `C.*` call sites below needed no edit — only this table did.
+ *
+ * The concrete light values live in :root and the dark ones in .dark
+ * (app/globals.css), which is what makes the theme switchable at all. An
+ * earlier version of this file held hex literals inline; a class on <html>
+ * could not reach them, so the reader stayed parchment no matter what the app
+ * around it did.
+ */
 const C = {
-  bgPrimary: '#F5F0E8',
-  bgSecondary: '#EDE5D8',
-  bgCard: '#FAF7F2',
-  bgInput: '#E8E0D0',
-  textPrimary: '#3D2914',
-  textSecondary: '#6B5344',
-  textMuted: '#9C7B5E',
-  accentGold: '#C9A84C',
-  accentGoldHover: '#B8943F',
-  chapterTitle: '#8B5E3C',
-  verseNumber: '#9C7B5E',
-  borderColor: '#D4C4A8',
-  borderLight: '#E0D5C0',
-  success: '#16a34a',
+  bgPrimary: 'var(--bq-reading-bg)',
+  bgSecondary: 'var(--bq-reading-bg)',
+  bgCard: 'var(--bq-reading-surface)',
+  bgInput: 'var(--bq-reading-bg)',
+  textPrimary: 'var(--bq-reading-ink)',
+  textSecondary: 'var(--bq-reading-ink-soft)',
+  textMuted: 'var(--bq-reading-muted)',
+  accentGold: 'var(--bq-reading-accent)',
+  accentGoldHover: 'var(--bq-reading-accent)',
+  chapterTitle: 'var(--bq-reading-accent)',
+  verseNumber: 'var(--bq-reading-muted)',
+  borderColor: 'var(--bq-reading-border)',
+  borderLight: 'var(--bq-reading-border-soft)',
+  success: 'var(--color-bq-success)',
 }
 
 // ─── Chapter-grid layout constants ─────────────────────────────────────────
@@ -1430,7 +1443,7 @@ export default function ReadPage() {
           backdropFilter: 'blur(8px)',
           borderBottom: `1px solid ${C.borderColor}`,
           zIndex: 1000,
-          boxShadow: '0 2px 12px rgba(61,41,20,0.06)',
+          boxShadow: 'var(--bq-reading-shadow-2)',
           display: 'flex',
           // TWO rows, but for a reason that survives scrutiny: at 44px faces a
           // single row needs 6*44 (circles) + 64 (speed pill) + 36 (gaps) +
@@ -1747,21 +1760,31 @@ export default function ReadPage() {
             background: C.bgCard,
             borderRadius: '10px',
             padding: '20px',
-            boxShadow: '0 2px 12px rgba(61,41,20,0.06)',
+            boxShadow: 'var(--bq-reading-shadow-2)',
             border: `1px solid ${C.borderLight}`,
             marginBottom: '20px',
           }}
         >
           <div
             style={{
-              fontFamily: 'Georgia, serif',
-              fontSize: '1.8rem',
-              color: C.textPrimary,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '12px',
               marginBottom: '4px',
-              fontWeight: 600,
             }}
           >
-            📖 聖經朗讀
+            <div
+              style={{
+                fontFamily: 'Georgia, serif',
+                fontSize: '1.8rem',
+                color: C.textPrimary,
+                fontWeight: 600,
+              }}
+            >
+              📖 聖經朗讀
+            </div>
+            <ThemeToggle />
           </div>
           <div
             style={{
@@ -1778,8 +1801,8 @@ export default function ReadPage() {
             <div
               style={{
                 padding: '10px 14px',
-                background: `${C.success}15`,
-                border: `1px solid ${C.success}40`,
+                background: 'var(--bq-reading-success-soft)',
+                border: '1px solid var(--bq-reading-success-line)',
                 borderRadius: '8px',
                 color: C.success,
                 fontSize: '0.9rem',
@@ -1802,8 +1825,8 @@ export default function ReadPage() {
               <div
                 style={{
                   padding: '10px 14px',
-                  background: `${C.accentGold}15`,
-                  border: `1px solid ${C.accentGold}40`,
+                  background: 'var(--bq-reading-accent-soft)',
+                  border: '1px solid var(--bq-reading-accent-line)',
                   borderRadius: '8px',
                   color: C.chapterTitle,
                   fontSize: '0.9rem',
@@ -1941,7 +1964,7 @@ export default function ReadPage() {
                       border: `1px solid ${C.borderColor}`,
                       borderRadius: '8px',
                       padding: '8px',
-                      boxShadow: '0 4px 16px rgba(61,41,20,0.12)',
+                      boxShadow: 'var(--bq-reading-shadow-4)',
                       maxHeight: '300px',
                       paddingBottom: BOOK_GRID_SCROLL_PAD_BOTTOM,
                       overflowY: 'auto',
@@ -2069,7 +2092,7 @@ export default function ReadPage() {
                         border: `1px solid ${C.borderColor}`,
                         borderRadius: '8px',
                         padding: '8px',
-                        boxShadow: '0 4px 16px rgba(61,41,20,0.12)',
+                        boxShadow: 'var(--bq-reading-shadow-4)',
                         maxHeight: '300px',
                         paddingBottom: BOOK_GRID_SCROLL_PAD_BOTTOM,
                         overflowY: 'auto',
@@ -2162,7 +2185,7 @@ export default function ReadPage() {
                 borderRadius: '8px',
                 padding: '10px',
                 marginBottom: '12px',
-                boxShadow: '0 2px 8px rgba(61,41,20,0.08)',
+                boxShadow: 'var(--bq-reading-shadow-2)',
               }}
             >
               <div
@@ -2258,7 +2281,7 @@ export default function ReadPage() {
                 borderRadius: '8px',
                 padding: '10px',
                 marginBottom: '12px',
-                boxShadow: '0 2px 8px rgba(61,41,20,0.08)',
+                boxShadow: 'var(--bq-reading-shadow-2)',
               }}
             >
               <div
@@ -2367,7 +2390,9 @@ export default function ReadPage() {
             style={{
               width: '100%',
               padding: '14px',
-              background: canDisplay ? C.accentGold : `${C.borderColor}60`,
+              background: canDisplay
+                ? C.accentGold
+                : 'var(--bq-reading-border-strong)',
               border: 'none',
               borderRadius: '8px',
               color: canDisplay ? 'white' : C.textMuted,
@@ -2450,7 +2475,7 @@ export default function ReadPage() {
                       marginBottom: '20px',
                       border: `1px solid ${C.borderLight}`,
                       borderLeft: `4px solid ${C.accentGold}`,
-                      boxShadow: '0 2px 8px rgba(61,41,20,0.06)',
+                      boxShadow: 'var(--bq-reading-shadow-2)',
                       position: 'relative',
                       // Each chapter is its own card, so off-screen cards can skip
                       // layout/paint. `auto` in containIntrinsicSize lets the

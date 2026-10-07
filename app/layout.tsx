@@ -1,9 +1,9 @@
-import type { Metadata, Viewport } from "next";
-import { cookies } from "next/headers";
-import { createServerClient } from "@supabase/ssr";
-import { Nunito, Noto_Sans_TC, Noto_Serif_TC } from "next/font/google";
-import "./globals.css";
-import { isIdentity, type Identity } from "@/lib/identity";
+import type { Metadata, Viewport } from 'next'
+import { cookies } from 'next/headers'
+import { createServerClient } from '@supabase/ssr'
+import { Nunito, Noto_Sans_TC, Noto_Serif_TC } from 'next/font/google'
+import './globals.css'
+import { isIdentity, type Identity } from '@/lib/identity'
 
 // ─── Self-hosted webfonts (perf batch #5) ────────────────────────────────────
 // Previously three render-blocking <link> tags to fonts.googleapis.com in the
@@ -25,11 +25,11 @@ import { isIdentity, type Identity } from "@/lib/identity";
 //   Noto Sans TC  400, 500, 700
 //   Noto Serif TC 400, 600 (.scripture-text, headings)
 const nunito = Nunito({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700", "800", "900"],
-  variable: "--font-nunito",
-  display: "swap",
-});
+  subsets: ['latin'],
+  weight: ['400', '500', '600', '700', '800', '900'],
+  variable: '--font-nunito',
+  display: 'swap',
+})
 
 // Noto Sans/Serif TC: next/font emits the full CJK face broken into ~100
 // unicode-range subsets automatically; there is no `chinese-traditional`
@@ -41,36 +41,36 @@ const nunito = Nunito({
 // is correct anyway: a CJK face must not be preloaded, since one woff2 would
 // not cover the text and preloading the wrong subset wastes bandwidth.
 const notoSansTC = Noto_Sans_TC({
-  weight: ["400", "500", "700"],
-  variable: "--font-noto-sans-tc",
-  display: "swap",
+  weight: ['400', '500', '700'],
+  variable: '--font-noto-sans-tc',
+  display: 'swap',
   preload: false,
-});
+})
 
 const notoSerifTC = Noto_Serif_TC({
-  weight: ["400", "600"],
-  variable: "--font-noto-serif-tc",
-  display: "swap",
+  weight: ['400', '600'],
+  variable: '--font-noto-serif-tc',
+  display: 'swap',
   preload: false,
-});
+})
 
 export const metadata: Metadata = {
-  title: "DuoBible",
-  description: "每日讀經，養成習慣。為青少年基督徒而設的讀經計劃應用。",
-  manifest: "/manifest.json",
+  title: 'DuoBible',
+  description: '每日讀經，養成習慣。為青少年基督徒而設的讀經計劃應用。',
+  manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
-    statusBarStyle: "default",
-    title: "DuoBible",
+    statusBarStyle: 'default',
+    title: 'DuoBible',
   },
   icons: {
-    icon: [{ url: "/icons/icon-192.png" }],
-    apple: [{ url: "/icons/icon-192.png" }],
+    icon: [{ url: '/icons/icon-192.png' }],
+    apple: [{ url: '/icons/icon-192.png' }],
   },
-};
+}
 
 export const viewport: Viewport = {
-  width: "device-width",
+  width: 'device-width',
   // Pinch-zoom stays ENABLED. `maximumScale: 1` + `userScalable: false` are
   // an accessibility regression, not a fix: they disable the one native
   // gesture a low-vision reader has to magnify body text, and WCAG 1.4.4
@@ -84,8 +84,8 @@ export const viewport: Viewport = {
   // this change makes the declared intent match the actual behaviour rather
   // than changing what most users already had.
   initialScale: 1,
-  themeColor: "#58CC02",
-};
+  themeColor: '#58CC02',
+}
 
 // ─── Force dynamic rendering so the server reads the latest profile.identity
 // from Supabase on every request. Without this, Next.js statically generates
@@ -95,12 +95,12 @@ export const viewport: Viewport = {
 // users, but the identity lookup is now gated on a session cookie, so
 // anonymous hits (/login, /signup, /offline, logged-out pages) cost zero
 // network round-trips instead of one. ────────────────────────────────────────
-export const dynamic = "force-dynamic";
+export const dynamic = 'force-dynamic'
 
 export default async function RootLayout({
   children,
 }: Readonly<{
-  children: React.ReactNode;
+  children: React.ReactNode
 }>) {
   // ─── Read user identity (for body[data-identity="..."] bg) ────────────────
   // Server component: read the Supabase session from cookies, then look up
@@ -116,66 +116,104 @@ export default async function RootLayout({
   // getSession() reads and validates the cookie claims locally (it refreshes
   // over the network only when the token is within 10s of expiry), so an
   // anonymous page render makes no Supabase Auth call at all.
-  let userIdentity: Identity = "Uni";
+  let userIdentity: Identity = 'Uni'
   try {
-    const cookieStore = await cookies();
+    const cookieStore = await cookies()
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
       {
         cookies: {
-          getAll() { return cookieStore.getAll(); },
-          setAll() { /* no-op in root layout (RSC can't set cookies) */ },
+          getAll() {
+            return cookieStore.getAll()
+          },
+          setAll() {
+            /* no-op in root layout (RSC can't set cookies) */
+          },
         },
       },
-    );
+    )
     // Local cookie read only — no network round-trip for anonymous visitors.
-    const { data: { session } } = await supabase.auth.getSession();
+    const {
+      data: { session },
+    } = await supabase.auth.getSession()
     if (session?.user) {
       const { data: profile } = await supabase
-        .from("profiles")
-        .select("identity")
-        .eq("id", session.user.id)
-        .maybeSingle();
+        .from('profiles')
+        .select('identity')
+        .eq('id', session.user.id)
+        .maybeSingle()
       if (profile?.identity && isIdentity(profile.identity)) {
-        userIdentity = profile.identity;
+        userIdentity = profile.identity
       }
     }
   } catch (err) {
-    console.error("[layout] failed to read user identity:", err);
+    console.error('[layout] failed to read user identity:', err)
     // fall through to default 'Uni'
   }
+
+  // ── Theme ────────────────────────────────────────────────────────────────
+  // Only an EXPLICIT choice is resolved here. `system` cannot be: there is no
+  // server-side signal for the OS preference. Sec-CH-Prefers-Color-Scheme is a
+  // made-up header — it does not exist — and relying on it would silently ship
+  // light to every dark-mode visitor. The inline script below resolves `system`
+  // in the browser, before the first paint.
+  // Its own await cookies(): the cookieStore above is scoped inside a try
+  // block for Supabase, and reusing it here would put the theme behind that
+  // try — a Supabase failure would silently reset the theme to light.
+  const themeCookie = (await cookies()).get('ui-theme')?.value
+  const theme: 'light' | 'dark' | null =
+    themeCookie === 'light' || themeCookie === 'dark' ? themeCookie : null
+
+  // Runs before the first paint, which a server-side cookie read cannot do for
+  // `system`. One statement inside try/catch so a malformed cookie cannot throw
+  // during hydration.
+  const themeBootstrap =
+    '(function(){try{var m=document.cookie.match(/(?:^|;\\s*)ui-theme=([^;]+)/);' +
+    "var p=m?m[1]:'system';" +
+    "var d=p==='dark'||(p==='system'&&window.matchMedia('(prefers-color-scheme: dark)').matches);" +
+    "document.documentElement.classList.toggle('dark',d);" +
+    "document.documentElement.style.colorScheme=d?'dark':'light';}catch(e){}})()"
 
   return (
     <html
       lang="zh-Hant"
-      className={`${nunito.variable} ${notoSansTC.variable} ${notoSerifTC.variable}`}
+      // Read the theme cookie server-side so `dark` is on <html> in the FIRST
+      // paint. The cookie exists instead of localStorage for exactly this
+      // reason: localStorage is not readable during SSR, so a dark-mode reader
+      // would get a white flash on every navigation. `system` is resolved here
+      // too, which is why a visitor who never touched the toggle still gets a
+      // dark first paint when their OS is dark.
+      className={`${nunito.variable} ${notoSansTC.variable} ${notoSerifTC.variable}${
+        theme === 'dark' ? ' dark' : ''
+      }`}
+      style={{ colorScheme: theme ?? undefined }}
     >
+      {/* Resolves `system` before the first paint; see themeBootstrap above. */}
+      <script dangerouslySetInnerHTML={{ __html: themeBootstrap }} />
       <head>
         {/*
-          The old render-blocking <link> to
-          https://fonts.googleapis.com/css2?family=... is gone. next/font
-          self-hosts the faces at build time under /_next/static/media/ and
-          injects its own preload + stylesheet links, so there is no
-          third-party font request and no extra round-trip on first paint.
+          next/font self-hosts the faces at build time under
+          /_next/static/media/ and injects its own preload + stylesheet links,
+          so there is no third-party font request and no extra round-trip.
         */}
       </head>
       <body data-identity={userIdentity}>
         {children}
         {/* Service worker registration — register immediately for PWA push support */}
-<script
-  id="register-sw"
-  dangerouslySetInnerHTML={{
-    __html: `if ('serviceWorker' in navigator) {
+        <script
+          id="register-sw"
+          dangerouslySetInnerHTML={{
+            __html: `if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('/sw.js').then(reg => {
         console.log('[SW] registered, scope:', reg.scope);
       }).catch(err =>
         console.error('[SW] registration failed:', err)
       );
     }`,
-  }}
-/>
+          }}
+        />
       </body>
     </html>
-  );
+  )
 }

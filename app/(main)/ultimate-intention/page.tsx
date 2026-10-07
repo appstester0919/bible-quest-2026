@@ -20,6 +20,7 @@ import { cookies } from 'next/headers'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 
+import ThemeToggle from '@/components/ThemeToggle'
 import ChapterRow from '@/components/ultimate-intention/ChapterRow'
 import ScriptToggle from '@/components/ultimate-intention/ScriptToggle'
 
@@ -90,7 +91,10 @@ export default async function BookIndexPage() {
                 {book.titleEn} · {t(book.author)}
               </p>
             </div>
-            <ScriptToggle lang={lang} />
+            <div className="flex items-center gap-2 shrink-0">
+              <ThemeToggle />
+              <ScriptToggle lang={lang} />
+            </div>
           </div>
         </header>
 

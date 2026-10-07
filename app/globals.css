@@ -79,6 +79,31 @@
    * app is unaffected when the control hasn't mounted yet. */
   --bq-font-scale: 1;
 
+  /* Reading-surface tokens. The scripture reader and the book reader both
+     want a warmer, calmer surface than the app's white cards, and both
+     previously hardcoded it. Centralised here so .dark can retint them. */
+  --bq-reading-bg: #f5f0e8;
+  --bq-reading-surface: #faf7f2;
+  --bq-reading-ink: #3d2914;
+  --bq-reading-ink-soft: #6b5344;
+  --bq-reading-muted: #9c7b5e;
+  --bq-reading-border: #d4c4a8;
+  --bq-reading-border-soft: #e0d5c0;
+  --bq-reading-accent: #c9a84c;
+  /* Alpha variants. `${C.x}15` in JS meant "this colour at 8% alpha", which
+     only works on a hex literal — `var(--x)15` is invalid CSS, so each
+     translucent tint needed its own token. */
+  --bq-reading-accent-soft: rgba(201, 168, 76, 0.09);
+  --bq-reading-accent-line: rgba(201, 168, 76, 0.28);
+  --bq-reading-success-soft: rgba(22, 163, 74, 0.09);
+  --bq-reading-success-line: rgba(22, 163, 74, 0.28);
+  --bq-reading-border-strong: rgba(212, 196, 168, 0.42);
+  /* A brown shadow on a near-black page reads as a smudge, not a shadow, so
+     the dark palette drops its opacity rather than reusing the light value. */
+  --bq-reading-shadow-2: 0 2px 12px rgba(61, 41, 20, 0.06);
+  --bq-reading-shadow-4: 0 4px 16px rgba(61, 41, 20, 0.08);
+  --bq-reading-shadow-8: 0 2px 8px rgba(61, 41, 20, 0.05);
+
   --color-primary: var(--color-bq-primary);
   --color-streak: var(--color-bq-streak);
   --color-success: var(--color-bq-success);
@@ -115,6 +140,82 @@
   --shadow-card: var(--shadow-bq-card);
   --shadow-floating: var(--shadow-bq-floating);
   --shadow-button: var(--shadow-bq-button);
+}
+
+/* ============================================================
+ * DARK MODE
+ *
+ * Why the override lives on .dark and not on a media query:
+ * a `prefers-color-scheme: dark` block cannot express 「I want light even
+ * though my phone is in dark mode」, which is the whole point of a manual
+ * toggle. So there is exactly one switch — the `dark` class on <html> — set
+ * server-side from the `ui-theme` cookie. Reading a cookie (rather than
+ * localStorage) is what lets the correct palette be in the FIRST paint;
+ * localStorage can only be read after hydration, which shows a white flash
+ * on every navigation for dark-mode users.
+ *
+ * `theme=system` resolves on the SERVER too (below), so a system-dark
+ * visitor with no cookie still gets `dark` in the first paint.
+ *
+ * Only the --color-bq-* layer is redefined. Every --color-* alias in :root
+ * points at these, so overriding the 15 base tokens restyles the whole app
+ * without touching a single component.
+ *
+ * The warm parchment palette is NOT inverted. Light is #F5F0E8 sand on
+ * #3D2914 brown ink; dark keeps the same brown-gold family at low
+ * luminance (#14100C background, #E8DCC8 ink) rather than the usual
+ * blue-grey, because this is a reading app and the two surfaces have to
+ * read as the same book.
+ * ============================================================ */
+:root.dark,
+.dark {
+  --color-bq-primary: #e8dcc8;
+  --color-bq-streak: #ffb545;
+  --color-bq-success: #6ee04a;
+  --color-bq-success-dark: #58cc02;
+  --color-bq-gem: #4cc9f8;
+  --color-bq-gem-dark: #1cb0f6;
+  --color-bq-xp: #ffd966;
+  --color-bq-danger: #ff6b6b;
+  --color-bq-accent: #d8a4ff;
+
+  /* Cards must be LIGHTER than the page to read as raised on a dark
+     surface; the light palette does the opposite. */
+  --color-bq-surface: #1f1a14;
+  --color-bq-background: rgba(16, 13, 9, 0.94); /* overlay on bg.png */
+  --color-bq-muted: #8a7f70;
+  --color-bq-ink: #ece2d2;
+  --color-bq-ink-soft: #b5a892;
+  --color-bq-line: #3a3228;
+
+  /* Shadows are invisible on a dark surface; the light values would add
+     a muddy halo. Flattened, and the borders above carry the separation. */
+  --shadow-bq-card: none;
+  --shadow-bq-floating: 0 8px 28px rgba(0, 0, 0, 0.6);
+  --shadow-bq-button: none;
+
+  /* The scripture reader and the book reader both pin their own warm
+     parchment (#F5F0E8 bg / #3D2914 ink) as INLINE styles — see the `C`
+     palette in app/(main)/read/page.tsx and .scripture-text in this file.
+     Inheriting those would blow out a dark page with a white slab, so the
+     reading surfaces are given their own variables and the JS palette is
+     derived from them. */
+  --bq-reading-bg: #14100c;
+  --bq-reading-surface: #1f1a14;
+  --bq-reading-ink: #ece2d2;
+  --bq-reading-ink-soft: #b5a892;
+  --bq-reading-muted: #8a7f70;
+  --bq-reading-border: #3a3228;
+  --bq-reading-border-soft: #2a241c;
+  --bq-reading-accent: #c9a84c;
+  --bq-reading-accent-soft: rgba(201, 168, 76, 0.14);
+  --bq-reading-accent-line: rgba(201, 168, 76, 0.38);
+  --bq-reading-success-soft: rgba(110, 224, 74, 0.13);
+  --bq-reading-success-line: rgba(110, 224, 74, 0.36);
+  --bq-reading-border-strong: rgba(58, 50, 40, 0.55);
+  --bq-reading-shadow-2: 0 2px 12px rgba(0, 0, 0, 0.5);
+  --bq-reading-shadow-4: 0 4px 16px rgba(0, 0, 0, 0.6);
+  --bq-reading-shadow-8: 0 2px 8px rgba(0, 0, 0, 0.45);
 }
 
 /* ============================================================
@@ -198,8 +299,9 @@ body {
   line-height: 1.9;
   /* Warm brown ink, not --color-bq-primary's #1f2937 grey: the user preferred
      「DuoBible 經文版面」的經文 over this one, and #3D2914 is that page's
-     textPrimary. */
-  color: #3d2914;
+     textPrimary. A token now, so .dark can retint it — a hardcoded value here
+     would leave a #3D2914 slab unreadable on a dark page. */
+  color: var(--bq-reading-ink);
 }
 
 button,

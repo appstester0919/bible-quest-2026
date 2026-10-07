@@ -25,6 +25,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 
 import MarkComplete from '@/components/ultimate-intention/ReadingProgress'
+import ThemeToggle from '@/components/ThemeToggle'
 import ScriptToggle from './ScriptToggle'
 
 // ─── Geometry (mirrors app/(main)/read/page.tsx) ─────────────────────────────
@@ -318,8 +319,10 @@ export default function ChapterReader({
           // a warm ground instead of pure white, and warm brown ink instead of
           // --color-bq-primary's near-black grey. Pure white behind long serif
           // prose is the glare the scripture reader already solved.
-          background: '#F5F0E8',
-          color: '#3D2914',
+          // Tokens, not literals: .dark redefines these, and a literal here
+          // would leave a #F5F0E8 slab blowing out the dark page.
+          background: 'var(--bq-reading-bg)',
+          color: 'var(--bq-reading-ink)',
           paddingTop: CLEAR_PX + (padTop ? 0 : 16),
           paddingBottom: 96,
         }}
@@ -337,7 +340,8 @@ export default function ChapterReader({
             <span>
               {chapter.num} / {total}
             </span>
-            <span className="ml-auto">
+            <span className="ml-auto flex items-center gap-2">
+              <ThemeToggle />
               <ScriptToggle lang={lang} />
             </span>
           </nav>
