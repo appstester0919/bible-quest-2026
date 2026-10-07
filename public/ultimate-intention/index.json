@@ -50,7 +50,7 @@
         "zh-Hans": ""
       },
       "images": 1,
-      "chars": 2736
+      "chars": 2731
     },
     {
       "num": 4,
@@ -176,7 +176,7 @@
         "zh-Hans": ""
       },
       "images": 1,
-      "chars": 4524
+      "chars": 4516
     },
     {
       "num": 13,
@@ -204,7 +204,7 @@
         "zh-Hans": ""
       },
       "images": 1,
-      "chars": 4926
+      "chars": 4921
     },
     {
       "num": 15,
@@ -218,7 +218,7 @@
         "zh-Hans": ""
       },
       "images": 1,
-      "chars": 2587
+      "chars": 2580
     },
     {
       "num": 16,
@@ -274,7 +274,7 @@
         "zh-Hans": ""
       },
       "images": 1,
-      "chars": 3709
+      "chars": 3699
     },
     {
       "num": 20,
@@ -302,7 +302,7 @@
         "zh-Hans": ""
       },
       "images": 1,
-      "chars": 4166
+      "chars": 4154
     },
     {
       "num": 22,
@@ -330,7 +330,7 @@
         "zh-Hans": ""
       },
       "images": 1,
-      "chars": 3828
+      "chars": 3818
     },
     {
       "num": 24,
@@ -400,7 +400,7 @@
         "zh-Hans": ""
       },
       "images": 1,
-      "chars": 1930
+      "chars": 1926
     }
   ]
 }

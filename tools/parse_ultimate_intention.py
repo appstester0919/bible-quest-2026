@@ -49,6 +49,15 @@ TOC_PAGES = [
 CN = "一二三四五六七八九十"
 
 
+def int_to_cn(n: int) -> str:
+    """1..28 → 一二三…十, 十一…十九, 二十…二十八. The inverse of cn_to_int."""
+    if n <= 10:
+        return CN[n - 1]
+    if n < 20:
+        return "十" + (CN[n - 11] if n > 10 else "")
+    return "二十" + (CN[n - 21] if n > 20 else "")
+
+
 def cn_to_int(s: str) -> int:
     """Chinese numeral 1..28 → int. Handles 一二三…十, 十一…十九, 二十…二十八."""
     digits = {c: i + 1 for i, c in enumerate(CN)}
@@ -110,37 +119,49 @@ def extract_images() -> dict[int, list[int]]:
     return pages
 
 
-def page_lines(n: int) -> list[tuple[float, str]]:
+def page_lines(n: int) -> list[tuple[float, float, str]]:
     """[(y_min, text)] for page n, top to bottom, header stripped."""
     xml = subprocess.run(
         ["pdftotext", "-f", str(n), "-l", str(n), "-bbox-layout", str(PDF), "-"],
         capture_output=True, text=True,
     ).stdout
-    rows: list[tuple[float, str]] = []
+    rows: list[tuple[float, float, str]] = []
     for m in re.finditer(r'<line xMin="([\d.]+)" yMin="([\d.]+)"[^>]*>(.*?)</line>', xml, re.S):
+        x = float(m.group(1))
         y = float(m.group(2))
         words = re.findall(r"<word[^>]*>(.*?)</word>", m.group(3), re.S)
         txt = "".join(words).strip()
         if not txt or txt == RUNNING_HEADER or is_junk(txt):
             continue
-        rows.append((y, txt))
+        rows.append((y, x, txt))
     return rows
 
 
-def merge_runs(rows: list[tuple[float, str]]) -> list[str]:
-    """Join bbox lines into paragraphs.
+# Paragraph indent in points. Measured across all 103 pages, the left-margin
+# histogram is bimodal: continuation lines sit at the body margin and every
+# paragraph FIRST line sits a few points right of it. GAP_PT (22) was the old
+# y-delta test, which is the wrong signal — line pitch is uniform inside a
+# paragraph, so it only fired on the rare full-line-height gap and let whole
+# paragraphs run together (the user reported 1000+ character walls).
+PARA_INDENT_PT = 8.0
 
-    The PDF's line pitch is uniform (~15.6pt) within a paragraph and jumps
-    (~28-32pt) at a paragraph break, so y-delta is the paragraph signal. That
-    is fragile in general, so we ALSO merge when the previous line ends without
-    terminal punctuation and the new line starts flush-left (x would be the
-    stronger signal, but it is not returned per word here).
+
+def merge_runs(rows: list[tuple[float, float, str]]) -> list[str]:
+    """Join bbox lines into paragraphs, using the first-line INDENT.
+
+    The x coordinate the parser already extracted but never used is the real
+    paragraph signal: a paragraph's first line is indented, continuation lines
+    are flush to the margin. y-delta cannot see paragraph breaks at all here
+    because the book sets paragraphs with normal leading.
     """
     paras: list[str] = []
     cur = ""
-    prev_y = None
-    for y, txt in rows:
-        if prev_y is not None and y - prev_y > 22.0:
+    prev_x: float | None = None
+    for _y, x, txt in rows:
+        # Indented relative to the previous line ⇒ new paragraph. Comparing to
+        # the previous line rather than an absolute margin keeps this immune to
+        # pages whose body starts further right.
+        if prev_x is not None and x - prev_x > PARA_INDENT_PT:
             if cur:
                 paras.append(cur)
             cur = txt
@@ -148,7 +169,7 @@ def merge_runs(rows: list[tuple[float, str]]) -> list[str]:
             cur += txt
         else:
             cur = txt
-        prev_y = y
+        prev_x = x
     if cur:
         paras.append(cur)
     return paras
@@ -204,9 +225,9 @@ def main() -> None:
             local = 0
 
             # Walk lines, emitting a paragraph or an image at each gap.
-            chunk: list[tuple[float, str]] = []
+            chunk: list[tuple[float, float, str]] = []
             prev_y = None
-            for y, txt in rows:
+            for y, x, txt in rows:
                 if prev_y is not None and (y - prev_y) > GAP_PT and local < len(here):
                     if chunk:
                         for para in merge_runs(chunk):
@@ -215,7 +236,7 @@ def main() -> None:
                     num = here[local]
                     blocks.append({"type": "img", "src": renamed.get(num, f"{num:02d}.jpg")})
                     local += 1
-                chunk.append((y, txt))
+                chunk.append((y, x, txt))
                 prev_y = y
             if chunk:
                 for para in merge_runs(chunk):
@@ -226,13 +247,27 @@ def main() -> None:
                 blocks.append({"type": "img", "src": renamed.get(num, f"{num:02d}.jpg")})
             cursor_img += len(here)
 
-        # Drop the chapter title line — it is rendered as the page h1 instead.
-        head = f"第{CN.replace('十','10')}"  # unused; filter by title text below
-        blocks = [
-            b for b in blocks
-            if not (b["type"] == "p" and entry["title"] and entry["title"] in b["text"]
-                    and len(b["text"]) <= len(entry["title"]) + 6)
-        ]
+        # Only strip the chapter title prefix. A more aggressive heading split
+        # was tried and rejected: matching a short run of characters before the
+        # first 「，」chopped real sentences in half (「正確的起點如果起點不對，」became
+        # a heading 「正確的起點如果起點不對」 plus a body starting 「，就會導引…」).
+        # Section headings inside the body are left merged with their paragraph;
+        # getting them right needs the PDF's font size, not text heuristics.
+        title = entry["title"] or ""
+        # The body opens with 「第N篇」 + the title as one line, e.g.
+        # 「第二篇神的永遠計劃當我們知道…」. Strip both parts: the ordinal is
+        # rendered as the page heading, and the title is the page subheading.
+        lead = f"第{int_to_cn(entry['num'])}篇"
+        def _strip_head(b):
+            if b["type"] != "p" or not title:
+                return b
+            t = b["text"]
+            for pref in (lead + title, title, lead):
+                if pref and t.startswith(pref):
+                    return {**b, "text": t[len(pref):]}
+            return b
+        blocks = [_strip_head(b) for b in blocks]
+        blocks = [b for b in blocks if b["type"] != "p" or b["text"].strip()]
 
         chapters.append({
             "num": entry["num"],

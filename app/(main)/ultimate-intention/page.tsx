@@ -120,10 +120,10 @@ export default async function BookIndexPage() {
                 className="lesson-card-link lesson-card-link--compact block"
               >
                 <div className="flex items-center gap-3 py-1">
-                  <span
-                    className="shrink-0 w-12 font-extrabold text-[var(--color-primary)]"
-                    aria-hidden="true"
-                  >
+                  {/* Not aria-hidden: it is the only thing telling a screen
+                      reader which chapter this row opens. 「Ch 3」 is read as
+                      「chapter 3」, which is the intent. */}
+                  <span className="shrink-0 w-12 font-extrabold text-[var(--color-primary)]">
                     Ch {c.num}
                   </span>
                   <span className="flex-1 min-w-0 font-bold text-[var(--color-ink)] break-words">

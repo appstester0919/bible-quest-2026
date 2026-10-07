@@ -325,7 +325,13 @@ export default function ChapterReader({
                 <p
                   key={i}
                   className="scripture-text break-words"
-                  style={{ fontSize: `${bodyFont}em` }}
+                  style={{
+                    fontSize: `${bodyFont}em`,
+                    // 「中文也習慣在每一段的開頭，移後兩個空格」. Done in CSS
+                    // rather than stored in the data so copy/paste and screen
+                    // readers see clean text with no leading whitespace.
+                    textIndent: '2em',
+                  }}
                 >
                   {b.text}
                 </p>
