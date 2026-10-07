@@ -164,8 +164,13 @@ body {
 .scripture-text {
   font-family: var(--font-serif);
   font-size: 1.125rem;
-  line-height: 1.8;
-  color: var(--color-primary);
+  /* 1.9 to match the verse line-height in app/(main)/read/page.tsx, so the two
+     readers share one typographic rhythm. */
+  line-height: 1.9;
+  /* Warm brown ink, not --color-bq-primary's #1f2937 grey: the user preferred
+     「DuoBible 經文版面」的經文 over this one, and #3D2914 is that page's
+     textPrimary. */
+  color: #3d2914;
 }
 
 button,

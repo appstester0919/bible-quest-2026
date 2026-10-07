@@ -96,6 +96,37 @@ def parse_chapter(page: str) -> list[dict]:
     body = content_div(page)
     blocks: list[dict] = []
 
+    # From ch7 on, the web edition appends a study-guide apparatus that the PDF
+    # does not have: 「研读指南」, then the questions, then 「第N篇答案：」 and
+    # the answers. It is a workbook, not the book. The user asked for the reader
+    # to match the PDF, so cut the chapter at the guide — which also removes the
+    # dangling 「第N篇答案：」 headings that appeared with no questions above them
+    # (ch9) or no answers at all (ch10 onward).
+    # Only a paragraph whose ENTIRE text is the marker counts. A plain substring
+    # search hit the translator's preface, which mentions 「第七篇及以后各篇末尾的
+    # "研读指南"为白受恩所译」 and truncated chapter 7 to nothing.
+    # The marker is sometimes wrapped in <strong>, sometimes not, so allow any
+    # inline markup between the <p> and the text.
+    # Variants seen in the source: bare 「研读指南」, wrapped in <strong>, and
+    # 「研读指南 （白受恩译）」 with a translator credit. Keep it to paragraphs
+    # whose text is SHORT — a long paragraph that merely mentions the phrase is
+    # body prose (the translator's preface does exactly that).
+    guide = None
+    for m in re.finditer(
+        r'<p class="wp-block-paragraph"[^>]*>(.*?)</p>', body, re.S
+    ):
+        txt = clean(m.group(1))
+        if re.match(r"^研[读讀]指南(\s*[（(]\s*[^）)]{0,12}\s*[）)])?$", txt):
+            guide = m
+            break
+        # ch12 has no guide paragraph at all — the apparatus starts straight at
+        # 「第十二篇答案：」, so that heading is the only available cut point.
+        if re.match(r"^第[一二三四五六七八九十]+篇答案\s*[：:]?$", txt):
+            guide = m
+            break
+    if guide:
+        body = body[:guide.start()]
+
     # Walk the content in DOCUMENT ORDER over <p> and <img> only: the paragraph
     # text and the figures have to interleave, and scanning for them separately
     # loses the sequence.
@@ -122,32 +153,49 @@ def parse_chapter(page: str) -> list[dict]:
             if text:
                 blocks.append({"type": "p", "text": text})
             continue
-        # <strong> may wrap the whole paragraph (a subheading) or just lead in.
+
         stripped = clean(re.sub(r"</?strong>", "", para_html))
-        strongs = [clean(s) for s in re.findall(r"<strong>(.*?)</strong>", para_html, re.S)]
-        strongs = [s for s in strongs if s]
-        if not strongs:
-            text = clean(para_html)
-            if text:
-                blocks.append({"type": "p", "text": text})
+        strongs = [clean(x) for x in re.findall(r"<strong>(.*?)</strong>", para_html, re.S)]
+        strongs = [x for x in strongs if x]
+
+        # Not every <strong> is a subheading. Three distinct uses appear in the
+        # source:
+        #
+        #   1. the whole paragraph is a subheading   -> heading
+        #   2. <strong>为</strong> inside a sentence  -> inline emphasis on one or
+        #      two characters; the editor was highlighting, not titling. Treating
+        #      these as headings produced junk like 「为代表在里面被改变被替换」
+        #      on ch13, which the user correctly reported does not exist in
+        #      either the web page or the PDF.
+        #   3. a bold lead-in followed by prose     -> heading + the prose
+        #
+        # (2) is distinguished by the strong text being a fragment of the
+        # surrounding sentence: short, and it appears mid-paragraph rather than
+        # standing alone.
+        inline_emphasis = (
+            len(strongs) > 1
+            and all(len(x) <= 3 for x in strongs)
+            and sum(len(x) for x in strongs) * 4 < len(stripped)
+        )
+        if inline_emphasis:
+            blocks.append({"type": "p", "text": stripped})
             continue
+
         heading = "".join(strongs).strip()
         if any(j.fullmatch(heading) for j in JUNK):
             continue
-        # A heading the editor bolded inside a sentence keeps its tail as prose
-        # — e.g. 「架构(1)」 bold, then the paragraph that explains it.
         rest = re.sub(r"\s*<strong>.*?</strong>\s*", "", para_html, flags=re.S)
         rest = clean(rest)
-        # …unless the tail is only closing punctuation the editor left outside
-        # the <strong> by mistake. On ch3 the source literally reads
+        # A tail with no word characters is closing punctuation the editor left
+        # outside the <strong>: ch3 reads
         #   <p><strong>只不过是手段和方法（媒介</strong>）</p>
-        # so the naive split emitted 「）」as its own paragraph above the
-        # subheading. Fold punctuation-only tails back into the heading.
+        # Folding it back keeps the heading whole.
         if rest and not re.search(r"[\w\u4e00-\u9fff]", rest):
             heading = (heading + rest).strip()
         elif rest and rest != stripped:
             blocks.append({"type": "p", "text": rest})
         blocks.append({"type": "h", "text": heading})
+
     return blocks
 
 

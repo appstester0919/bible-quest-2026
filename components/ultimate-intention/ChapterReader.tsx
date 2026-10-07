@@ -39,9 +39,13 @@ const SPEEDS = [1, 1.25, 1.5, 1.75, 2] as const
 // DESIGN.md typography.scripture). Previously this was an absolute rem value
 // applied to a 1rem base, so the reader rendered 16px while the scripture reader
 // rendered 18px — the user read the difference as 「字體比聖經朗讀版面小」.
-const FONT_MIN = 0.85 // ≈15.3px
-const FONT_MAX = 1.5 // ≈27px
-const FONT_STEP = 0.1
+// Same numbers as the scripture reader's --read-font-size clamp in
+// app/(main)/read/page.tsx: 20px default, 14–36px range, 2px per tap. The book
+// used an em scale off 1rem (18px, 15.3–27px), so both the default size and the
+// ceiling were below the reading size 「DuoBible 經文版面」 already offers.
+const FONT_MIN = 0.7 // 14px
+const FONT_MAX = 1.8 // 36px
+const FONT_STEP = 0.1 // 2px
 
 type Block =
   | { type: 'p'; text: string }
@@ -93,7 +97,9 @@ export default function ChapterReader({
   const [font, setFont] = useState(() => {
     if (typeof window === 'undefined') return 1
     const v = Number(window.localStorage.getItem('ui.reader.font'))
-    return Number.isFinite(v) && v > 0 ? v : 1
+    // 20px — the scripture reader's default. Stored values are old em factors
+    // around 1.0, so rebase anything under 1.05 onto the new scale.
+    return Number.isFinite(v) && v > 0 ? (v < 1.05 ? 1.11 : v) : 1.11
   })
 
   // The article must start below the fixed bar, or the first line hides under it.
@@ -304,8 +310,15 @@ export default function ChapterReader({
           Figures stay inline in the reading flow, never as a page background —
           text over an illustration is unreadable. */}
       <article
-        className="page min-h-screen bg-[var(--color-surface)]"
+        className="page min-h-screen"
         style={{
+          // 「DuoBible 經文版面顯示的經文字體大小和背景顏色都比現在『屬靈書』好」
+          // Borrow the Bible Read Aloud palette verbatim (read/page.tsx `C`):
+          // a warm ground instead of pure white, and warm brown ink instead of
+          // --color-bq-primary's near-black grey. Pure white behind long serif
+          // prose is the glare the scripture reader already solved.
+          background: '#F5F0E8',
+          color: '#3D2914',
           paddingTop: CLEAR_PX + (padTop ? 0 : 16),
           paddingBottom: 96,
         }}
