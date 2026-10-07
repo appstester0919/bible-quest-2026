@@ -72,6 +72,47 @@ PHRASE_FIX = {
 # Longest-first so a longer phrase is matched before a shorter one it contains.
 _PHRASE_ORDER = sorted(PHRASE_FIX.items(), key=lambda kv: -len(kv[0]))
 
+# User-approved glyph fixes, 2026-10-07, each probe-verified on all three zh-HK
+# voices AFTER the user corrected or confirmed the reading. Added for the
+# 屬靈書 corpus; harmless for scripture (these chars simply do not occur there).
+#
+#  栄 → 榮  SOURCE TYPO: the PDF itself contains 栄 (U+8369, the Japanese
+#           shinjitai) where it should read 荣. All three OpenCC configs leave it
+#           alone because it is not a simplified form of anything — the
+#           translator mistyped. Must be fixed in the source text, and fixing it
+#           here also repairs the DISPLAY text, not just the audio.
+#  禰 → 祢  s2hk maps 祢→禰, but HK churches print 祢 for the reverential "You"
+#           (35 occurrences, every one addressing God). User confirmed.
+#  羣 → 群  HK/TW standard for 羣人 / 羣眾. User confirmed.
+#  諍 → 淨  User corrected my reading: 諍 is pronounced 淨 (zing6), NOT 爭, and
+#           諍言 means candid exhortation, not argument — so 爭 was wrong on BOTH
+#           counts and I am glad it was rejected. Measured proof that a
+#           substitution is required at all: on all three voices
+#           「對教會的諍言」and「對教會的言」are byte-identical (13536/12816/12672),
+#           i.e. edge-tts SKIPS 諍 rather than mispronouncing it. With 淨 the audio
+#           grows by exactly one syllable (15264/14112/13680). The displayed text
+#           remains 諍言; only the audio speaks 淨, which is the correct reading.
+#  鐧 → 簡  User instruction: 殺手鐧 is correct as written, so 鐧 is kept in the
+#           display text and the audio substitutes 簡 only because 鐧 cannot be
+#           pronounced. Killers implement a plan; 殺手鐧 = the trump card.
+#  齧 → 嚙  HK glyph. User confirmed.
+
+# DISPLAY-LEVEL fixes. These change the TEXT THE USER READS, not just the audio,
+# so they belong here rather than in TTS_CHAR_MAP. Applied to the simplified
+# source before conversion, so both script outputs are corrected.
+#
+#  栄 → 榮  the PDF itself contains the Japanese shinjitai where it means 榮
+#  禰 → 祢  s2hk maps 祢→禰; HK churches print 祢, and 35 occurrences all address
+#           God (主禰 / 惟禰 / 禰的), so this is a vocabulary correction, not a
+#           glyph variant. User confirmed.
+#
+# NOT here: 羣 (kept as the traditional variant 羣, which HK also uses — only the
+# AUDIO needs 群, and TTS_CHAR_MAP handles that), and 齧/鐧 likewise audio-only.
+SOURCE_TYPO_FIX = {
+    "栄": "榮",
+    "禰": "祢",
+}
+
 CN = "一二三四五六七八九十"
 
 
@@ -98,7 +139,14 @@ def to_hk(text: str, conv: opencc.OpenCC) -> str:
 
 def main() -> None:
     conv = opencc.OpenCC("s2hk")
-    book = json.loads((ROOT / "book.json").read_text(encoding="utf-8"))
+    raw = (ROOT / "book.json").read_text(encoding="utf-8")
+    # Repair source typos BEFORE parsing, so 栄→榮 fixes the display text too.
+    for wrong, right in SOURCE_TYPO_FIX.items():
+        if wrong in raw:
+            n = raw.count(wrong)
+            print(f"source typo: {wrong} → {right}  x{n}")
+            raw = raw.replace(wrong, right)
+    book = json.loads(raw)
 
     OUT_HT.mkdir(parents=True, exist_ok=True)
     OUT_HS.mkdir(parents=True, exist_ok=True)
