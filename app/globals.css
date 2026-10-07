@@ -167,25 +167,33 @@ body {
 }
 
 .scripture-text {
-  /* 「內文的字體線條比較幼，不容易看，可以換成讀經版面經文用的字體」
-     Two things were wrong with the previous fix. This rule pointed at
-     --font-serif (Noto Serif TC) at weight 400, and those thin strokes were the
-     complaint.
+  /* 「現在屬靈書內容字體仍不是聖經朗讀版面顯示經文所用的字體」
 
-     Putting Georgia first does not fix it on its own: Georgia is a system font
-     and is absent on iOS and Android, so every phone fell through to Songti TC
-     / Noto Serif TC at 400 and the page looked unchanged —
-     「你沒有更換字體？」.
+     Three fixes went in before this one and each was wrong, all from the same
+     mistake: I read the reader's fontFamily values and assumed the one nearest
+     the verse text applied to the verses. It does not.
 
-     The load-bearing part is the weight. next/font only fetches Noto Serif TC
-     400 and 600 (see layout.tsx), so 500 has no face to select and the browser
-     keeps painting 400. 600 IS shipped, so it is a real change in stroke weight
-     on every device. Georgia stays first so a desktop that has it still matches
-     the scripture reader's face. */
-  font-family: Georgia, 'Times New Roman', 'Songti TC', var(--font-serif);
-  font-weight: 600;
+     What the scripture reader actually renders, per app/(main)/read/page.tsx:
+       - verse TEXT span: fontFamily NOT set  -> inherits body
+       - body:           --font-sans -> var(--font-nunito), var(--font-noto-sans-tc)
+       - so the verses are NOTOJANSANS TC at weight 400, sans-serif
+       - 'Georgia, serif' appears only on the verse NUMBER span (weight 500),
+         the chapter heading (600), the 📖 聖經朗讀 title and the audio-bar
+         chapter chip — chrome, not the verse body
+
+     So every earlier attempt made this WORSE rather than better: this rule
+     pointed at --font-serif (Noto Serif TC 400), then at Georgia at 500, then
+     at Georgia at 600 — each time moving further from the reader's actual
+     sans-serif 400 while looking more deliberate.
+
+     Match the reader exactly: no font-family and no font-weight, so both
+     inherit from body the way the verses do. Inheriting is the point — it
+     means a future body-font change moves both surfaces together instead of
+     silently drifting apart again. */
+  font-family: var(--font-sans);
+  font-weight: 400;
   font-size: 1.125rem;
-  /* 1.9 to match the verse line-height in app/(main)/read/page.tsx, so the two
+  /* 1.9 matches the verse line-height in app/(main)/read/page.tsx, so the two
      readers share one typographic rhythm. */
   line-height: 1.9;
   /* Warm brown ink, not --color-bq-primary's #1f2937 grey: the user preferred
