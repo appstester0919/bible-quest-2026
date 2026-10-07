@@ -91,6 +91,11 @@
   --color-surface: var(--color-bq-surface);
   --color-background: var(--color-bq-background);
   --color-muted: var(--color-bq-muted);
+  /* --color-ink was referenced by several components (chapter titles, the
+     reading bar's buttons) but never defined, so every one of those colours
+     silently fell back to inheritance. Point it at the strongest existing ink
+     token rather than inventing a new value. */
+  --color-ink: var(--color-bq-primary);
   --color-ink-soft: var(--color-bq-ink-soft);
   --color-line: var(--color-bq-line);
 
@@ -162,7 +167,15 @@ body {
 }
 
 .scripture-text {
-  font-family: var(--font-serif);
+  /* 「內文的字體線條比較幼，不容易看，可以換成讀經版面經文用的字體」
+     The scripture reader renders verses in Georgia (read/page.tsx sets
+     fontFamily: 'Georgia' and lets weight inherit, which lands on the 700 the
+     app uses for body text). This rule pointed at --font-serif — Noto Serif TC
+     400 — whose thin strokes were the complaint. Match the reader: same family,
+     same weight. */
+  font-family:
+    'Georgia', 'Times New Roman', 'Songti TC', 'Noto Serif TC', serif;
+  font-weight: 500;
   font-size: 1.125rem;
   /* 1.9 to match the verse line-height in app/(main)/read/page.tsx, so the two
      readers share one typographic rhythm. */

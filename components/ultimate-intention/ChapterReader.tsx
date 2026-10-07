@@ -24,6 +24,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 
+import MarkComplete from '@/components/ultimate-intention/ReadingProgress'
 import ScriptToggle from './ScriptToggle'
 
 // ─── Geometry (mirrors app/(main)/read/page.tsx) ─────────────────────────────
@@ -387,7 +388,12 @@ export default function ChapterReader({
             )}
           </div>
 
-          <nav className="flex gap-3 mt-10">
+          <MarkComplete
+            chapterNum={chapter.num}
+            chapterTitle={chapter.title[lang]}
+          />
+
+          <nav className="flex gap-3 mt-8">
             {prevHref ? (
               <button
                 type="button"

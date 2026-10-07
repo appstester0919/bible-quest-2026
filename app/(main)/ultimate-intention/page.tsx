@@ -20,6 +20,7 @@ import { cookies } from 'next/headers'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 
+import ChapterRow from '@/components/ultimate-intention/ChapterRow'
 import ScriptToggle from '@/components/ultimate-intention/ScriptToggle'
 
 export const dynamic = 'force-dynamic'
@@ -42,6 +43,8 @@ type Index = {
   author: Localized
   chapters: IndexChapter[]
 }
+
+const SOURCE_SITE = 'https://gaienfuren.com'
 
 const DATA = path.join(
   process.cwd(),
@@ -114,26 +117,35 @@ export default async function BookIndexPage() {
             「Ch N」 in latin and the Chinese ordinal is dropped entirely. */}
         <ul className="space-y-2">
           {book.chapters.map((c) => (
-            <li key={c.num}>
-              <Link
-                href={`/ultimate-intention/${c.num}?lang=${lang}`}
-                className="lesson-card-link lesson-card-link--compact block"
-              >
-                <div className="flex items-center gap-3 py-1">
-                  {/* Not aria-hidden: it is the only thing telling a screen
-                      reader which chapter this row opens. 「Ch 3」 is read as
-                      「chapter 3」, which is the intent. */}
-                  <span className="shrink-0 w-12 font-extrabold text-[var(--color-primary)]">
-                    Ch {c.num}
-                  </span>
-                  <span className="flex-1 min-w-0 font-bold text-[var(--color-ink)] break-words">
-                    {t(c.title)}
-                  </span>
-                </div>
-              </Link>
-            </li>
+            <ChapterRow
+              key={c.num}
+              num={c.num}
+              title={t(c.title)}
+              lang={lang}
+            />
           ))}
         </ul>
+
+        {/* 「目錄也用細字標明內容出處網站並連結，以示尊重」
+            The text is transcribed from a public edition of De Vern Framke's
+            Ultimate Intention; naming it costs one line and is the honest thing
+            to do with someone else's book. */}
+        <footer className="mt-8 pt-4 border-t border-[var(--color-border)]">
+          <p className="text-xs text-[var(--color-ink-soft)] leading-relaxed">
+            內容出處：{' '}
+            <a
+              href={SOURCE_SITE}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline underline-offset-2 hover:text-[var(--color-primary)]"
+            >
+              {SOURCE_SITE.replace(/^https?:\/\//, '')}
+            </a>
+            <br />
+            {t(book.author)} · {book.titleEn}（{' '}
+            {lang === 'zh-Hant' ? '繁體版' : '简体版'}）
+          </p>
+        </footer>
       </div>
     </div>
   )

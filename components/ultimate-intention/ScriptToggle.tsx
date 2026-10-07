@@ -24,7 +24,15 @@ export default function ScriptToggle({
   const apply = (script: 'zh-Hant' | 'zh-Hans') => {
     // 1 year — the user only changes this if their preference changes.
     document.cookie = `ui-script=${script}; path=/; max-age=31536000; samesite=lax`
-    router.refresh()
+    // router.refresh() was NOT enough: 「按右上角的繁簡轉換還是沒有反應」. It
+    // re-renders the RSC payload but Next reuses the cached router state for
+    // the current route, so the page kept rendering in the previous script. A
+    // real navigation guarantees the server component re-reads the cookie. The
+    // ?lang= stays on the URL so the choice is also shareable, and the existing
+    // scroll position is restored by ChapterReader's sessionStorage handler.
+    const url = new URL(window.location.href)
+    url.searchParams.set('lang', script)
+    router.replace(url.toString() as any)
   }
 
   return (
