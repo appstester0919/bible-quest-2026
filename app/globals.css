@@ -38,7 +38,8 @@
    * app/layout.tsx (--font-nunito / --font-noto-sans-tc / --font-noto-serif-tc).
    * next/font also emits a `__variable` fallback that resolves to the same
    * family name, so these stacks still name the real face. */
-  --font-sans: var(--font-nunito), var(--font-noto-sans-tc), system-ui, sans-serif;
+  --font-sans:
+    var(--font-nunito), var(--font-noto-sans-tc), system-ui, sans-serif;
   --font-serif: var(--font-noto-serif-tc), 'Noto Serif', Georgia, serif;
 
   /* Spacing tokens: scoped under --bq-spacing-*; existing Tailwind
@@ -1083,6 +1084,18 @@ a.card-link:active,
     box-shadow 0.15s ease,
     border-color 0.15s ease;
 }
+/* Compact row: the index needs 28 of these on one screen-ish, and
+   .lesson-card-link's 24px padding plus its border radius is sized for a
+   lesson card you tap to begin a session. Same visual language, denser box. */
+.lesson-card-link--compact {
+  padding: 10px 16px;
+  border-radius: var(--bq-radius-md);
+}
+
+.lesson-card-link--compact:hover {
+  transform: none;
+}
+
 .lesson-card-link:hover {
   transform: translateY(-2px);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);

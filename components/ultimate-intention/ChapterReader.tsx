@@ -35,10 +35,13 @@ const CLEAR_PX = BAR_H + 6
 
 const SPEEDS = [1, 1.25, 1.5, 1.75, 2] as const
 
-// Font scale bounds. Base 1rem, ±2 steps of 0.12rem.
-const FONT_MIN = 0.88
-const FONT_MAX = 1.36
-const FONT_STEP = 0.12
+// Font scale as a MULTIPLIER on .scripture-text's 1.125rem base (18px, per
+// DESIGN.md typography.scripture). Previously this was an absolute rem value
+// applied to a 1rem base, so the reader rendered 16px while the scripture reader
+// rendered 18px — the user read the difference as 「字體比聖經朗讀版面小」.
+const FONT_MIN = 0.85 // ≈15.3px
+const FONT_MAX = 1.5 // ≈27px
+const FONT_STEP = 0.1
 
 type Block = { type: 'p'; text: string } | { type: 'img'; src: string }
 
@@ -143,131 +146,143 @@ export default function ChapterReader({
         />
       )}
 
-      {/* ── Fixed audio bar ─────────────────────────────────────────────── */}
-      {hasAudio && (
+      {/* ── Fixed bar ──────────────────────────────────────────────────────
+          Rendered unconditionally. Playback and speed require audio, but font
+          size does not, and the user reported 「沒有辦法調較字體大小」 while the
+          book had no mp3 yet — gating the controls on hasAudio hid the only
+          adjustment that was available. */}
+      <div
+        className="fixed inset-x-0 z-40 border-b border-[var(--color-border)] bg-[var(--color-surface)]"
+        style={{ height: BAR_H }}
+        role="region"
+        aria-label="朗讀控制"
+      >
         <div
-          className="fixed inset-x-0 z-40 border-b border-[var(--color-border)] bg-[var(--color-surface)]"
+          className="max-w-3xl mx-auto px-3 flex items-center gap-2"
           style={{ height: BAR_H }}
-          role="region"
-          aria-label="朗讀控制"
         >
-          <div
-            className="max-w-3xl mx-auto px-3 flex items-center gap-2"
-            style={{ height: BAR_H }}
+          <BarBtn
+            onClick={toggle}
+            disabled={!src}
+            face={PLAY}
+            circular
+            ariaLabel={!src ? '朗讀尚未備妥' : playing ? '暫停' : '朗讀'}
+            primary
           >
-            <BarBtn
-              onClick={toggle}
-              disabled={false}
-              face={PLAY}
-              circular
-              ariaLabel={playing ? '暫停' : '朗讀'}
-              primary
-            >
-              {playing ? (
-                <svg
-                  width="16"
-                  height="16"
-                  viewBox="0 0 24 24"
-                  fill="currentColor"
-                  aria-hidden="true"
-                >
-                  <rect x="6" y="5" width="4" height="14" rx="1" />
-                  <rect x="14" y="5" width="4" height="14" rx="1" />
-                </svg>
-              ) : (
-                <svg
-                  width="16"
-                  height="16"
-                  viewBox="0 0 24 24"
-                  fill="currentColor"
-                  aria-hidden="true"
-                >
-                  <path d="M8 5.14v13.72a1 1 0 0 0 1.54.84l10.3-6.86a1 1 0 0 0 0-1.68L9.54 4.3A1 1 0 0 0 8 5.14z" />
-                </svg>
-              )}
-            </BarBtn>
-
-            <BarBtn
-              onClick={() => (prevHref ? goto(prevHref) : goto(indexHref))}
-              ariaLabel={prevHref ? '上一篇' : '返回目錄'}
-            >
+            {playing ? (
               <svg
-                width="18"
-                height="18"
+                width="16"
+                height="16"
                 viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth={2}
-                strokeLinecap="round"
-                strokeLinejoin="round"
+                fill="currentColor"
                 aria-hidden="true"
               >
-                <polyline points="15 18 9 12 15 6" />
+                <rect x="6" y="5" width="4" height="14" rx="1" />
+                <rect x="14" y="5" width="4" height="14" rx="1" />
               </svg>
-            </BarBtn>
-
-            <BarBtn
-              onClick={() => (nextHref ? goto(nextHref) : goto(indexHref))}
-              ariaLabel={nextHref ? '下一篇' : '返回目錄'}
-            >
+            ) : (
               <svg
-                width="18"
-                height="18"
+                width="16"
+                height="16"
                 viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth={2}
-                strokeLinecap="round"
-                strokeLinejoin="round"
+                fill="currentColor"
                 aria-hidden="true"
               >
-                <polyline points="9 18 15 12 9 6" />
+                <path d="M8 5.14v13.72a1 1 0 0 0 1.54.84l10.3-6.86a1 1 0 0 0 0-1.68L9.54 4.3A1 1 0 0 0 8 5.14z" />
               </svg>
-            </BarBtn>
+            )}
+          </BarBtn>
 
-            <select
-              value={speed}
-              onChange={(e) => {
-                const v = Number(e.target.value)
-                setSpeed(v)
-                if (audioRef.current) audioRef.current.playbackRate = v
-              }}
-              aria-label="朗讀速度"
-              className="ml-auto rounded-md border border-[var(--color-border)] bg-transparent px-2 text-sm"
-              style={{ height: BTN }}
+          <BarBtn
+            onClick={() => (prevHref ? goto(prevHref) : goto(indexHref))}
+            ariaLabel={prevHref ? '上一篇' : '返回目錄'}
+          >
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={2}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
             >
-              {SPEEDS.map((s) => (
-                <option key={s} value={s}>
-                  {s}x
-                </option>
-              ))}
-            </select>
+              <polyline points="15 18 9 12 15 6" />
+            </svg>
+          </BarBtn>
 
-            <BarBtn
-              onClick={() =>
-                setFont((f) => Math.max(FONT_MIN, +(f - FONT_STEP).toFixed(2)))
-              }
-              ariaLabel="縮小字體"
+          <BarBtn
+            onClick={() => (nextHref ? goto(nextHref) : goto(indexHref))}
+            ariaLabel={nextHref ? '下一篇' : '返回目錄'}
+          >
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={2}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
             >
-              <span style={{ fontSize: '0.72rem', fontWeight: 800 }}>A−</span>
-            </BarBtn>
-            <BarBtn
-              onClick={() =>
-                setFont((f) => Math.min(FONT_MAX, +(f + FONT_STEP).toFixed(2)))
-              }
-              ariaLabel="放大字體"
-            >
-              <span style={{ fontSize: '0.95rem', fontWeight: 800 }}>A+</span>
-            </BarBtn>
-          </div>
+              <polyline points="9 18 15 12 9 6" />
+            </svg>
+          </BarBtn>
+
+          <select
+            value={speed}
+            onChange={(e) => {
+              const v = Number(e.target.value)
+              setSpeed(v)
+              if (audioRef.current) audioRef.current.playbackRate = v
+            }}
+            disabled={!src}
+            aria-label="朗讀速度"
+            className="ml-auto rounded-md border border-[var(--color-border)] bg-transparent px-2 text-sm disabled:opacity-40"
+            style={{ height: BTN }}
+          >
+            {SPEEDS.map((s) => (
+              <option key={s} value={s}>
+                {s}x
+              </option>
+            ))}
+          </select>
+
+          <BarBtn
+            onClick={() =>
+              setFont((f) => Math.max(FONT_MIN, +(f - FONT_STEP).toFixed(2)))
+            }
+            ariaLabel="縮小字體"
+          >
+            <span style={{ fontSize: '0.72rem', fontWeight: 800 }}>A−</span>
+          </BarBtn>
+          <BarBtn
+            onClick={() =>
+              setFont((f) => Math.min(FONT_MAX, +(f + FONT_STEP).toFixed(2)))
+            }
+            ariaLabel="放大字體"
+          >
+            <span style={{ fontSize: '0.95rem', fontWeight: 800 }}>A+</span>
+          </BarBtn>
         </div>
-      )}
+      </div>
 
       {/* ── Article ─────────────────────────────────────────────────────── */}
+      {/* DESIGN.md §Typography: "Scripture / Reading (chapter text): serif,
+          generous line-height, monochrome ink on warm white." The previous
+          version used the sans stack on --color-background, which contradicted
+          the spec's two-zone rule and read as UI chrome rather than text. It
+          also sized type inline off a 1rem base, landing at 16px instead of the
+          specified 18px (.scripture-text in globals.css). Now it reuses that
+          class verbatim so the two readers cannot drift apart again.
+          Figures stay inline in the reading flow, never as a page background —
+          text over an illustration is unreadable. */}
       <article
-        className="page min-h-screen bg-[var(--color-background)]"
+        className="page min-h-screen bg-[var(--color-surface)]"
         style={{
-          paddingTop: hasAudio ? CLEAR_PX + (padTop ? 0 : 16) : 0,
+          paddingTop: CLEAR_PX + (padTop ? 0 : 16),
           paddingBottom: 96,
         }}
       >
@@ -289,18 +304,15 @@ export default function ChapterReader({
             </span>
           </nav>
 
-          <h1 className="h-section mb-1">{chapter.label}</h1>
+          <h1 className="h-section mb-1">Ch {chapter.num}</h1>
           <p className="text-base text-[var(--color-ink-soft)] mb-6">
             {chapter.title[lang]}
           </p>
 
-          <div
-            className="space-y-4"
-            style={{ fontSize: `${bodyFont}rem`, lineHeight: 1.9 }}
-          >
+          <div className="space-y-5">
             {chapter.blocks.map((b, i) =>
               b.type === 'img' ? (
-                <figure key={i} className="my-6">
+                <figure key={i} className="my-8">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={`/ultimate-intention/${b.src}`}
@@ -310,7 +322,11 @@ export default function ChapterReader({
                   />
                 </figure>
               ) : (
-                <p key={i} className="text-[var(--color-ink)] break-words">
+                <p
+                  key={i}
+                  className="scripture-text break-words"
+                  style={{ fontSize: `${bodyFont}em` }}
+                >
                   {b.text}
                 </p>
               ),
@@ -375,6 +391,8 @@ function BarBtn({
       title={ariaLabel}
       disabled={disabled}
       style={{
+        opacity: disabled ? 0.35 : 1,
+        cursor: disabled ? 'default' : 'pointer',
         width: size,
         height: size,
         minWidth: size,

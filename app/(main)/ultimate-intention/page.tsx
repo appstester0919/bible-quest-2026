@@ -74,7 +74,6 @@ export default async function BookIndexPage() {
     )
   }
 
-  const totalChars = book.chapters.reduce((n, c) => n + c.chars, 0)
   const totalImages = book.chapters.reduce((n, c) => n + c.images, 0)
 
   return (
@@ -98,7 +97,7 @@ export default async function BookIndexPage() {
               📘
             </span>
             <p className="font-extrabold text-base">
-              {book.chapters.length} 篇 · {Math.round(totalChars / 1000)} 千字
+              {book.chapters.length} 篇
             </p>
           </div>
           <p className="text-sm opacity-90">
@@ -108,34 +107,28 @@ export default async function BookIndexPage() {
           </p>
         </div>
 
-        <ul className="space-y-3">
+        {/* Compact single-line rows. Design.md §Components: cards are 20px
+            corners with 24px padding — correct for a lesson card you tap to
+            start, but 28 of them made the index three screens long. The roman
+            numeral and 一篇 said the same thing twice, so the number is now
+            「Ch N」 in latin and the Chinese ordinal is dropped entirely. */}
+        <ul className="space-y-2">
           {book.chapters.map((c) => (
             <li key={c.num}>
               <Link
                 href={`/ultimate-intention/${c.num}?lang=${lang}`}
-                className="lesson-card-link block"
+                className="lesson-card-link lesson-card-link--compact block"
               >
-                <div className="flex items-start gap-3">
+                <div className="flex items-center gap-3 py-1">
                   <span
-                    className="shrink-0 w-11 text-center font-extrabold text-[var(--color-primary)] text-lg"
+                    className="shrink-0 w-12 font-extrabold text-[var(--color-primary)]"
                     aria-hidden="true"
                   >
-                    {c.num}
+                    Ch {c.num}
                   </span>
-                  <div className="flex-1 min-w-0">
-                    <h2 className="font-extrabold text-base text-[var(--color-ink)] break-words">
-                      {c.label} {t(c.title)}
-                    </h2>
-                    {t(c.preview) && (
-                      <p className="text-sm text-[var(--color-ink-soft)] mt-1 line-clamp-2 break-words">
-                        {t(c.preview)}
-                      </p>
-                    )}
-                    <p className="text-xs text-[var(--color-muted)] mt-1">
-                      {c.chars.toLocaleString()} 字
-                      {c.images > 0 && ` · ${c.images} 圖`}
-                    </p>
-                  </div>
+                  <span className="flex-1 min-w-0 font-bold text-[var(--color-ink)] break-words">
+                    {t(c.title)}
+                  </span>
                 </div>
               </Link>
             </li>
