@@ -7,6 +7,7 @@
 // revalidation step.
 
 import { notFound } from 'next/navigation'
+import { cookies } from 'next/headers'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 
@@ -46,10 +47,20 @@ export default async function ReaderPage({
   const num = Number(chapter)
   if (!Number.isInteger(num) || num < 1 || num > TOTAL) notFound()
 
-  // 繁體 is the default; the index page's cookie is NOT read here so a shared
-  // deep link can force the other script.
+  // 繁體 is the default. ?lang= wins so a shared deep link can force the other
+  // script; otherwise fall back to the ui-script cookie.
+  //
+  // The cookie used to be ignored here, which made ScriptToggle look dead:
+  // it sets ui-script and calls router.refresh(), but this page only ever read
+  // the query string, so the reader re-rendered in 繁體 every time and the
+  // user reported 「繁簡轉換button現在沒有發揮作用」.
+  const cookieLang = (await cookies()).get('ui-script')?.value
   const lang: 'zh-Hant' | 'zh-Hans' =
-    langQ === 'zh-Hans' ? 'zh-Hans' : 'zh-Hant'
+    langQ === 'zh-Hans' || langQ === 'zh-Hant'
+      ? langQ
+      : cookieLang === 'zh-Hans'
+        ? 'zh-Hans'
+        : 'zh-Hant'
 
   let data: ChapterFile
   let book: Index

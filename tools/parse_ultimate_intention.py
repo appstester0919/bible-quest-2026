@@ -175,6 +175,69 @@ def merge_runs(rows: list[tuple[float, float, str]]) -> list[str]:
     return paras
 
 
+# Section subheadings inside a chapter, e.g. 「正確的起點」. Measured across
+# the book they are set on the SAME doubled 30.2pt leading as a paragraph break
+# but run far narrower than the 470pt body measure, so both signals are
+# available from the bbox data. They must be split OUT of their paragraph: the
+# user reported 「第一段後，是段落title『正確的起點』，然後是該段內容」 as still
+# welded together.
+HEAD_GAP_PT = 24.0        # doubled leading that precedes every subheading
+HEAD_MAX_LEN = 14         # a subheading never fills a 40-char body line
+
+
+def split_subheads(rows: list[tuple[float, float, str]]) -> list[tuple[str, bool]]:
+    """Join bbox lines into paragraphs, splitting the subheadings out.
+
+    Two passes, because the two tests answer different questions:
+
+    Pass 1 marks HEADING LINES. A subheading line is indented like any paragraph
+    first line, sits on the doubled 30.2pt leading of a paragraph break, and is
+    short enough not to be a full 40-character measure. Measured across the
+    book: 「正確的起點」 (page 8) is 5 chars / 60pt wide / 31.2pt above;
+    「在永恒里父神对祂儿子的计划」 (page 9) is 13 chars / 156.6pt / 31.0pt above.
+    A short WRAPPED line also exists (page 11: 「價值，只要他們都聯於一個……」)
+    but it sits at the normal 15.6pt leading, so the gap test separates them.
+
+    Pass 2 merges lines into paragraphs using the same indent test merge_runs
+    uses, and additionally closes the paragraph immediately AFTER a heading,
+    since a subheading is a standalone line followed by its own body text.
+
+    Returns [(text, is_heading)] in document order.
+    """
+    n = len(rows)
+    is_head_line = [False] * n
+    for i, (y, x, txt) in enumerate(rows):
+        if i == 0:
+            continue
+        prev_y, prev_x, _prev_txt = rows[i - 1]
+        indented = x - prev_x > PARA_INDENT_PT
+        doubled = (y - prev_y) > HEAD_GAP_PT
+        is_head_line[i] = indented and doubled and len(txt) <= HEAD_MAX_LEN
+
+    out: list[tuple[str, bool]] = []
+    cur = ""
+    cur_head = False
+    prev_x: float | None = None
+    just_closed_head = False
+    for i, (y, x, txt) in enumerate(rows):
+        indented = prev_x is not None and x - prev_x > PARA_INDENT_PT
+        if indented or not cur or just_closed_head:
+            if cur:
+                out.append((cur, cur_head))
+            cur, cur_head = txt, is_head_line[i]
+            # A heading is followed at NORMAL leading by its body, so the next
+            # line is not indented — without just_closed_head it would be glued
+            # straight back onto the heading.
+            just_closed_head = is_head_line[i]
+        else:
+            cur += txt
+            just_closed_head = False
+        prev_x = x
+    if cur:
+        out.append((cur, cur_head))
+    return out
+
+
 def main() -> None:
     IMG_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -230,21 +293,27 @@ def main() -> None:
             for y, x, txt in rows:
                 if prev_y is not None and (y - prev_y) > GAP_PT and local < len(here):
                     if chunk:
-                        for para in merge_runs(chunk):
-                            blocks.append({"type": "p", "text": para})
+                        for para, is_head in split_subheads(chunk):
+                            blocks.append({
+                                "type": "h" if is_head else "p",
+                                "text": para,
+                            })
                         chunk = []
                     num = here[local]
-                    blocks.append({"type": "img", "src": renamed.get(num, f"{num:02d}.jpg")})
+                    blocks.append({"type": "img", "src": "img/" + renamed.get(num, f"{num:02d}.jpg")})
                     local += 1
                 chunk.append((y, x, txt))
                 prev_y = y
             if chunk:
-                for para in merge_runs(chunk):
-                    blocks.append({"type": "p", "text": para})
+                for para, is_head in split_subheads(chunk):
+                    blocks.append({
+                        "type": "h" if is_head else "p",
+                        "text": para,
+                    })
 
             # Any images on this page the gap scan missed go at the end.
             for num in here[local:]:
-                blocks.append({"type": "img", "src": renamed.get(num, f"{num:02d}.jpg")})
+                blocks.append({"type": "img", "src": "img/" + renamed.get(num, f"{num:02d}.jpg")})
             cursor_img += len(here)
 
         # Only strip the chapter title prefix. A more aggressive heading split

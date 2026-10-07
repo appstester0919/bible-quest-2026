@@ -172,8 +172,12 @@ def main() -> None:
                 blocks_hs.append(b)
                 blocks_ht.append(b)
             else:
-                blocks_hs.append({"type": "p", "text": b["text"]})
-                blocks_ht.append({"type": "p", "text": to_hk(b["text"], conv)})
+                # Preserve the block type. The web parser emits "h" for a
+                # subheading and "p" for body prose; flattening both to "p" threw
+                # away all 154 subheadings before the reader ever saw them.
+                kind = b["type"] if b["type"] in ("p", "h") else "p"
+                blocks_hs.append({"type": kind, "text": b["text"]})
+                blocks_ht.append({"type": kind, "text": to_hk(b["text"], conv)})
 
         meta = {"num": n, "label": label,
                 "title": {"zh-Hant": title_ht, "zh-Hans": title_hs}}

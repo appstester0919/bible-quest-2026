@@ -43,7 +43,10 @@ const FONT_MIN = 0.85 // ≈15.3px
 const FONT_MAX = 1.5 // ≈27px
 const FONT_STEP = 0.1
 
-type Block = { type: 'p'; text: string } | { type: 'img'; src: string }
+type Block =
+  | { type: 'p'; text: string }
+  | { type: 'h'; text: string }
+  | { type: 'img'; src: string }
 
 type Chapter = {
   num: number
@@ -78,8 +81,20 @@ export default function ChapterReader({
   const audioRef = useRef<HTMLAudioElement>(null)
 
   const [playing, setPlaying] = useState(false)
-  const [speed, setSpeed] = useState(1)
-  const [font, setFont] = useState(1)
+  // 「當我進入下一篇，大部份設定都失去，即是要重新調教字體大小和朗讀速度」
+  // The reader remounts on every chapter change, so these have to outlive the
+  // component. localStorage rather than a context: the value is read once on
+  // mount, so a context would not help, and this keeps the fix local.
+  const [speed, setSpeed] = useState(() => {
+    if (typeof window === 'undefined') return 1
+    const v = Number(window.localStorage.getItem('ui.reader.speed'))
+    return Number.isFinite(v) && v > 0 ? v : 1
+  })
+  const [font, setFont] = useState(() => {
+    if (typeof window === 'undefined') return 1
+    const v = Number(window.localStorage.getItem('ui.reader.font'))
+    return Number.isFinite(v) && v > 0 ? v : 1
+  })
 
   // The article must start below the fixed bar, or the first line hides under it.
   const [padTop, setPadTop] = useState(false)
@@ -89,6 +104,15 @@ export default function ChapterReader({
     window.addEventListener('scroll', onScroll, { passive: true })
     return () => window.removeEventListener('scroll', onScroll)
   }, [])
+
+  // Persist the two display settings whenever they change, so a chapter change
+  // (or a reload) restores them.
+  useEffect(() => {
+    window.localStorage.setItem('ui.reader.font', String(font))
+  }, [font])
+  useEffect(() => {
+    window.localStorage.setItem('ui.reader.speed', String(speed))
+  }, [speed])
 
   const src = hasAudio
     ? `/ultimate-intention/audio/${lang}/${String(chapter.num).padStart(2, '0')}.mp3`
@@ -321,6 +345,17 @@ export default function ChapterReader({
                     loading="lazy"
                   />
                 </figure>
+              ) : b.type === 'h' ? (
+                // A subheading. The web edition marks every one with <strong>,
+                // so this is an exact split rather than a guess: 「正確的起點」
+                // is its own block between two body paragraphs.
+                <h2
+                  key={i}
+                  className="scripture-text font-semibold break-words mt-8 mb-3"
+                  style={{ fontSize: `${bodyFont * 1.06}em` }}
+                >
+                  {b.text}
+                </h2>
               ) : (
                 <p
                   key={i}
