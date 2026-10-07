@@ -168,14 +168,22 @@ body {
 
 .scripture-text {
   /* 「內文的字體線條比較幼，不容易看，可以換成讀經版面經文用的字體」
-     The scripture reader renders verses in Georgia (read/page.tsx sets
-     fontFamily: 'Georgia' and lets weight inherit, which lands on the 700 the
-     app uses for body text). This rule pointed at --font-serif — Noto Serif TC
-     400 — whose thin strokes were the complaint. Match the reader: same family,
-     same weight. */
-  font-family:
-    'Georgia', 'Times New Roman', 'Songti TC', 'Noto Serif TC', serif;
-  font-weight: 500;
+     Two things were wrong with the previous fix. This rule pointed at
+     --font-serif (Noto Serif TC) at weight 400, and those thin strokes were the
+     complaint.
+
+     Putting Georgia first does not fix it on its own: Georgia is a system font
+     and is absent on iOS and Android, so every phone fell through to Songti TC
+     / Noto Serif TC at 400 and the page looked unchanged —
+     「你沒有更換字體？」.
+
+     The load-bearing part is the weight. next/font only fetches Noto Serif TC
+     400 and 600 (see layout.tsx), so 500 has no face to select and the browser
+     keeps painting 400. 600 IS shipped, so it is a real change in stroke weight
+     on every device. Georgia stays first so a desktop that has it still matches
+     the scripture reader's face. */
+  font-family: Georgia, 'Times New Roman', 'Songti TC', var(--font-serif);
+  font-weight: 600;
   font-size: 1.125rem;
   /* 1.9 to match the verse line-height in app/(main)/read/page.tsx, so the two
      readers share one typographic rhythm. */

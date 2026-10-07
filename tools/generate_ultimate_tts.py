@@ -42,8 +42,21 @@ from tts_char_substitutions import tts_text  # noqa: E402
 ROOT = Path("/mnt/d/AI/BibleQuest2026/public/ultimate-intention")
 OUT_ROOT = ROOT / "audio"
 
-VOICE_FEMALE = "zh-HK-HiuGaaiNeural"
-VOICE_MALE = "zh-HK-WanLungNeural"
+# Voice per script. 「轉到簡體，朗讀卻沒有轉成普通話？」 — both scripts were
+# synthesised with the SAME zh-HK voice, so the spoken audio never changed with
+# the text: 繁體 read in Cantonese and 简体 read in Cantonese, which is exactly
+# what was reported. The two languages now use their own locale:
+#
+#   繁體 (this book is a Hong Kong / 白受恩 translation) -> zh-HK
+#   简体 -> zh-CN, the mainland standard the reader expects
+#
+# Female on odd chapters, male on even — unchanged, so the voices still
+# alternate the way the scripture reader's do.
+VOICES = {
+    "zh-Hant": ("zh-HK-HiuGaaiNeural", "zh-HK-WanLungNeural"),
+    "zh-Hans": ("zh-CN-XiaoxiaoNeural", "zh-CN-YunjianNeural"),
+}
+VOICE_FEMALE, VOICE_MALE = VOICES["zh-Hant"]  # back-compat for ad-hoc imports
 
 # A chapter whose audio is under this many seconds is treated as a silent
 # truncation and retried. The smallest real chapter in this book is 第五篇 at
@@ -126,7 +139,8 @@ async def main() -> None:
             continue
 
         text = chapter_text(ch)
-        voice = VOICE_FEMALE if num % 2 == 1 else VOICE_MALE
+        female, male = VOICES[args.lang]
+        voice = female if num % 2 == 1 else male
         r = await synth(text, voice, out)
 
         if r["status"] == "ok":
