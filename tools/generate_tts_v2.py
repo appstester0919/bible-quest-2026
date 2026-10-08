@@ -29,15 +29,31 @@ LOG_FILE = "/mnt/d/AI/BibleQuest2026/.tts_gen_log.json"
 BIBLE_DATA = "/mnt/d/AI/BibleQuest2026/public/bible-data.json"
 DELAY_BETWEEN_BATCHES = 3
 
-# Edge TTS zh-HK speech rate measured from production runs:
-#   female HiuGaaiNeural ~5.5 chars/sec, male WanLungNeural ~4.83 chars/sec
-# We use 4.83 (slower male voice) as the conservative lower bound — anything
-# faster than this would silently truncate. Generated mp3 < 90% of expected
-# duration → retry once, then mark fail (previously the script logged 'ok'
-# on a partial file; bug book 10 hit 2026-07-20, fix landed 2026-08-03).
-CHARS_PER_SEC_CONSERVATIVE = 4.83
-MIN_DURATION_RATIO = 0.90  # accept if >=90% of expected duration
-MAX_RETRIES_PER_CHAPTER = 2  # 1 retry on silent truncation (1st pass + 1 retry)
+# Edge TTS zh-HK speaking rate, MEASURED across all 1,189 committed files
+# (tools/verify_scripture_audio.py, 2026-10-08):
+#
+#   female HiuGaaiNeural  0.297 s/char = 3.37 chars/sec  (odd chapters)
+#   male   WanLungNeural  0.214 s/char = 4.67 chars/sec  (even chapters)
+#
+# The previous comment here claimed ~5.5 and ~4.83 chars/sec. The male figure
+# was close; the female voice is 39% SLOWER than documented, and because a
+# single conservative constant was used for both, every female chapter was
+# expected to be ~60% shorter than it really is. That is why 但以理書 11 — an
+# ODD, female chapter — came out at 114.6s for 1,887 characters instead of
+# ~560s, and passed the 90% floor: the floor was measuring against a duration
+# the female voice could never reach.
+#
+# The constant is now per-voice, and MIN_DURATION_RATIO is derived rather than
+# guessed: the slowest real speech is 0.297 s/char, and a genuine half-length
+# truncation lands near 0.45 s/char, so 0.85 tolerance clears all real
+# variation while still catching a real cut.
+SECONDS_PER_CHAR = {"female": 0.297, "male": 0.214}
+MIN_DURATION_RATIO = 0.85
+MAX_RETRIES_PER_CHAPTER = 3  # 2 attempts + 1 spare; 但11 was accepted on a bad check
+
+# Back-compat: regen_round11_yan.py imports this name. It is the SLOWER voice,
+# which is still the correct conservative choice for a single-constant estimate.
+CHARS_PER_SEC_CONSERVATIVE = 1 / SECONDS_PER_CHAR["female"]  # ≈ 3.37
 
 
 def _probe_duration(path: str) -> float:
@@ -55,6 +71,7 @@ def _probe_duration(path: str) -> float:
 
 async def _save_and_verify(text: str, voice: str, output_path: str) -> tuple[bool, float, int]:
     """Save Edge TTS audio, then verify duration matches expected. Returns (ok, duration, size)."""
+    per_char = SECONDS_PER_CHAR["female" if voice == VOICE_FEMALE else "male"]
     # Apply TTS-only homophone substitution so archaic CUV chars are pronounced correctly
     # (櫺繙鬮捫 → 靈翻鳩悶). bible-data.json is unchanged; only the text passed to TTS is modified.
     tts_input = tts_text(text)
@@ -62,7 +79,7 @@ async def _save_and_verify(text: str, voice: str, output_path: str) -> tuple[boo
     await comm.save(output_path)
     d = _probe_duration(output_path)
     size = os.path.getsize(output_path) if os.path.exists(output_path) else 0
-    expected = len(text) / CHARS_PER_SEC_CONSERVATIVE
+    expected = len(text) * per_char
     ok = d >= expected * MIN_DURATION_RATIO
     return ok, d, size
 
@@ -90,9 +107,10 @@ async def generate_chapter(book_abbr: str, chapter: int, verses: list) -> dict:
                     "duration": duration, "voice": voice, "status": "ok",
                     "attempts": attempt + 1,
                 }
+            want = len(text) * SECONDS_PER_CHAR["female" if voice == VOICE_FEMALE else "male"]
             last_err = (
-                f"silent truncation: expected ≥{len(text)/CHARS_PER_SEC_CONSERVATIVE:.1f}s, "
-                f"got {duration:.1f}s ({duration*CHARS_PER_SEC_CONSERVATIVE/len(text)*100:.0f}%)"
+                f"silent truncation: expected ≥{want * MIN_DURATION_RATIO:.1f}s, "
+                f"got {duration:.1f}s ({duration / want * 100:.0f}%)"
             )
             if attempt < MAX_RETRIES_PER_CHAPTER - 1:
                 # Brief backoff before retry (avoid rate-limit)
