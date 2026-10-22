@@ -51,6 +51,9 @@ supabase/.temp
 coverage/
 .nyc_output
 
+# TTS render in progress (partial mp3 writes)
+*.part
+
 # Misc
 *.tgz
 .cache/

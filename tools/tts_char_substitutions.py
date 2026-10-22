@@ -172,8 +172,57 @@ Use `regen_tts_affected_chapters.py` after wiring this module in.
 # references/tts-char-substitution-2026-08-10.md for full audit + reverting
 # story.
 TTS_CHAR_MAP: dict[str, str] = {
-    '攢': '賺',  # zaan2 → 賺 (zaan6). 攢 returns NoAudioReceived on BOTH zh-HK voices (control 媽 1.87s / 11232B same run), and is dropped mid-word: 必不積攢存留 measures 2.26s / 13536B against 必不積賺存留 2.52s / 15120B — one syllable short, so 賽 23:18 currently plays 「必不積存留」 with no error anywhere. 1 occurrence, 1 chapter.
-    # Two Cantonese readings exist for 攢 (羊羊粵語審音字典): cyun4 and zaan2, the second from     # 廣韻「作旱切」. The cyun4 reading maps exactly to 存, but this verse already contains 存     # immediately after 攢 — 「必不積攢存留」 — so that mapping would read 「積存存留」, two     # identical syllables in a row, which KH LAI rejected as unnatural. The zaan2 reading avoids     # the collision, hence 賺. Honest caveat: 賺 is zaan6, not zaan2 — the tone differs by one, so     # this mapping is chosen for naturalness and engine output rather than exact tone match, and     # the ear test is what settles it. Display text stays canonical 攢.
+    '攢': '賺',  # zaan6 → 賺 (zaan6) — 完全同音，唔係 tone 差一。2026-10-22 更正：先前註解寫「zaan2 → 賺 (zaan6), tone 差一」係錯。jyut6ping3 收錄 攢 = cyun4 / zaan2 / zaan6 / zyun1 / zyun6，zaan6 本身正係 攢 嘅讀音之一。揀 zaan6 (= 賺) 因為 賽 23:18「必不積攢存留」緊接就係「存」(cyun4)，揀 cyun4 會讀成「積存存留」（兩個相鄰同音字，KH LAI 判定唔自然）。攢 喺兩個 zh-HK 聲線都回 NoAudioReceived（同一輪對照 媽 1.87s / 11232B），而且係喺詞中間被丟：必不積攢存留 2.26s / 13536B vs 必不積賺存留 2.52s / 15120B — 差一個音節，即係賽 23:18 而家讀緊「必不積存留」而全流程冇任何報錯。1 處，1 章。顯示文字維持正字 攢。
+    # ======================================================================
+    # 2026-10-22 — 系統性全庫掃描 (tools/sweep_corpus_silent.py)
+    # 之前所有映射都係「有人投訴才加」。今次掃過 corpus 全部 3,972 個
+    # 不重複 CJK 字（31,103 節聖經 + 28 冊屬靈書繁/簡），發現 82 個字
+    # 對 edge-tts 完全無聲（NoAudioReceived）。其中 48 個已有映射，以下
+    # 34 個係從未修過的 —— 即係 52 個聖經章 + 3 個屬靈書檔一直播緊
+    # 少咗音節嘅音頻。
+    #
+    # 揀字原則（見 references/cantonese-polyphone-sub-selection.md）:
+    #   1. 字典讀音相同（jyut6ping3）
+    #   2. 盡量 GB 標準簡化字 —— 簡化字同繁體字讀音相同 + 字義相同
+    #   3. 「讀落自然」優先過純粹同音
+    #   4. 冇可用同音字時，寧願用 RCUV 官方譯法（例：磣→磨）
+    # 驗證：tools/verify_substitutions2.py（字典 + 雙聲線 + 真實經文語境時長）
+    # ======================================================================
+    '啣': '銜',  # haam4 → 銜 (haam4) 完全同音。撒上17:34「從群中啣一隻羊羔去」、但7:5「口齒內啣著三根肋骨」—— 銜 = 用口含著
+    '噯': '唉',  # aai1 → 唉 (aai1) 完全同音。嘆詞「噯！」：伯2:10 / 太17:17 / 可9:19 / 路9:41
+    '専': '專',  # zyun1 → 專 (zyun1) 完全同音。専 係日本新字形，屬靈書 28「完全専注於」= 專注（源文錯字）
+    '廩': '廪',  # lam5 → 廪 (lam5)。廪 係 廩 嘅異體字，字義完全相同（倉廩 = 穀倉）：珥1:17 / 耶50:26
+    '櫓': '橹',  # lou5 → 橹 (lou5)。GB 標準簡化字，same meaning（盪槳搖櫓）：可6:48 / 約6:8 / 賽33:21
+    '璫': '珰',  # dong1 → 珰 (dong1)。GB 標準簡化字（腳下玎璫 = 佩環聲）：賽3:16
+    '癤': '疖',  # zit3 → 疖 (zit3)。GB 標準簡化字（長了癤子 = 疖瘡）：利13:2 / 利13:10 / 利14:2 / 利14:3
+    '磣': '磨',  # ⚠ 唯一一個刻意唔跟同音嘅例外。磣 = cam2，字典冇任何常用同音字（cam2 只有 噆 梫 硶 等罕用字）。
+    #                改用 RCUV（和合本修訂版）官方譯法「用沙石磨斷我的牙」→ 磨 (mo4)，字義同讀音自然都對。哀3:16
+    '穡': '穑',  # sik1 → 穑 (sik1)。GB 標準簡化字（稼穡 = 播種收割）：創8:22
+    '簍': '篓',  # lau5 → 篓 (lau5)。GB 標準簡化字（駱駝的馱簍 = 馱籃）：創31:34 / 路16:6
+    '糴': '籴',  # dek6 → 籴 (dek6)。GB 標準簡化字（糴糧 = 買入穀物）：創41-47 共 13 節
+    '糶': '粜',  # tiu3 → 粜 (tiu3)。GB 標準簡化字（糶糧 = 賣出穀物）：創41:56 / 創42:6
+    '脩': '修',  # sau1 → 修 (sau1) 完全同音。屬靈書 01「以人為中心的靈脩」= 靈修
+    '覿': '觌',  # dik6 → 觌 (dik6)。GB 標準簡化字（覿面 = 遇見）：士6:22
+    '輥': '辊',  # gwan2 → 辊 (gwan2)。GB 標準簡化字（輥去 / 輥到墓門口 = 滾）：書5:9 / 太27:60 / 太28:2 等 8 節
+    '鉋': '刨',  # paau4 → 刨 (paau4) 完全同音。GB 標準簡化字（鉋子 = 木工刨刀）：賽44:13
+    '銲': '焊',  # hon6 → 焊 (hon6) 完全同音。GB 標準簡化字（銲工 = 焊接工）：賽41:7
+    '鏇': '旋',  # syun4 → 旋 (syun4) 完全同音。⚠ 字義欠佳（鏇 = 金屬鑄像），但 syun4 冇其他可用字
+    '鏨': '站',  # zaam6 → 站 (zaam6) 完全同音。⚠ 字義欠佳（鏨成 = 鑿刻成），zaam6 冇其他可用字
+    '鐃': '铙',  # naau4 → 铙 (naau4)。GB 標準簡化字（鐃鉤 = 銅鉤）：代下33:11
+    '鐫': '镌',  # zyun1 → 镌 (zyun1)。GB 標準簡化字（鐵筆鐫刻 = 雕刻）：伯19:24
+    '鐺': '铛',  # dong1 → 铛 (dong1)。GB 標準簡化字（金鈴鐺 = 金鈴鐺）：出28:33-34 / 出39:25-26 / 亞14:11
+    '閤': '阖',  # hap6 → 阖 (hap6)。GB 標準簡化字，字義完全相同（閤家 = 全家 / 閤城 = 全城）：創20:16 / 王下11:20
+    '颻': '搖',  # jiu4 → 搖 (jiu4) 完全同音 + 同義（飄颻 = 飄搖）：士9:9 / 士9:11
+    '颼': '嗖',  # sau1 → 嗖 (sau1) 完全同音 + 同義（嗖 = 呼嘯聲）：伯41:29
+    '飫': '醧',  # jyu3 → 醧 (jyu3) 完全同音。醧 係 飫 嘅異體字（飽飫 = 飽足）：耶31:25
+    '騸': '骟',  # sin3 → 骟 (sin3)。GB 標準簡化字（騸了 = 閹過的）：利22:24
+    '鴟': '鸱',  # ci1 → 鸱 (ci1)。GB 標準簡化字（角鴟 = 貓頭鷹類）：利11:18 / 申14:16
+    '鶿': '鸧',  # ci4 → 鸧 (ci4)。GB 標準簡化字（鸕鶿 = 鸕鶿）：利11:17 / 申14:17
+    '鷂': '鹞',  # jiu6 → 鹞 (jiu6)。GB 標準簡化字（鷂鷹 = 鷹類）：利11:14 / 申14:13 / 賽34:13
+    '鷥': '鸶',  # si1 → 鸶 (si1)。GB 標準簡化字（鷺鷥 = 白鷺）：利11:19 / 申14:18
+    '鸇': '煎',  # zin1 → 煎 (zin1) 完全同音。⚠ 字義欠佳（鸇 = 鳶類），zin1 冇其他可用字
+    '鸕': '鸬',  # lou4 → 鸬 (lou4)。GB 標準簡化字（鸕鶿 = 鸕鶿）：利11:17 / 申14:17
+    '鸛': '鹳',  # gun3 → 鹳 (gun3)。GB 標準簡化字（鸛 = 鸛鳥）：利11:19 / 申14:18 / 亞5:11 / 耶8:7
     '躥': '穿',  # cyun1 → 穿 (cyun1). 躥 returns NoAudioReceived on BOTH zh-HK voices bare (control 媽 1.87s / 11232B same run). Both corpus occurrences are in 穿山越嶺 / 躥上牒 type motion verbs — 歌 2:8 「他躥山越嶺而來」, 珥 2:9 「躥上牆，爬上房屋」 — 2 chapters. No exact homophone exists: 蹲 is cyun4 (wrong tone), 竄 is cyun2. 穿 is cyun1, an exact match, and per KH LAI 「穿山越嶺在現代是正確的」 — the idiom is current usage, not a forced substitute. Rejected on tone, not meaning: 蹲 reads closer to the motion but lands a tone off.
     '綹': '縷',  # lau5 → 縷 (lau5). 綹 returns NoAudioReceived on BOTH zh-HK voices bare (control 媽 1.87s / 11232B same run). All 7 occurrences are 髮綹 / 一綹頭髮 — a lock or strand of hair — 民 6:5, 士 16:13/14/19, 歌 7:5, 結 8:3 and one more; single sense, so a blanket mapping is safe, 5 chapters. 教育部辭典 gives 綹 ㄌㄧㄡˇ (liǼ) vs 縷 ㄌㄨˇ (lǔ), so they differ in MANDARIN, but both are lau5 in Cantonese (verified shyyp.net), which is the voice being generated. 縷 is also the semantic neighbour 一縷頭髮, so the substituted audio is correct in meaning as well as sound.
     '硃': '朱',  # zyu1 → 朱 (zyu1). 硃 returns NoAudioReceived on BOTH zh-HK voices bare (control 媽 1.87s / 11232B same run), and is dropped mid-word: 雖像硃紅 measures 1.90s / 11376B against 雖像朱紅 2.21s / 13248B, so 賽 1:18 plays 「雖像紅」 with no error. 1 occurrence, 1 chapter. 朱 is zyu1 (exact) and is the base form of the same word 硃紅 — this is the standard 硃/朱 pairing, not a homophone stand-in. Note 硃 is also the surname form 硃熹, but in 賽 1:18 it is plainly the colour, so reading it as 朱 (vermilion) is correct either way.
@@ -283,7 +332,7 @@ TTS_PUNCTUATION_FIXES: list[tuple[str, str, str]] = [
 ]
 
 
-def tts_text(display_text: str) -> str:
+def tts_text(display_text: str, script: str = "HK") -> str:
     """
     Convert user-facing display text to TTS-pronounceable text.
 
@@ -293,20 +342,38 @@ def tts_text(display_text: str) -> str:
 
     Pipeline:
       1. Apply verse-specific punctuation fixes (e.g. 撒下 1:23)
-      2. Apply char substitution map (TTS_CHAR_MAP)
+      2. Apply char substitution map (TTS_CHAR_MAP) — CANTONESE ONLY
 
     Step 1 must run before step 2 because punctuation fixes may insert
     punctuation that's later passed to edge_tts unchanged (punctuation is
     not in TTS_CHAR_MAP so order doesn't matter for that, but conceptually
     fixes precede substitution).
+
+    script
+    ------
+    "HK" (default) applies the whole map. "CN" applies the punctuation
+    fixes only.
+
+    Why the map is Cantonese-only (2026-10-22): the corpus-wide sweep
+    (tools/sweep_corpus_silent.py) probed all 3,972 distinct characters on
+    every voice the app uses. All 82 rejected characters are rejected by the
+    zh-HK voices and by NO zh-CN voice — the Mandarin render can pronounce
+    everything the Cantonese render cannot. So on the Mandarin side the map
+    can only do harm: it swaps a character the engine reads correctly for
+    one it reads differently. 邑 → 泣 is the concrete case — both are kap1
+    in Cantonese, but 邑 is yì and 泣 is qì in Mandarin, so 《屬靈書》
+    簡體版 was going to read 「可居住的城泣」 ("a weeping city") instead of
+    「可居住的城邑」. The same class of error applies to 攢→賺, 磣→磨,
+    鏇→旋, 鏨→站, 鸇→煎.
     """
     if not display_text:
         return display_text
     result = display_text
     for marker, replacement, _ref in TTS_PUNCTUATION_FIXES:
         result = result.replace(marker, replacement)
-    for old, new in _FROZEN_MAP:
-        result = result.replace(old, new)
+    if script != "CN":
+        for old, new in _FROZEN_MAP:
+            result = result.replace(old, new)
     return result
 
 

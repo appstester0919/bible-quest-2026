@@ -32,12 +32,29 @@ Usage:
 import argparse
 import asyncio
 import json
+import socket
 import subprocess
 import sys
 import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
+
+# Force IPv4 before edge_tts opens its websocket. On WSL the IPv6 route to
+# Edge's endpoint fails with WSServerHandshakeError: 403 even while the
+# service is healthy — voices/list still returns 200. 2026-10-22: this file
+# had no patch, so it inherited the 403 and would have reported every
+# character as silent. See skill wsl-edge-tts-ipv6-403.
+_orig_getaddrinfo = socket.getaddrinfo
+
+
+def _ipv4_only(host, port, *args, **kwargs):
+    res = _orig_getaddrinfo(host, port, *args, **kwargs)
+    v4 = [r for r in res if r[0] == socket.AF_INET]
+    return v4 or res
+
+
+socket.getaddrinfo = _ipv4_only
 
 import edge_tts  # noqa: E402
 
@@ -215,7 +232,7 @@ def run_verify(chapters: list[Path], outdir: Path, lang: str) -> int:
         src = ROOT / lang / f"{n}.json"
         if not src.exists():
             continue
-        body = chapter_text(json.loads(src.read_text(encoding="utf-8")))
+        body = chapter_text(json.loads(src.read_text(encoding="utf-8")), lang=lang)
         sec = audio_seconds(mp3, mp3.stat().st_size)
         if body and sec:
             ref_rates.setdefault("odd" if n % 2 == 1 else "even",
@@ -227,7 +244,7 @@ def run_verify(chapters: list[Path], outdir: Path, lang: str) -> int:
     for p in chapters:
         num = int(p.stem)
         ch = json.loads(p.read_text(encoding="utf-8"))
-        text = chapter_text(ch)
+        text = chapter_text(ch, lang=lang)
         mp3 = outdir / f"{num:02d}.mp3"
         if not mp3.exists():
             print(f"[MISS] {num:02d} {ch['label']} — no audio file")
@@ -269,10 +286,21 @@ def run_verify(chapters: list[Path], outdir: Path, lang: str) -> int:
     return 1 if (bad or missing) else 0
 
 
-def chapter_text(ch: dict) -> str:
-    """Paragraphs joined; image blocks contribute nothing to speech."""
+def chapter_text(ch: dict, lang: str = "zh-Hant") -> str:
+    """Paragraphs joined; image blocks contribute nothing to speech.
+
+    2026-10-22 FIX: tts_text() was imported at module level but never
+    actually called here, so every TTS_CHAR_MAP substitution was silently
+    skipped for the whole 屬靈書 audio tree. All 42 earlier fixes had
+    shipped as silent characters in this book. The substitution has to be
+    applied to the text BEFORE it reaches edge_tts.
+    """
     parts = [b["text"] for b in ch["blocks"] if b["type"] == "p"]
-    return "".join(parts)
+    # The char map is Cantonese-only: no zh-CN voice rejects any corpus
+    # character, and the map's targets do not share the Mandarin reading
+    # (邑→泣 would read 城泣). Punctuation fixes still apply to both.
+    script = "CN" if lang == "zh-Hans" else "HK"
+    return tts_text("".join(parts), script=script)
 
 
 async def main() -> None:
@@ -319,7 +347,7 @@ async def main() -> None:
             print(f"[skip] {num:02d} {ch['label']} {out.stat().st_size:,}B", flush=True)
             continue
 
-        text = chapter_text(ch)
+        text = chapter_text(ch, lang=args.lang)
         female, male = VOICES[args.lang]
         voice = female if num % 2 == 1 else male
         r = await synth(text, voice, out, lang=args.lang, num=num)
@@ -355,7 +383,7 @@ async def run_probe(chapters: list[Path], lang: str) -> None:
     are capped and the run is resumable in the sense that it re-derives from the
     corpus each time rather than accumulating state.
     """
-    corpus = "".join(chapter_text(json.loads(p.read_text(encoding="utf-8")))
+    corpus = "".join(chapter_text(json.loads(p.read_text(encoding="utf-8")), lang=lang)
                      for p in chapters)
     chars = sorted(set(c for c in corpus if "\u4e00" <= c <= "\u9fff"))
 
