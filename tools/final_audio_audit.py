@@ -61,15 +61,16 @@ def _build_touch_index() -> dict[str, str]:
                         "public/ultimate-intention/audio"],
                        capture_output=True, text=True)
     cur = ""
+    commit_re = re.compile(r"^[0-9a-f]{7,40} \d{4}-\d{2}-\d{2}$")
     for line in r.stdout.split("\n"):
         if not line.strip():
             continue
-        if line.startswith(" "):            # indented file name
+        if commit_re.match(line.strip()):
+            cur = line.strip()              # "hash date"
+        elif cur:
             f = line.strip()
             if f and f not in _TOUCH_CACHE:
-                _TOUCH_CACHE[f] = cur
-        else:
-            cur = line.strip()              # "hash date"
+                _TOUCH_CACHE[f] = cur       # first (most recent) touch wins
     return _TOUCH_CACHE
 
 
