@@ -12,8 +12,13 @@ service-worker script actually reports the new CACHE_NAME, because a stale
 CACHE_NAME means every installed PWA keeps serving the previous bytes
 regardless of how correct the deployment is.
 
-    python3 tools/verify_prod_audio.py --base https://biblequest2026.vercel.app
+    python3 tools/verify_prod_audio.py --base https://bible-quest-2026.vercel.app
     python3 tools/verify_prod_audio.py --base <preview-url> --ref HEAD
+
+NB: use `bible-quest-2026.vercel.app`, NOT the legacy alias
+`biblequest2026.vercel.app` — the alias is still pinned to a 2026-08
+deployment and serves an old service-worker CACHE_NAME, so verifying against
+it reports a false mismatch.
 """
 import argparse
 import hashlib
