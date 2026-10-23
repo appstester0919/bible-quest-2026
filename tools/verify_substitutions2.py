@@ -50,6 +50,11 @@ import edge_tts  # noqa: E402
 OUT = Path("/home/appstester0919/.hermes/cache/scratch/cand2")
 OUT.mkdir(parents=True, exist_ok=True)
 DICT = Path("/home/appstester0919/.hermes/cache/scratch/jyut6.yaml")
+DICT_RAW = ("https://raw.githubusercontent.com/rime/rime-cantonese/main/"
+             "jyut6ping3.chars.dict.yaml")
+OCC_ST = Path("/home/appstester0919/.hermes/cache/scratch/STCharacters.txt")
+OCC_ST_RAW = ("https://raw.githubusercontent.com/BYVoid/OpenCC/master/data/"
+              "dictionary/STCharacters.txt")
 HK = ("zh-HK-HiuGaaiNeural", "zh-HK-WanLungNeural")
 CN = ("zh-CN-XiaoxiaoNeural", "zh-CN-YunjianNeural")
 TOL = 0.15
@@ -93,13 +98,52 @@ PAIRS = [
 ]
 
 
+def ensure_file(path: Path, url: str) -> Path:
+    """Download `url` into `path` when it is missing or empty.
+
+    The rime dictionary and the OpenCC table used to live only in the scratch
+    dir, which Hermes prunes — so this committed script silently stopped
+    working once the scratch copy was swept. Fetch them on demand instead.
+    """
+    if path.exists() and path.stat().st_size > 0:
+        return path
+    import urllib.request
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with urllib.request.urlopen(url, timeout=180) as r:
+        path.write_bytes(r.read())
+    return path
+
+
 def load_dict():
+    """jyutping readings per character, from the rime-cantonese dictionary.
+
+    Handles both the raw rime layout (`char<TAB>reading[<TAB>weight]`) and
+    the flattened layout written by the sweep tooling (`char<TAB>rd1<TAB>rd2`).
+    """
+    ensure_file(DICT, DICT_RAW)
     jp = collections.defaultdict(set)
     for line in io.open(DICT, encoding="utf-8"):
+        if line.startswith("#") or line.strip() in ("---", "..."):
+            continue
         parts = line.rstrip("\n").split("\t")
         if len(parts) >= 2 and len(parts[0]) == 1:
-            jp[parts[0]].add(parts[1].split()[0])
+            for rd in parts[1:]:
+                rd = rd.strip()
+                if re.fullmatch(r"[a-z]+\d", rd):
+                    jp[parts[0]].add(rd)
     return jp
+
+
+def load_opencc():
+    """simplified char -> traditional forms, from OpenCC's STCharacters."""
+    ensure_file(OCC_ST, OCC_ST_RAW)
+    st = {}
+    for line in io.open(OCC_ST, encoding="utf-8"):
+        if line.startswith("#") or "\t" not in line:
+            continue
+        k, v = line.rstrip("\n").split("\t", 1)
+        st[k.strip()] = v.strip().split(" ")
+    return st
 
 
 async def dur(text, voice):
@@ -122,6 +166,7 @@ async def dur(text, voice):
 
 async def main():
     jp = load_dict()
+    st = load_opencc()
     print(f"edge-tts {edge_tts.__version__}\n")
     ctrl = await dur("媽", HK[0])
     if ctrl is None:
@@ -137,12 +182,21 @@ async def main():
     for orig, cand, syl, phrase, ref, note in PAIRS:
         # 1. dict
         so, sc = set(jp.get(orig, set())), set(jp.get(cand, set()))
+        # The rime dictionary is traditional-only, so a simplified candidate
+        # is ABSENT BY DESIGN. Absence is not evidence that the candidate is
+        # the simplification of THIS source — 鶿→鸧 slipped through on that
+        # assumption (OpenCC: 鸧 ← 鶬, a different bird reading coeng1; 鶿's
+        # own simplification is 鹚, ci4). OpenCC decides the correspondence,
+        # and the traditional form's reading must still match the source's.
+        trads = st.get(cand, [])
+        occ_ok = bool(trads) and any(
+            t == orig or (so & jp.get(t, set())) for t in trads)
         if so and sc:
             dict_ok = bool(so & sc)
             dict_txt = "✓" if dict_ok else "✗"
         elif not sc:
-            dict_ok = True                      # GB simplification, not in dict
-            dict_txt = "簡"
+            dict_ok = occ_ok
+            dict_txt = "簡✓" if occ_ok else "簡✗"
         else:
             dict_ok, dict_txt = True, "n/a"
         # 2. voice
@@ -160,7 +214,8 @@ async def main():
             delta = abs(dc - dr)
             ctx_ok = delta <= TOL
         verdict = "✓ 可提交耳驗" if (voice_ok and ctx_ok and dict_ok) \
-            else ("✗ " + ("字典唔同音 " if not dict_ok else "")
+            else ("✗ " + (("簡化對應錯 " if not sc else "字典唔同音 ")
+                           if not dict_ok else "")
                   + ("無聲 " if not voice_ok else "")
                   + ("語境長度差異大" if not ctx_ok else ""))
         print(f'{orig:3}{cand:4}{syl:8}{dict_txt:6}'
