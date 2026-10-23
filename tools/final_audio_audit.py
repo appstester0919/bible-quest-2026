@@ -42,7 +42,41 @@ def dur(p: Path) -> float:
         return 0.0
 
 
+_TOUCH_CACHE: dict[str, str] = {}
+
+
+def _build_touch_index() -> dict[str, str]:
+    """Map every tracked file to the last commit that touched it.
+
+    One `git log --name-only` walk replaces 1,245 individual `git log -1`
+    calls. The per-file version took ~70 minutes on /mnt/d (Windows drive
+    over WSL) because every call re-read the index and walked history
+    again; the batched walk does it once and finishes in seconds.
+    """
+    if _TOUCH_CACHE:
+        return _TOUCH_CACHE
+    r = subprocess.run(["git", "-C", str(ROOT), "-c", "core.quotePath=false",
+                        "log", "--format=%h %ad", "--date=short",
+                        "--name-only", "--no-renames", "--", "public/audio",
+                        "public/ultimate-intention/audio"],
+                       capture_output=True, text=True)
+    cur = ""
+    for line in r.stdout.split("\n"):
+        if not line.strip():
+            continue
+        if line.startswith(" "):            # indented file name
+            f = line.strip()
+            if f and f not in _TOUCH_CACHE:
+                _TOUCH_CACHE[f] = cur
+        else:
+            cur = line.strip()              # "hash date"
+    return _TOUCH_CACHE
+
+
 def git_last_touch(rel: str) -> str:
+    idx = _build_touch_index()
+    if rel in idx:
+        return idx[rel]
     r = subprocess.run(["git", "-C", str(ROOT), "-c", "core.quotePath=false",
                         "log", "-1", "--format=%h %ad", "--date=short", "--", rel],
                        capture_output=True, text=True)
