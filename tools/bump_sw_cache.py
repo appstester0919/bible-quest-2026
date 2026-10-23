@@ -69,8 +69,8 @@ def main():
     comment = (f"// bump v{old_v} -> v{new_v} ({args.what}) "
                f"Corpus scope: {len(bible)} Bible chapters + {len(ult)} 屬靈書 files "
                f"({len(files)} files, {nbytes:,} B total). "
-               f"Audio bytes changed, so a stale cache would serve the old "
-               f"silent-character mp3s to every installed PWA.")
+               f"Audio bytes changed, so a stale cache would serve the previous "
+               f"mp3s to every installed PWA.")
     new_line = f"const CACHE_NAME = 'bible-quest-v{new_v}' {comment}"
 
     print(f"bible-quest-v{old_v} -> bible-quest-v{new_v}")
