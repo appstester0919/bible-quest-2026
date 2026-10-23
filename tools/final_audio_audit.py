@@ -56,21 +56,20 @@ def _build_touch_index() -> dict[str, str]:
     if _TOUCH_CACHE:
         return _TOUCH_CACHE
     r = subprocess.run(["git", "-C", str(ROOT), "-c", "core.quotePath=false",
-                        "log", "--format=%h %ad", "--date=short",
+                        "log", "--format=@@%h %ad", "--date=short",
                         "--name-only", "--no-renames", "--", "public/audio",
                         "public/ultimate-intention/audio"],
                        capture_output=True, text=True)
     cur = ""
-    commit_re = re.compile(r"^[0-9a-f]{7,40} \d{4}-\d{2}-\d{2}$")
     for line in r.stdout.split("\n"):
-        if not line.strip():
+        line = line.strip()
+        if not line:
             continue
-        if commit_re.match(line.strip()):
-            cur = line.strip()              # "hash date"
+        if line.startswith("@@"):              # explicit commit marker
+            cur = line[2:]
         elif cur:
-            f = line.strip()
-            if f and f not in _TOUCH_CACHE:
-                _TOUCH_CACHE[f] = cur       # first (most recent) touch wins
+            # git still quotes paths containing spaces even with quotePath=false
+            _TOUCH_CACHE.setdefault(line.strip('"'), cur)   # newest-first: first hit wins
     return _TOUCH_CACHE
 
 
