@@ -86,9 +86,7 @@ async function getMemberDisplayName(
 }
 
 // ─── Create group ─────────────────────────────────────────────────────────────
-export async function createGroup(
-  name: string,
-): Promise<{
+export async function createGroup(name: string): Promise<{
   success: boolean
   groupId?: string
   inviteCode?: string
@@ -137,9 +135,7 @@ export async function createGroup(
 }
 
 // ─── Join group (request approval) ────────────────────────────────────────────
-export async function requestJoinGroup(
-  inviteCode: string,
-): Promise<{
+export async function requestJoinGroup(inviteCode: string): Promise<{
   success: boolean
   status?: 'pending' | 'approved'
   groupName?: string
@@ -452,9 +448,7 @@ export async function deleteGroup(
 }
 
 // ─── Group daily check-in (called when user completes reading) ────────────────
-export async function checkInAllMyGroups(
-  dateLocal: string,
-): Promise<{
+export async function checkInAllMyGroups(dateLocal: string): Promise<{
   success: boolean
   count?: number
   error?: string
@@ -781,9 +775,7 @@ export async function getMyGroupDashboardData(): Promise<{
 }
 
 // ─── Get group members (for admin management) ────────────────────────────────
-export async function getGroupMembers(
-  groupId: string,
-): Promise<{
+export async function getGroupMembers(groupId: string): Promise<{
   success: boolean
   members?: GroupMember[]
   isAdmin?: boolean
@@ -813,9 +805,7 @@ export async function getGroupMembers(
 }
 
 // ─── Get group info by invite code (for /join page) ──────────────────────────
-export async function getGroupByInviteCode(
-  code: string,
-): Promise<{
+export async function getGroupByInviteCode(code: string): Promise<{
   success: boolean
   group?: {
     id: string
@@ -1164,7 +1154,7 @@ export async function sendNudge(
     (process.env.VERCEL_PROJECT_PRODUCTION_URL
       ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
       : '') ||
-    'https://biblequest2026.vercel.app'
+    'https://bible-quest-2026.vercel.app'
   const cronToken = process.env.CRON_RELAY_TOKEN
   let delivered = 0
 
