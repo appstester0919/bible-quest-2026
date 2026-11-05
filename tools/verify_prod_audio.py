@@ -15,10 +15,12 @@ regardless of how correct the deployment is.
     python3 tools/verify_prod_audio.py --base https://bible-quest-2026.vercel.app
     python3 tools/verify_prod_audio.py --base <preview-url> --ref HEAD
 
-NB: use `bible-quest-2026.vercel.app`, NOT the legacy alias
-`biblequest2026.vercel.app` — the alias is still pinned to a 2026-08
-deployment and serves an old service-worker CACHE_NAME, so verifying against
-it reports a false mismatch.
+NB: always verify against the official host `bible-quest-2026.vercel.app`.
+The legacy hostname `biblequest2026.vercel.app` is a PROJECT-LEVEL REDIRECT
+domain (added 2026-11-05) to `bible-quest-2026.vercel.app`, so it now follows
+the latest production deployment automatically — it no longer needs manual
+re-pointing after every deploy. It issues a 307 to the canonical host, so
+`curl -L` is required if you fetch it directly.
 """
 import argparse
 import hashlib
