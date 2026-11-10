@@ -1018,22 +1018,37 @@ export async function getIncompleteGroupMembersToday(): Promise<{
   // senders — completedToday came back empty and every member looked nudgeable.
   // reading_sessions SELECT RLS is now relaxed in migration
   // 20260816000001_reading_sessions_select_for_members.sql.
-  const [{ data: todaySessions }, { data: todayCheckins }] = await Promise.all([
-    supabase
-      .from('reading_sessions')
-      .select('user_id')
-      .in('user_id', otherUserIds)
-      .eq('date_local', today),
-    supabase
+  //
+  // Bounded fetch: a bare SELECT here could exceed PostgREST's max-rows cap
+  // (~1000) — one reader has 2266 sessions and writes a row per chapter, so a
+  // single member's today rows alone can crowd out other members' completion
+  // rows, making a completed member look incomplete and nudgable. Distinct
+  // user_ids are all this filter needs, so page through the deduped set: at
+  // most one row per member, well under the cap for any group ≤30.
+  const completedToday = new Set<string>()
+  {
+    let offset = 0
+    for (;;) {
+      const { data } = await supabase
+        .from('reading_sessions')
+        .select('user_id')
+        .in('user_id', otherUserIds)
+        .eq('date_local', today)
+        .range(offset, offset + 999)
+      const page = data ?? []
+      page.forEach((s) => completedToday.add(s.user_id))
+      if (page.length < 1000) break
+      offset += 1000
+    }
+  }
+  {
+    const { data: todayCheckins } = await supabase
       .from('group_checkins')
       .select('user_id')
       .in('user_id', otherUserIds)
-      .eq('date_local', today),
-  ])
-  const completedToday = new Set([
-    ...(todaySessions || []).map((s) => s.user_id),
-    ...(todayCheckins || []).map((c) => c.user_id),
-  ])
+      .eq('date_local', today)
+    ;(todayCheckins ?? []).forEach((c) => completedToday.add(c.user_id))
+  }
 
   // 4. Filter & dedupe by user_id (cross-group aggregation). group_id = first
   //    membership found for that user.

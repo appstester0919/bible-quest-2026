@@ -20,6 +20,7 @@ import ThemeToggle from '@/components/ThemeToggle'
 import { getChapter, loadBible, type BookMeta } from '@/lib/bible/lookup'
 import { celebrate } from '@/lib/confetti'
 import { readingDate } from '@/lib/readingDate'
+import { fetchAllReadingSessions } from '@/lib/readingSessionsScan'
 import { generateReadingPlan } from '@/lib/bible/planGenerator'
 import {
   horizonForToday,
@@ -421,17 +422,26 @@ export default function ReadPage() {
         .eq('user_id', authUser.id)
         .eq('status', 'active')
         .maybeSingle()
-      const sessionsData = enrollmentData
-        ? await supabase
-            .from('reading_sessions')
-            .select('*')
-            .eq('enrollment_id', enrollmentData.id)
+      // Every session for the current enrollment, paged below PostgREST's
+      // max-rows cap (~1000). The list feeds `sessions` state and the
+      // today-session lookup below; a capped first page could hide today's
+      // rows behind older ones for a reader with 2000+ sessions.
+      const sessionsRows = enrollmentData
+        ? (
+            await fetchAllReadingSessions<ReadingSession>(
+              () =>
+                supabase
+                  .from('reading_sessions')
+                  .select('*')
+                  .eq('enrollment_id', enrollmentData.id),
+              'read.fetch',
+            )
+          ).rows
         : null
 
       setProfile(statsData as Profile)
       setEnrollment(enrollmentData as Enrollment)
-      const sessions = sessionsData?.data as ReadingSession[] | null
-      if (sessions) setSessions(sessions)
+      if (sessionsRows) setSessions(sessionsRows)
 
       // Load bible data — reuse the shared cached loader so /bible-data.json is
       // downloaded and parsed exactly once (getChapter() uses the same cache).
@@ -453,7 +463,7 @@ export default function ReadPage() {
       }
 
       // Today session
-      if (enrollmentData && sessionsData) {
+      if (enrollmentData && sessionsRows) {
         // Shared reading date (05:00 HKT cutoff) — must match the value
         // markLessonComplete writes, or a completed session is invisible here.
         const dateLocal = readingDate()

@@ -21,6 +21,7 @@ import {
 import { NudgeButton } from '@/components/NudgeButton'
 import { CatchUpCard } from '@/components/CatchUpCard'
 import { readingDate } from '@/lib/readingDate'
+import { fetchAllReadingSessions } from '@/lib/readingSessionsScan'
 
 interface Profile {
   id: string
@@ -230,14 +231,24 @@ export default function DashboardPage() {
         if (error) errors.push(`enrollment: ${error.message}`)
         setEnrollment(error ? null : enrollmentsData)
 
-        const { data: sessionsData, error: sessionsErr } = enrollmentsData
-          ? await supabase
-              .from('reading_sessions')
-              .select('id, chapter_ref, date_local')
-              .eq('enrollment_id', enrollmentsData.id)
-          : { data: null, error: null }
+        // Every session for the current enrollment. completedDays (progress bar)
+        // and todayCompleted are computed from this list client-side; a bare
+        // SELECT is silently capped at PostgREST's max-rows (~1000 in
+        // production; one reader has 2266), which would undercount progress
+        // days past the first page. Page below the cap until a short page
+        // proves the end.
+        const { rows: sessionsData, scanError: sessionsErr } = enrollmentsData
+          ? await fetchAllReadingSessions<ReadingSession>(
+              () =>
+                supabase
+                  .from('reading_sessions')
+                  .select('id, chapter_ref, date_local')
+                  .eq('enrollment_id', enrollmentsData.id),
+              'dashboard.fetch',
+            )
+          : { rows: [] as ReadingSession[], scanError: null }
         if (sessionsErr) errors.push(`sessions: ${sessionsErr.message}`)
-        setSessions(sessionsData ?? [])
+        setSessions(sessionsData)
 
         // Use global_stats view for server-calculated values
         const gsData = gsRes.data

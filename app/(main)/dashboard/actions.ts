@@ -94,5 +94,11 @@ export async function markLessonComplete(
     throw new Error(error.message)
   }
 
-  return { success: true, sessionId: inserted?.id }
+  // No row came back: trg_dedupe_reading_session dropped the insert as a
+  // duplicate, so this completion was already recorded by a concurrent write.
+  if (!inserted?.id) {
+    return { success: true, alreadyCompleted: true }
+  }
+
+  return { success: true, sessionId: inserted.id }
 }

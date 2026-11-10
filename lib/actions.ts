@@ -3,6 +3,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { readingDate, addDays } from '@/lib/readingDate'
+import { fetchAllReadingSessions } from '@/lib/readingSessionsScan'
 
 // ─── Date helpers (HKT-only, avoids .toISOString() UTC offset bug) ─────────────
 function getHKTDateStr(date: Date = new Date()): string {
@@ -113,6 +114,13 @@ export async function markLessonComplete(
     )
   }
 
+  // .maybeSingle(), NOT .single(): the guard SELECT above and this INSERT are
+  // not atomic, so a concurrent request (or a retry racing this one) can pass
+  // the guard and then be dropped by trg_dedupe_reading_session. A dropped row
+  // makes the INSERT return zero rows, and .single() turns that into error
+  // PGRST116 — the reader would see a hard failure for a completion that was
+  // in fact already recorded. .maybeSingle() returns null instead, which we
+  // report as an idempotent no-op.
   const { data: insertResult, error } = await supabase
     .from('reading_sessions')
     .insert({
@@ -125,15 +133,21 @@ export async function markLessonComplete(
       book_zh,
       chapter,
     })
-    .select()
-    .single()
+    .select('id')
+    .maybeSingle()
 
   if (error) {
     console.error('[markLessonComplete] INSERT failed:', JSON.stringify(error))
     return { success: false, error: error.message, errorDetails: error }
   }
 
-  return { success: true, sessionId: insertResult?.id }
+  // No row came back: the DB trigger dropped it as a duplicate, so this
+  // completion was already recorded by a concurrent write.
+  if (!insertResult?.id) {
+    return { success: true, alreadyCompleted: true }
+  }
+
+  return { success: true, sessionId: insertResult.id }
 }
 
 /**
@@ -164,15 +178,29 @@ export async function recalcUserStatsAfterCompletion(
       error: 'Not authenticated',
     }
 
-  const { data: allSessions } = await supabase
-    .from('reading_sessions')
-    .select('date_local, xp_earned')
-    .eq('user_id', user.id)
-    .order('date_local', { ascending: true })
+  // Pull EVERY session row for this user, not just the first PostgREST page.
+  //
+  // This SELECT used to be bare, and PostgREST silently caps a bare SELECT at
+  // its max-rows default (1000 in production) — no error, just fewer rows than
+  // match. For the reader with 2266 sessions that meant totalXp = sum of only
+  // the first 1000 rows (10,000 XP instead of 22,660), so their level and both
+  // streaks were computed from truncated data. fetchAllReadingSessions() pages
+  // with .range() below the cap until a short page proves the end, so totalXp
+  // sums every row and uniqueDates contains every reading date — safe even if
+  // session counts grow past any future cap.
+  const { rows: allSessions } = await fetchAllReadingSessions<{
+    date_local: string
+    xp_earned: number
+  }>(
+    () =>
+      supabase
+        .from('reading_sessions')
+        .select('date_local, xp_earned')
+        .eq('user_id', user.id),
+    'recalcUserStatsAfterCompletion',
+  )
 
-  const uniqueDates = [
-    ...new Set((allSessions ?? []).map((r) => r.date_local)),
-  ].sort()
+  const uniqueDates = [...new Set(allSessions.map((r) => r.date_local))].sort()
 
   const todayStr = getHKTDateStr()
   // Yesterday is derived from the same reading date, not from wall-clock
@@ -203,13 +231,11 @@ export async function recalcUserStatsAfterCompletion(
     }
   }
 
-  // XP model: sum of xp_earned across all reading_sessions.
+  // XP model: sum of xp_earned across ALL reading_sessions (full paged scan —
+  // see the fetch above; a capped page would understate this sum).
   // Currently each chapter is worth 10 XP (set in calendar handleCompleteDay).
   // Level = floor(sqrt(total_xp / 100)) + 1 → 100/400/900/1600... for L2/L3/L4/L5
-  const totalXp = (allSessions ?? []).reduce(
-    (sum, s) => sum + (s.xp_earned || 0),
-    0,
-  )
+  const totalXp = allSessions.reduce((sum, s) => sum + (s.xp_earned || 0), 0)
   const level = Math.floor(Math.sqrt(totalXp / 100)) + 1
 
   let longestStreak = streak
@@ -304,25 +330,31 @@ export async function unmarkDayComplete(
 
   console.log('[unmarkDayComplete] DELETE ok')
 
-  // 2. Recalculate user_stats from remaining sessions
-  const { data: remaining, error: fetchError } = await supabase
-    .from('reading_sessions')
-    .select('date_local, xp_earned')
-    .eq('user_id', user.id)
-    .order('date_local', { ascending: true })
+  // 2. Recalculate user_stats from ALL remaining sessions (full paged scan —
+  // a bare SELECT here hits the same PostgREST max-rows cap as
+  // recalcUserStatsAfterCompletion and would write an understated XP/streak).
+  const { rows: remaining, scanError: recalcScanError } =
+    await fetchAllReadingSessions<{ date_local: string; xp_earned: number }>(
+      () =>
+        supabase
+          .from('reading_sessions')
+          .select('date_local, xp_earned')
+          .eq('user_id', user.id),
+      'unmarkDayComplete.recalc',
+    )
 
-  if (fetchError) {
+  // Fail closed: writing stats derived from a partial scan would silently
+  // understate total_xp, level and streak — the exact bug class this fixes.
+  if (recalcScanError) {
     console.error(
       '[unmarkDayComplete] fetch for recalc failed:',
-      JSON.stringify(fetchError),
+      JSON.stringify(recalcScanError),
     )
-    return { success: false, error: fetchError.message }
+    return { success: false, error: recalcScanError.message }
   }
 
   // Collect unique completion dates in order
-  const uniqueDates = [
-    ...new Set((remaining ?? []).map((r) => r.date_local)),
-  ].sort()
+  const uniqueDates = [...new Set(remaining.map((r) => r.date_local))].sort()
 
   // Calculate streak — FIX: use en-CA+HKT throughout
   const todayStr = getHKTDateStr()
@@ -535,41 +567,52 @@ export async function markDayCompleteBatch(
   // Compare against each row's OWN final date_local (dates?.[i] ?? null can
   // differ per row), so build the key from the row value, not the fallback.
   //
-  // The SELECT is narrowed to the dates this batch can actually write: only
-  // distinct date_local values present in uniqueRows matter for the comparison,
-  // and every one is a valid YYYY-MM-DD string — `row.date_local` comes from
-  // `own || dateLocal`, and both sides of that fallback are non-null (the
-  // column is NOT NULL in the schema, and the future-date guard above already
-  // rejected any malformed override). Narrowing keeps the result set small.
+  // Narrowing keeps the result set small: only the distinct date_local values
+  // this batch can actually write matter for the comparison, and every one is
+  // a valid YYYY-MM-DD string — `row.date_local` comes from `own || dateLocal`,
+  // and both sides of that fallback are non-null (the column is NOT NULL in the
+  // schema, and the future-date guard above already rejected any malformed
+  // override).
   //
-  // .limit(10000) is belt-and-braces on top of the narrowing: PostgREST caps a
-  // bare SELECT at its max-rows default (1000), and production has a user with
-  // 2266 sessions — a truncated result silently hides old duplicates, so the
-  // guard would let them be inserted again. An explicit limit above any real
-  // per-user session count makes truncation impossible rather than merely
-  // unlikely.
+  // fetchAllReadingSessions() then pages with .range() instead of trusting a
+  // limit header: PostgREST caps a bare SELECT at its max-rows default (1000),
+  // and production has a user with 2266 sessions, so even a narrowed guard can
+  // sit above the cap — a truncated result silently hides old duplicates and
+  // the batch would insert them again. Paging below the cap until a short page
+  // proves the end makes truncation structurally impossible, whatever limit
+  // PostgREST is configured with.
   const batchDates = [
     ...new Set(uniqueRows.map((row) => row.date_local as string)),
   ].sort()
-  const { data: existingSessions, error: existingError } = await supabase
-    .from('reading_sessions')
-    .select('enrollment_id, date_local, chapter_ref')
-    .eq('user_id', user.id)
-    .eq('enrollment_id', enrollmentId)
-    .in('date_local', batchDates)
-    .limit(10000)
+  const { rows: existingSessions, scanError: batchScanError } =
+    await fetchAllReadingSessions<{
+      enrollment_id: string
+      date_local: string
+      chapter_ref: string
+    }>(
+      () =>
+        supabase
+          .from('reading_sessions')
+          .select('enrollment_id, date_local, chapter_ref')
+          .eq('user_id', user.id)
+          .eq('enrollment_id', enrollmentId)
+          .in('date_local', batchDates),
+      'markDayCompleteBatch.duplicateGuard',
+    )
 
   // Fail closed. Unlike markLessonComplete (where a missed guard just re-runs
   // an insert the trigger will drop), this path bulk-inserts many rows at
   // once: if the SELECT errored we cannot tell which of them already exist,
   // and writing duplicate completion events corrupts XP/level/streak — worse
-  // than not writing them. Skip the insert and report the failure instead.
-  if (existingError) {
+  // than not writing them. fetchAllReadingSessions() returns whatever it
+  // managed to page plus a truncatedAtGuard flag; either symptom means the key
+  // set is incomplete, so skip the insert and report the failure.
+  if (batchScanError) {
     console.error(
       '[markDayCompleteBatch] duplicate-guard SELECT failed:',
-      existingError,
+      batchScanError,
     )
-    return { success: false, error: existingError.message }
+    return { success: false, error: batchScanError.message }
   }
 
   const existingKeys = new Set(
@@ -598,17 +641,23 @@ export async function markDayCompleteBatch(
     )
   }
 
-  // ── Step 2: Recalculate user stats server-side (single SELECT + UPDATE) ───
-  const { data: allSessions } = await supabase
-    .from('reading_sessions')
-    .select('date_local, xp_earned')
-    .eq('user_id', user.id)
+  // ── Step 2: Recalculate user stats server-side (full paged scan + UPDATE) ──
+  // Same truncation fix as recalcUserStatsAfterCompletion(): a bare SELECT here
+  // silently capped at PostgREST's max-rows (1000), understating totalXp and
+  // every streak for high-volume readers. Streak logic below is unchanged.
+  const { rows: allSessions } = await fetchAllReadingSessions<{
+    date_local: string
+    xp_earned: number
+  }>(
+    () =>
+      supabase
+        .from('reading_sessions')
+        .select('date_local, xp_earned')
+        .eq('user_id', user.id),
+    'markDayCompleteBatch.recalc',
+  )
 
-  const uniqueDates = [
-    ...new Set(
-      (allSessions ?? []).map((r: { date_local: string }) => r.date_local),
-    ),
-  ].sort()
+  const uniqueDates = [...new Set(allSessions.map((r) => r.date_local))].sort()
 
   const todayStr = getHKTDateStr()
   // Yesterday is derived from the same reading date, not from wall-clock
@@ -639,7 +688,7 @@ export async function markDayCompleteBatch(
     }
   }
 
-  const totalXp = (allSessions ?? []).reduce(
+  const totalXp = allSessions.reduce(
     (sum: number, s: { xp_earned?: number }) => sum + (s.xp_earned ?? 0),
     0,
   )

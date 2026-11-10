@@ -15,6 +15,7 @@ import {
 } from '@/lib/actions'
 import { checkInAllMyGroups } from '@/lib/groupActions'
 import { summariseRuns } from '@/lib/refRange'
+import { fetchAllReadingSessions } from '@/lib/readingSessionsScan'
 
 interface Enrollment {
   id: string
@@ -104,14 +105,22 @@ export default function CalendarPage() {
         setEnrollment(enrollmentData)
       }
 
-      const { data: sessionsData } =
-        enrollmentData && !enrollmentError
-          ? await supabase
-              .from('reading_sessions')
-              .select('*')
-              .eq('enrollment_id', enrollmentData.id)
-          : { data: null as ReadingSession[] | null }
-      setSessions(sessionsData ?? [])
+      // Every session for the current enrollment. A bare SELECT is silently
+      // capped at PostgREST's max-rows (~1000 in production; this reader has
+      // 2266), which would blank out calendar tiles beyond the first page —
+      // completed days rendering as unread. Page below the cap until a short
+      // page proves the end so every tile reflects its true state.
+      const { rows: sessionsData } = enrollmentData
+        ? await fetchAllReadingSessions<ReadingSession>(
+            () =>
+              supabase
+                .from('reading_sessions')
+                .select('*')
+                .eq('enrollment_id', enrollmentData.id),
+            'calendar.fetch',
+          )
+        : { rows: [] as ReadingSession[] }
+      setSessions(sessionsData)
 
       const res = await fetch('/bible-data.json')
       const bibleJson = await res.json()
