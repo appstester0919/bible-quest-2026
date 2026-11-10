@@ -23,8 +23,11 @@
 --
 -- SECURITY
 --   SECURITY DEFINER + fixed search_path, following migration 0006's style.
---   The function reads only the calling user's own rows (auth.uid()), so it
---   does not widen data access beyond what sessions_select RLS already grants;
+--   The caller must be asking about their OWN user id: the function refuses
+--   p_user_id <> auth.uid() outright. Without that check, SECURITY DEFINER
+--   would let any signed-in user read another user's XP total and every
+--   reading date they have logged — a data leak wider than the
+--   sessions_select RLS policy it is meant to mirror.
 --   EXECUTE is granted to authenticated only.
 --
 -- NOTE ON DISTINCT-USER COUNTS ELSEWHERE
@@ -45,17 +48,25 @@ STABLE
 SECURITY DEFINER
 SET search_path = public
 AS $$
+  -- Every column is derived from ONE filtered set. A scalar subquery in the
+  -- SELECT list does NOT inherit the outer WHERE clause, so a reading_dates
+  -- array built as a standalone subquery would leak another user's dates
+  -- even while total_xp and session_count were correctly withheld.
+  WITH mine AS (
+    SELECT rs.xp_earned, rs.date_local
+    FROM public.reading_sessions rs
+    WHERE rs.user_id = p_user_id
+      AND p_user_id = auth.uid()
+  )
   SELECT
-    COALESCE(sum(rs.xp_earned), 0)::bigint AS total_xp,
+    COALESCE(sum(mine.xp_earned), 0)::bigint AS total_xp,
     count(*)::bigint                       AS session_count,
     array(
-      SELECT DISTINCT rs2.date_local
-      FROM public.reading_sessions rs2
-      WHERE rs2.user_id = p_user_id
-      ORDER BY rs2.date_local
+      SELECT DISTINCT m2.date_local
+      FROM mine m2
+      ORDER BY m2.date_local
     )::date[]                             AS reading_dates
-  FROM public.reading_sessions rs
-  WHERE rs.user_id = p_user_id;
+  FROM mine;
 $$;
 
 REVOKE ALL ON FUNCTION public.user_xp_streak_facts(uuid) FROM PUBLIC, anon;

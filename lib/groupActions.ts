@@ -1034,6 +1034,10 @@ export async function getIncompleteGroupMembersToday(): Promise<{
         .select('user_id')
         .in('user_id', otherUserIds)
         .eq('date_local', today)
+        // ORDER BY id is load-bearing: without it Postgres makes no promise
+        // that OFFSET pages stay disjoint, so a member's completion row could
+        // be skipped and that member wrongly nudged.
+        .order('id', { ascending: true })
         .range(offset, offset + 999)
       const page = data ?? []
       page.forEach((s) => completedToday.add(s.user_id))
