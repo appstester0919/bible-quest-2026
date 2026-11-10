@@ -29,6 +29,10 @@ export async function markLessonComplete(
   sessionId?: string
   error?: string
   errorDetails?: unknown
+  // True when the exact (user_id, enrollment_id, date_local, chapter_ref)
+  // 4-tuple already existed and no new row was inserted — the completion is
+  // idempotent and callers can treat it as "already done", not an error.
+  alreadyCompleted?: boolean
 }> {
   const supabase = await createClient()
   const {
@@ -61,6 +65,33 @@ export async function markLessonComplete(
   const book_zh = parts[0] || '創'
   const chapterRaw = parts[1] || '1'
   const chapter = parseInt(chapterRaw.replace(/[^0-9]/g, ''), 10) || 1
+
+  // ── Duplicate guard ────────────────────────────────────────────────────────
+  // A completion event is identified by
+  // (user_id, enrollment_id, date_local, chapter_ref). If that exact 4-tuple
+  // already exists, this is the SAME event being recorded twice — not a new
+  // completion — so it must not be inserted again.
+  //
+  // enrollment_id is part of the key on purpose: the same user reading the
+  // same chapter on the same day under a DIFFERENT plan enrollment is a
+  // legitimate, distinct event (old plan finished, new plan started).
+  //
+  // The DB trigger trg_dedupe_reading_session (migration 0006) enforces the
+  // same rule as a backstop, but it silently drops the row — which would make
+  // .single() fail with PGRST116. Checking first keeps the action idempotent
+  // and lets us return the existing session instead of an error.
+  const { data: existing } = await supabase
+    .from('reading_sessions')
+    .select('id')
+    .eq('user_id', user.id)
+    .eq('enrollment_id', enrollmentId)
+    .eq('date_local', dateLocal)
+    .eq('chapter_ref', chapterRef)
+    .maybeSingle()
+
+  if (existing?.id) {
+    return { success: true, sessionId: existing.id, alreadyCompleted: true }
+  }
 
   const { data: insertResult, error } = await supabase
     .from('reading_sessions')
@@ -454,13 +485,53 @@ export async function markDayCompleteBatch(
     }
   })
 
-  const { error: insertError } = await supabase
-    .from('reading_sessions')
-    .insert(rows)
+  // ── Duplicate guard (mirrors markLessonComplete above) ─────────────────────
+  // Completion events are keyed by (user_id, enrollment_id, date_local,
+  // chapter_ref). The DB trigger trg_dedupe_reading_session (migration 0006)
+  // silently drops duplicate inserts as a backstop; doing the check here keeps
+  // the batch idempotent and lets insertedCount report rows actually inserted.
+  // First dedupe duplicates within `rows` itself, keeping the first occurrence.
+  const seenKeys = new Set<string>()
+  const uniqueRows = rows.filter((row) => {
+    const key = `${row.enrollment_id}|${row.date_local}|${row.chapter_ref}`
+    if (seenKeys.has(key)) return false
+    seenKeys.add(key)
+    return true
+  })
 
-  if (insertError) {
-    console.error('[markDayCompleteBatch] bulk INSERT failed:', insertError)
-    return { success: false, error: insertError.message }
+  // Compare against each row's OWN final date_local (dates?.[i] ?? null can
+  // differ per row), so build the key from the row value, not the fallback.
+  const { data: existingSessions } = await supabase
+    .from('reading_sessions')
+    .select('enrollment_id, date_local, chapter_ref')
+    .eq('user_id', user.id)
+    .eq('enrollment_id', enrollmentId)
+
+  const existingKeys = new Set(
+    (existingSessions ?? []).map(
+      (r: { enrollment_id: string; date_local: string; chapter_ref: string }) =>
+        `${r.enrollment_id}|${r.date_local}|${r.chapter_ref}`,
+    ),
+  )
+
+  const newRows = uniqueRows.filter((row) => {
+    const key = `${row.enrollment_id}|${row.date_local}|${row.chapter_ref}`
+    return !existingKeys.has(key)
+  })
+
+  if (newRows.length > 0) {
+    const { error: insertError } = await supabase
+      .from('reading_sessions')
+      .insert(newRows)
+
+    if (insertError) {
+      console.error('[markDayCompleteBatch] bulk INSERT failed:', insertError)
+      return { success: false, error: insertError.message }
+    }
+  } else {
+    console.log(
+      '[markDayCompleteBatch] all rows already exist; skipping INSERT',
+    )
   }
 
   // ── Step 2: Recalculate user stats server-side (single SELECT + UPDATE) ───
@@ -542,7 +613,7 @@ export async function markDayCompleteBatch(
 
   return {
     success: true,
-    insertedCount: refs.length,
+    insertedCount: newRows.length,
     totalXp,
     level,
     currentStreak: streak,

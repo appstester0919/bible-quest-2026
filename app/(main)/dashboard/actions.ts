@@ -32,17 +32,48 @@ export async function markLessonComplete(
   // lesson as unfinished.
   const dateLocal = readingDate()
 
-  const { error } = await supabase.from('reading_sessions').insert({
-    user_id: user.id,
-    enrollment_id: enrollmentId,
-    chapter_ref: chapterRef,
-    xp_earned: xpEarned,
-    date_local: dateLocal,
-  })
+  // ── Duplicate guard (mirrors markLessonComplete in lib/actions.ts) ─────────
+  // A completion event is identified by
+  // (user_id, enrollment_id, date_local, chapter_ref). If that exact 4-tuple
+  // already exists, this is the SAME event being recorded twice — not a new
+  // completion — so it must not be inserted again.
+  //
+  // enrollment_id is part of the key on purpose: the same user reading the
+  // same chapter on the same day under a DIFFERENT plan enrollment is a
+  // legitimate, distinct event (old plan finished, new plan started).
+  //
+  // The DB trigger trg_dedupe_reading_session (migration 0006) enforces the
+  // same rule as a backstop, but it silently drops the row — which would make
+  // PostgREST fail with PGRST116. Checking first keeps the action idempotent
+  // and lets us return the existing session instead of an error.
+  const { data: existing } = await supabase
+    .from('reading_sessions')
+    .select('id')
+    .eq('user_id', user.id)
+    .eq('enrollment_id', enrollmentId)
+    .eq('date_local', dateLocal)
+    .eq('chapter_ref', chapterRef)
+    .maybeSingle()
+
+  if (existing?.id) {
+    return { success: true, sessionId: existing.id, alreadyCompleted: true }
+  }
+
+  const { data: inserted, error } = await supabase
+    .from('reading_sessions')
+    .insert({
+      user_id: user.id,
+      enrollment_id: enrollmentId,
+      chapter_ref: chapterRef,
+      xp_earned: xpEarned,
+      date_local: dateLocal,
+    })
+    .select('id')
+    .maybeSingle()
 
   if (error) {
     throw new Error(error.message)
   }
 
-  return { success: true }
+  return { success: true, sessionId: inserted?.id }
 }
