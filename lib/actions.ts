@@ -80,17 +80,37 @@ export async function markLessonComplete(
   // same rule as a backstop, but it silently drops the row — which would make
   // .single() fail with PGRST116. Checking first keeps the action idempotent
   // and lets us return the existing session instead of an error.
-  const { data: existing } = await supabase
+  //
+  // .limit(1) is load-bearing: migration 0007 has not run, so historical
+  // duplicates still exist in production (1121 4-tuples, one user alone has
+  // 334). A bare .maybeSingle() on a >1-row result does NOT return data — it
+  // returns error PGRST116 "multiple rows returned", which used to surface as
+  // a hard failure when a reader re-completed a chapter that was double-
+  // written before the trigger shipped. Capping at one row makes the query
+  // structurally incapable of hitting that error.
+  const { data: existing, error: existingError } = await supabase
     .from('reading_sessions')
     .select('id')
     .eq('user_id', user.id)
     .eq('enrollment_id', enrollmentId)
     .eq('date_local', dateLocal)
     .eq('chapter_ref', chapterRef)
+    .limit(1)
     .maybeSingle()
 
   if (existing?.id) {
     return { success: true, sessionId: existing.id, alreadyCompleted: true }
+  }
+
+  // Guard failed for some other reason — proceed to the insert rather than
+  // failing the completion. The DB trigger is still the backstop, so a real
+  // duplicate cannot land; the worst case here is one dropped row, not a lost
+  // completion or an error thrown at the reader.
+  if (existingError) {
+    console.error(
+      '[markLessonComplete] duplicate-guard SELECT failed, proceeding to insert:',
+      JSON.stringify(existingError),
+    )
   }
 
   const { data: insertResult, error } = await supabase
@@ -490,10 +510,23 @@ export async function markDayCompleteBatch(
   // chapter_ref). The DB trigger trg_dedupe_reading_session (migration 0006)
   // silently drops duplicate inserts as a backstop; doing the check here keeps
   // the batch idempotent and lets insertedCount report rows actually inserted.
+  //
+  // Keys are JSON.stringify'd tuples, NOT `${a}|${b}|${c}` template strings:
+  // a bare pipe join is ambiguous — chapter_ref is free text (added in
+  // migration 0003, backfilled from book_zh + chapter) and a ref containing a
+  // pipe would splice the tuple into the wrong fields. JSON encodes each field
+  // with its own delimiters, so two different tuples can never produce the
+  // same key.
+  const sessionKey = (
+    enrollmentId: unknown,
+    dateLocal: unknown,
+    chapterRef: unknown,
+  ) => JSON.stringify([enrollmentId, dateLocal, chapterRef])
+
   // First dedupe duplicates within `rows` itself, keeping the first occurrence.
   const seenKeys = new Set<string>()
   const uniqueRows = rows.filter((row) => {
-    const key = `${row.enrollment_id}|${row.date_local}|${row.chapter_ref}`
+    const key = sessionKey(row.enrollment_id, row.date_local, row.chapter_ref)
     if (seenKeys.has(key)) return false
     seenKeys.add(key)
     return true
@@ -501,21 +534,52 @@ export async function markDayCompleteBatch(
 
   // Compare against each row's OWN final date_local (dates?.[i] ?? null can
   // differ per row), so build the key from the row value, not the fallback.
-  const { data: existingSessions } = await supabase
+  //
+  // The SELECT is narrowed to the dates this batch can actually write: only
+  // distinct date_local values present in uniqueRows matter for the comparison,
+  // and every one is a valid YYYY-MM-DD string — `row.date_local` comes from
+  // `own || dateLocal`, and both sides of that fallback are non-null (the
+  // column is NOT NULL in the schema, and the future-date guard above already
+  // rejected any malformed override). Narrowing keeps the result set small.
+  //
+  // .limit(10000) is belt-and-braces on top of the narrowing: PostgREST caps a
+  // bare SELECT at its max-rows default (1000), and production has a user with
+  // 2266 sessions — a truncated result silently hides old duplicates, so the
+  // guard would let them be inserted again. An explicit limit above any real
+  // per-user session count makes truncation impossible rather than merely
+  // unlikely.
+  const batchDates = [
+    ...new Set(uniqueRows.map((row) => row.date_local as string)),
+  ].sort()
+  const { data: existingSessions, error: existingError } = await supabase
     .from('reading_sessions')
     .select('enrollment_id, date_local, chapter_ref')
     .eq('user_id', user.id)
     .eq('enrollment_id', enrollmentId)
+    .in('date_local', batchDates)
+    .limit(10000)
+
+  // Fail closed. Unlike markLessonComplete (where a missed guard just re-runs
+  // an insert the trigger will drop), this path bulk-inserts many rows at
+  // once: if the SELECT errored we cannot tell which of them already exist,
+  // and writing duplicate completion events corrupts XP/level/streak — worse
+  // than not writing them. Skip the insert and report the failure instead.
+  if (existingError) {
+    console.error(
+      '[markDayCompleteBatch] duplicate-guard SELECT failed:',
+      existingError,
+    )
+    return { success: false, error: existingError.message }
+  }
 
   const existingKeys = new Set(
-    (existingSessions ?? []).map(
-      (r: { enrollment_id: string; date_local: string; chapter_ref: string }) =>
-        `${r.enrollment_id}|${r.date_local}|${r.chapter_ref}`,
+    (existingSessions ?? []).map((r) =>
+      sessionKey(r.enrollment_id, r.date_local, r.chapter_ref),
     ),
   )
 
   const newRows = uniqueRows.filter((row) => {
-    const key = `${row.enrollment_id}|${row.date_local}|${row.chapter_ref}`
+    const key = sessionKey(row.enrollment_id, row.date_local, row.chapter_ref)
     return !existingKeys.has(key)
   })
 

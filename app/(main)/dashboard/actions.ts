@@ -46,17 +46,36 @@ export async function markLessonComplete(
   // same rule as a backstop, but it silently drops the row — which would make
   // PostgREST fail with PGRST116. Checking first keeps the action idempotent
   // and lets us return the existing session instead of an error.
-  const { data: existing } = await supabase
+  //
+  // .limit(1) is load-bearing: historical duplicates are still in production
+  // (migration 0007 has not run), and a bare .maybeSingle() on a >1-row result
+  // returns error PGRST116 "multiple rows returned" instead of data — which
+  // used to fail the whole completion for a reader retrying a chapter that was
+  // double-written before the trigger shipped. Capping at one row makes the
+  // query structurally incapable of hitting that error.
+  const { data: existing, error: existingError } = await supabase
     .from('reading_sessions')
     .select('id')
     .eq('user_id', user.id)
     .eq('enrollment_id', enrollmentId)
     .eq('date_local', dateLocal)
     .eq('chapter_ref', chapterRef)
+    .limit(1)
     .maybeSingle()
 
   if (existing?.id) {
     return { success: true, sessionId: existing.id, alreadyCompleted: true }
+  }
+
+  // Guard failed for some other reason — proceed to the insert rather than
+  // failing the completion. The DB trigger is still the backstop, so a real
+  // duplicate cannot land; the worst case here is one dropped row, not a lost
+  // completion or an error thrown at the reader.
+  if (existingError) {
+    console.error(
+      '[markLessonComplete] duplicate-guard SELECT failed, proceeding to insert:',
+      JSON.stringify(existingError),
+    )
   }
 
   const { data: inserted, error } = await supabase
