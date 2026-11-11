@@ -137,6 +137,16 @@ export async function markLessonComplete(
     .maybeSingle()
 
   if (error) {
+    // 23505 = unique violation on uniq_reading_session_event
+    // (user_id, enrollment_id, date_local, chapter_ref). The guard SELECT
+    // above and this INSERT are not atomic, so a concurrent request can
+    // insert the same event in between and this INSERT is then rejected by
+    // the unique index. That is NOT a failure — the completion IS recorded,
+    // by the other request. Report it as an idempotent no-op, the same way
+    // the trigger-dropped case below is reported.
+    if (error.code === '23505') {
+      return { success: true, alreadyCompleted: true }
+    }
     console.error('[markLessonComplete] INSERT failed:', JSON.stringify(error))
     return { success: false, error: error.message, errorDetails: error }
   }
@@ -627,9 +637,23 @@ export async function markDayCompleteBatch(
   })
 
   if (newRows.length > 0) {
+    // upsert + ignoreDuplicates → ON CONFLICT DO NOTHING. The unique index
+    // uniq_reading_session_event on (user_id, enrollment_id, date_local,
+    // chapter_ref) rejects a row that a concurrent request already wrote
+    // between the guard SELECT above and this INSERT. Without this, one
+    // conflicting row fails the WHOLE multi-row insert and the reader loses
+    // every other chapter in the batch. With it, the conflicting row is
+    // skipped and the rest are written; the recalc below then reads the
+    // deduplicated set and computes the same XP either way.
+    //
+    // .insert() cannot express this — its options are only { count,
+    // defaultToNull }. .upsert() is what carries onConflict/ignoreDuplicates.
     const { error: insertError } = await supabase
       .from('reading_sessions')
-      .insert(newRows)
+      .upsert(newRows, {
+        onConflict: 'user_id,enrollment_id,date_local,chapter_ref',
+        ignoreDuplicates: true,
+      })
 
     if (insertError) {
       console.error('[markDayCompleteBatch] bulk INSERT failed:', insertError)

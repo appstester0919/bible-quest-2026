@@ -91,6 +91,15 @@ export async function markLessonComplete(
     .maybeSingle()
 
   if (error) {
+    // 23505 = unique violation on uniq_reading_session_event
+    // (user_id, enrollment_id, date_local, chapter_ref). The guard SELECT
+    // above and this INSERT are not atomic, so a concurrent request can
+    // insert the same event in between and this INSERT is then rejected by
+    // the unique index. That is NOT a failure — the completion IS recorded,
+    // by the other request. Report it as an idempotent no-op.
+    if (error.code === '23505') {
+      return { success: true, alreadyCompleted: true }
+    }
     throw new Error(error.message)
   }
 
